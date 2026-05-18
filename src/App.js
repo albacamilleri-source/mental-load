@@ -211,9 +211,9 @@ function TaskRow({ text, done, onToggle, color, sub, overdue, dueDate, badge }) 
         <Checkbox checked={done} onChange={onToggle} color={color} />
         <div style={{ flex: 1 }} onClick={() => sub && setOpen(!open)}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 14, fontWeight: 400, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s" }}>{text}</span>
+            <span style={{ fontSize: 14, fontWeight: 400, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s", color: done ? "var(--muted2)" : "var(--text)" }}>{text}</span>
             {overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.5px" }}>overdue {dueDate}</span>}
-            {dueDate && !overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted)", fontFamily: "'DM Mono', monospace" }}>{dueDate}</span>}
+            {dueDate && !overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{dueDate}</span>}
             {badge && <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : badge}</span>}
           </div>
         </div>
@@ -397,12 +397,11 @@ function TodayScreen({ who }) {
   const TABS = [
     { key: "morning", label: "☀ Morning", color: "var(--morning)" },
     { key: "evening", label: "☾ Evening", color: "var(--evening)" },
-    { key: "plans", label: "◈ Plans", color: "var(--admin)" },
   ];
 
   return (
     <div className="fade" style={{ padding: "0 0 100px" }}>
-      <div style={{ padding: "32px 20px 16px" }}>
+      <div style={{ padding: "68px 20px 16px" }}>
         <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Malta" })}</div>
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 300, color: "var(--text)", letterSpacing: "-0.5px", lineHeight: 1.1 }}>Good {greeting.toLowerCase()}, {who === "alba" ? "Alba" : "Josh"}<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
@@ -446,49 +445,47 @@ function TodayScreen({ who }) {
         )}
       </>)}
 
-      {/* Today's Plans */}
-      {tab === "plans" && (
-        <div style={{ padding: "0 20px" }}>
-          {plansLoading ? <Spinner /> : (<>
-            {/* Meeting block if scheduled today */}
-            {meetingIsToday && (
-              <div style={{ marginBottom: 16, padding: "14px 16px", borderRadius: 12, background: "var(--surface)", border: `1px solid var(--josh)44`, boxShadow: "0 1px 6px #2C282508" }}>
-                <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--josh)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 4 }}>↔ Alba & Josh Weekly</div>
-                <div style={{ fontSize: 13, color: "var(--text)" }}>Weekly meeting scheduled for today</div>
-                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>Check Week tab for the agenda</div>
-              </div>
-            )}
+      {/* ── Static Plans section — always visible below routine ── */}
+      <div style={{ padding: "28px 20px 0" }}>
 
-            {/* Next actions due today */}
-            {todayPlans.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--admin)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>Due Today · {todayPlans.length}</div>
-                {todayPlans.map(t => (
-                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 1px 4px #2C282508" }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--admin)", flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, color: "var(--text)" }}>{t.text}</div>
-                      {t.notes && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5, marginTop: 3, whiteSpace: "pre-wrap" }}>{t.notes}</div>}
-                      {t.context && <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", marginTop: 2 }}>{t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : "🏠"} {t.context}</div>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              !meetingIsToday && (
-                <div style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", fontSize: 13, color: "var(--muted)", textAlign: "center" }}>
-                  Nothing specific scheduled for today ✦
-                </div>
-              )
-            )}
-          {/* Today's calendar events */}
-          <div style={{ marginTop: 20 }}>
-            <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10 }}>Calendar</div>
-            <TodayCalendarTab />
+        {/* Meeting block if today */}
+        {meetingIsToday && (
+          <div style={{ marginBottom: 16, padding: "14px 16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
+            <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--josh)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 4 }}>↔ Alba & Josh Weekly</div>
+            <div style={{ fontSize: 13, color: "var(--text)" }}>Weekly meeting today</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>See Week tab for agenda</div>
           </div>
-          </>)}
+        )}
+
+        {/* Due today — next actions */}
+        {!plansLoading && todayPlans.length > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 500 }}>Due Today</span>
+              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{todayPlans.length}</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              {todayPlans.map(t => (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                  <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>
+                    {t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : t.context === "home" ? "🏠" : "◈"}
+                  </span>
+                  <span style={{ fontSize: 14, color: "var(--text)", flex: 1 }}>{t.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Calendar events */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 500 }}>Today</span>
+          </div>
+          <TodayCalendarTab />
         </div>
-      )}
+
+      </div>
     </div>
   );
 }
@@ -596,11 +593,11 @@ function JoshMeetingBlock({ isWed }) {
                     <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter") addItem(); if (e.key === "Escape") setAdding(false); }}
                       placeholder="What to discuss…"
-                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none" }}
+                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
                     />
                     <input value={newNotes} onChange={e => setNewNotes(e.target.value)}
                       placeholder="Notes (optional)"
-                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none" }}
+                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
                     />
                     <div style={{ display: "flex", gap: 6 }}>
                       <button onClick={addItem} style={{ flex: 1, padding: "8px", background: "var(--sage)", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 500 }}>Add</button>
@@ -774,7 +771,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--surface)", borderRadius: 12, border: `1px solid ${color}44`, marginBottom: 3, boxShadow: "0 2px 8px #2C282510" }}>
       <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
         onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none" }}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
       />
       <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)}
         placeholder="Notes — optional"
@@ -808,7 +805,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, color: "var(--text)" }}>{task.text}</span>
           {task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace" }}>overdue {task.due_date}</span>}
-          {task.due_date && !task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted)", fontFamily: "'DM Mono', monospace" }}>{task.due_date}</span>}
+          {task.due_date && !task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{task.due_date}</span>}
           {badge && <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : badge}</span>}
         </div>
         {task.notes && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{task.notes}</div>}
@@ -1341,7 +1338,7 @@ function PlanScreen() {
 
   return (
     <div className="fade" style={{ padding: "0 0 100px" }}>
-      <div style={{ padding: "32px 20px 20px" }}>
+      <div style={{ padding: "68px 20px 20px" }}>
         <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
           {new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
         </div>
@@ -1538,7 +1535,7 @@ function HistorySection() {
           <button key={k} onClick={() => setFilter(k)} style={{
             flex: 1, padding: "7px 2px", borderRadius: 20, border: `1px solid ${filter === k ? "transparent" : "var(--border)"}`,
             background: filter === k ? "var(--text)" : "var(--surface)",
-            color: filter === k ? "var(--bg)" : "var(--muted)", fontSize: 10,
+            color: filter === k ? "#fff" : "var(--muted)", fontSize: 10,
             fontFamily: "'DM Mono', monospace",
           }}>{l}</button>
         ))}
@@ -1611,7 +1608,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
             <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6, background: "var(--surface2)", borderRadius: 10, padding: 12, border: `1px solid ${color}44` }}>
               <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") submitEdit(); if (e.key === "Escape") setEditingIdx(null); }}
-                style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none" }}
+                style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
               />
               {extraFields && extraFields.map(f => (
                 f.type === "checkbox" ? (
@@ -1625,7 +1622,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
                 ) : (
                   <input key={f.key} value={editExtra[f.key] || ""} onChange={e => setEditExtra(x => ({ ...x, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
-                    style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none" }}
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
                   />
                 )
               ))}
@@ -1652,7 +1649,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
             <input autoFocus value={text} onChange={e => setText(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") setAdding(false); }}
               placeholder={placeholder || "Add item…"}
-              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none" }}
+              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
             />
             {extraFields && extraFields.map(f => (
               f.type === "checkbox" ? (
@@ -1666,7 +1663,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
               ) : (
                 <input key={f.key} value={extra[f.key] || ""} onChange={e => setExtra(x => ({ ...x, [f.key]: e.target.value }))}
                   placeholder={f.placeholder}
-                  style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none" }}
+                  style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
                 />
               )
             ))}
@@ -2111,7 +2108,7 @@ function InboxScreen({ who }) {
               {[["phone","📱 Phone"],["errand","🚗 Errand"],["home","🏠 Home"]].map(([k,l]) => (
                 <button key={k} onClick={() => setNewContext(k)} style={{
                   flex: 1, padding: "8px 4px", borderRadius: 8, border: "none", fontSize: 12,
-                  background: newContext === k ? "var(--admin)" : "var(--surface2)",
+                  background: newContext === k ? "var(--sage)" : "var(--surface2)",
                   color: newContext === k ? "#fff" : "var(--muted)",
                 }}>{l}</button>
               ))}
@@ -2828,7 +2825,7 @@ function ConnectScreen() {
 
   return (
     <div className="fade" style={{ padding: "0 0 100px" }}>
-      <div style={{ padding: "32px 20px 20px" }}>
+      <div style={{ padding: "68px 20px 20px" }}>
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>Connect<span style={{ color: "var(--sage)" }}>.</span></div>
         <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>Your people</div>
       </div>
@@ -2948,7 +2945,7 @@ function BottomNav({ active, onChange, who }) {
 function SettingsIcon({ onPress }) {
   return (
     <button onClick={onPress} style={{
-      position: "fixed", top: 18, right: 16, zIndex: 200,
+      position: "fixed", top: 16, right: 16, zIndex: 200,
       background: "var(--surface)", border: "1px solid var(--border)",
       borderRadius: 12, width: 36, height: 36,
       display: "flex", alignItems: "center", justifyContent: "center",
@@ -3075,7 +3072,7 @@ export default function App() {
         <BottomNav active={screen} onChange={setScreen} who={who} />
         <SettingsIcon onPress={() => setEditing(true)} />
         {/* Mobile who/switch — avatar style */}
-        <div style={{ position: "fixed", top: 18, left: 16, zIndex: 200, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ position: "fixed", top: 16, left: 16, zIndex: 200, display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{
             width: 32, height: 32, borderRadius: "50%",
             background: who === "alba" ? "var(--sage)" : "var(--josh)",
