@@ -3079,31 +3079,31 @@ export default function App() {
           display: "flex", alignItems: "center",
           padding: "0 16px", justifyContent: "space-between",
         }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: "50%",
-            background: who === "alba" ? "var(--sage)" : "var(--josh)",
+          {/* Left: avatar + name */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: "50%",
+              background: who === "alba" ? "var(--sage)" : "var(--josh)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 13, fontWeight: 500, color: "#fff",
+              fontFamily: "'Outfit', sans-serif",
+            }}>{who === "alba" ? "A" : "J"}</div>
+            <button onClick={() => { localStorage.removeItem("hb_who"); window.location.reload(); }} style={{
+              background: "none", border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 4, padding: 0,
+            }}>
+              <span style={{ fontSize: 13, fontFamily: "'Outfit', sans-serif", color: "var(--text)", fontWeight: 500 }}>{who === "alba" ? "Alba" : "Josh"}</span>
+              <span style={{ fontSize: 10, color: "var(--muted)" }}>▾</span>
+            </button>
+          </div>
+          {/* Right: settings */}
+          <button onClick={() => setEditing(true)} style={{
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: 10, width: 34, height: 34,
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 13, fontWeight: 500, color: "#fff",
-            fontFamily: "'Outfit', sans-serif",
-          }}>{(who === "alba" ? "A" : "J")}</div>
-          <button onClick={() => { localStorage.removeItem("hb_who"); window.location.reload(); }} style={{
-            background: "none", border: "none", cursor: "pointer",
-            display: "flex", alignItems: "center", gap: 4, padding: 0,
-          }}>
-            <span style={{ fontSize: 13, fontFamily: "'Outfit', sans-serif", color: "var(--text)", fontWeight: 500 }}>{who === "alba" ? "Alba" : "Josh"}</span>
-            <span style={{ fontSize: 10, color: "var(--muted)" }}>▾</span>
-          </button>
-        </div>
-        </div>
-        {/* Settings icon inside top bar */}
-        <button onClick={() => setEditing(true)} style={{
-          background: "var(--surface)", border: "1px solid var(--border)",
-          borderRadius: 10, width: 34, height: 34,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "var(--muted)", fontSize: 14,
-          boxShadow: "0 1px 4px rgba(28,26,24,0.08)",
-        }}>⚙</button>
+            color: "var(--muted)", fontSize: 14,
+            boxShadow: "0 1px 4px rgba(28,26,24,0.08)",
+          }}>⚙</button>
         </div>
       </>}
     </div>
