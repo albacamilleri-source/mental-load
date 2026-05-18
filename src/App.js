@@ -2453,6 +2453,246 @@ function CalendarScreen() {
 }
 
 
+
+// ─── THINGS TO DO SCREEN ──────────────────────────────────────────────────────
+const PLACES = [
+  { name: "Aquarium", type: "Activity", setting: "Indoor" },
+  { name: "Playtopia", type: "Activity", setting: "Indoor" },
+  { name: "Gravity at Shoreline", type: "Activity", setting: "Indoor" },
+  { name: "The Eden", type: "Activity", setting: "Indoor" },
+  { name: "Multimaxx Bay Street", type: "Activity", setting: "Indoor" },
+  { name: "Kidz World", type: "Activity", setting: "Indoor" },
+  { name: "Play Cafe", type: "Activity", setting: "Indoor" },
+  { name: "Multimaxx Pavi", type: "Activity", setting: "Indoor" },
+  { name: "Library", type: "Activity", setting: "Indoor" },
+  { name: "Rainforest Cafe", type: "Restaurant", setting: "Indoor" },
+  { name: "Trattoria Riccardo", type: "Restaurant", setting: "Indoor" },
+  { name: "Festacci", type: "Restaurant", setting: "Indoor" },
+  { name: "Spinola Kids Park", type: "Play Area", setting: "Indoor" },
+  { name: "Ohana", type: "Play Area", setting: "Indoor" },
+  { name: "L-Arka ta Noe", type: "Activity", setting: "Outdoor" },
+  { name: "Blue Grotto Cave", type: "Activity", setting: "Outdoor" },
+  { name: "Montekristo Animal Park", type: "Activity", setting: "Outdoor" },
+  { name: "Playmobil", type: "Activity", setting: "Both" },
+  { name: "Esplora", type: "Activity", setting: "Both" },
+  { name: "Popeye village", type: "Activity", setting: "Both" },
+  { name: "Majjistral park near Radisson", type: "Hike", setting: "Outdoor" },
+  { name: "Misrah Ghar il Kbir", type: "Hike", setting: "Outdoor" },
+  { name: "Fawwara", type: "Hike", setting: "Outdoor" },
+  { name: "Dingli cliffs", type: "Hike", setting: "Outdoor" },
+  { name: "Wied il-Għasel", type: "Hike", setting: "Outdoor" },
+  { name: "Wied Qirda", type: "Hike", setting: "Outdoor" },
+  { name: "Ghajn Hadid", type: "Hike", setting: "Outdoor" },
+  { name: "Qannotta Valley", type: "Hike", setting: "Outdoor" },
+  { name: "Bingemma punic tombs", type: "Hike", setting: "Outdoor" },
+  { name: "Xemxija Heritage Trail", type: "Hike", setting: "Outdoor" },
+  { name: "Ghajn Znuber Tower trail", type: "Hike", setting: "Outdoor" },
+  { name: "Calpham junction", type: "Hike", setting: "Outdoor" },
+  { name: "Ras id Dawwara (Sunset)", type: "Hike", setting: "Outdoor" },
+  { name: "Ghadira Nature Reserve", type: "Hike", setting: "Outdoor" },
+  { name: "Foresta 2000", type: "Hike", setting: "Outdoor" },
+  { name: "Dwejra", type: "Hike, Picnic", setting: "Outdoor" },
+  { name: "Xrobb l ghagin", type: "Hike, Picnic", setting: "Outdoor" },
+  { name: "Ahrax", type: "Picnic", setting: "Outdoor" },
+  { name: "Ta'Qali", type: "Picnic, Playground, Stroller walk", setting: "Outdoor" },
+  { name: "San Klement", type: "Picnic, Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Salini park", type: "Picnic, Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Gnien fuq il glaziz", type: "Picnic, Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Chinese Garden", type: "Picnic, Stroller walk", setting: "Outdoor" },
+  { name: "Buskett", type: "Picnic, Stroller walk", setting: "Outdoor" },
+  { name: "Chadwick lakes", type: "Picnic, Stroller walk", setting: "Outdoor" },
+  { name: "Gnien Stazzjon Attard", type: "Playground", setting: "Outdoor" },
+  { name: "Lapsi", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Romeo Romano Gardens", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Sant Antnin Family Park", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Gnien l Gharusa tal Mosta", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Pembroke Playground", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Qui-si-Sana Playground", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Wied fulija", type: "Stroller walk", setting: "Outdoor" },
+  { name: "Simar Nature Reserve", type: "Stroller walk", setting: "Outdoor" },
+  { name: "Birgu", type: "Stroller walk", setting: "Outdoor" },
+  { name: "St Thomas to il Hofra il Kbira via munxar path", type: "Stroller walk", setting: "Outdoor" },
+  { name: "Mdina", type: "Stroller walk", setting: "Outdoor" },
+  { name: "Il Qolla", type: "Stroller walk", setting: "Outdoor" },
+];
+
+const PLACE_TYPES = ["All", "Activity", "Hike", "Picnic", "Playground", "Play Area", "Restaurant", "Stroller walk"];
+const TYPE_COLORS = {
+  Activity: "#D4854A", Hike: "#4A8C6A", Picnic: "#9A7A42",
+  Playground: "#4A7D8A", "Play Area": "#7A6AA8", Restaurant: "#993556",
+  "Stroller walk": "#085041",
+};
+
+function ThingsToDoScreen() {
+  const [places, setPlaces] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [setting, setSetting] = useState("All");
+  const [type, setType] = useState("All");
+
+  useEffect(() => {
+    sb.from("places").select("*").order("name").then(({ data }) => {
+      setPlaces(data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  const types = ["All", ...Array.from(new Set(places.map(p => p.type).filter(Boolean))).sort()];
+
+  const filtered = places.filter(p => {
+    const settingMatch = setting === "All" || p.setting === setting || p.setting === "Both";
+    const typeMatch = type === "All" || p.type === type;
+    return settingMatch && typeMatch;
+  });
+
+  return (
+    <div className="fade" style={{ padding: "0 0 100px" }}>
+      <div style={{ padding: "32px 20px 18px" }}>
+        <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4 }}>Things To Do</div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>{filtered.length} places</div>
+      </div>
+
+      {/* Indoor/Outdoor toggle */}
+      <div style={{ padding: "0 20px 12px", display: "flex", gap: 6 }}>
+        {["All", "Indoor", "Outdoor"].map(s => (
+          <button key={s} onClick={() => setSetting(s)} style={{
+            flex: 1, padding: "9px 4px", borderRadius: 20,
+            background: setting === s ? "var(--text)" : "var(--surface)",
+            border: `1px solid ${setting === s ? "transparent" : "var(--border)"}`,
+            color: setting === s ? "var(--bg)" : "var(--muted)",
+            fontSize: 12, fontWeight: setting === s ? 500 : 400, transition: "all 0.18s",
+          }}>{s}</button>
+        ))}
+      </div>
+
+      {/* Type filter */}
+      <div style={{ padding: "0 20px 16px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {types.map(t => (
+          <button key={t} onClick={() => setType(t)} style={{
+            padding: "6px 12px", borderRadius: 20,
+            background: type === t ? (TYPE_COLORS[t] || "var(--text)") : "var(--surface)",
+            border: `1px solid ${type === t ? "transparent" : "var(--border)"}`,
+            color: type === t ? "#fff" : "var(--muted)",
+            fontSize: 11, transition: "all 0.18s",
+          }}>{t}</button>
+        ))}
+      </div>
+
+      {/* Places list */}
+      {loading ? <Spinner /> : (
+        <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: 16, textAlign: "center", fontSize: 13, color: "var(--muted)" }}>No places match these filters</div>
+          )}
+          {filtered.map(p => (
+            <div key={p.id} style={{ padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 14, color: "var(--text)", fontWeight: 400 }}>{p.name}</div>
+                {p.type && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, fontFamily: "'DM Mono', monospace" }}>{p.type}</div>}
+              </div>
+              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, flexShrink: 0, marginLeft: 8,
+                background: p.setting === "Both" ? "var(--surface2)" : p.setting === "Indoor" ? "#EEEDFE" : "#E1F5EE",
+                color: p.setting === "Both" ? "var(--muted)" : p.setting === "Indoor" ? "#3C3489" : "#085041",
+                fontFamily: "'DM Mono', monospace" }}>
+                {p.setting === "Both" ? "In/Out" : p.setting}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── FREE TIME SCREEN ─────────────────────────────────────────────────────────
+const FREE_TIME_OPTIONS = [
+  { label: "Research", icon: "🔍", action: "link", url: "https://drive.google.com/drive/folders/1G1xtRQSf_3x1WVdNcsFI2OVFXCBT3WuQ?usp=drive_link", desc: "Open research folder" },
+  { label: "Read", icon: "📖", action: "link", url: "kindle://", desc: "Open Kindle" },
+  { label: "Netflix", icon: "🎬", action: "link", url: "https://netflix.com", desc: "Open Netflix" },
+  { label: "Newsletters", icon: "📬", action: "link", url: "https://mail.google.com", desc: "Open Gmail" },
+  { label: "Workout", icon: "💪", action: "none", desc: "Time to move" },
+];
+
+function FreeTimeScreen() {
+  const [options, setOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    sb.from("free_time_options").select("*").order("sort_order").then(({ data }) => {
+      setOptions(data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  return (
+    <div className="fade" style={{ padding: "0 0 100px" }}>
+      <div style={{ padding: "32px 20px 28px" }}>
+        <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4 }}>Free Time</div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>What will you do?</div>
+      </div>
+      {loading ? <Spinner /> : (
+        <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {options.map(opt => (
+            <a key={opt.id} href={opt.url || undefined}
+              target="_blank" rel="noopener noreferrer"
+              style={{ textDecoration: "none" }}>
+              <div style={{ padding: "16px 18px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}>
+                <span style={{ fontSize: 24, flexShrink: 0 }}>{opt.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, color: "var(--text)", fontWeight: 500 }}>{opt.label}</div>
+                  {opt.description && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{opt.description}</div>}
+                </div>
+                {opt.url && <span style={{ fontSize: 14, color: "var(--muted2)" }}>→</span>}
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── KIDS TIME SCREEN ─────────────────────────────────────────────────────────
+const KIDS_TIME_OPTIONS = [
+  { label: "Read", icon: "📚", desc: "Story time together" },
+  { label: "Board game", icon: "🎲", desc: "Pick a game and play" },
+  { label: "Puzzle", icon: "🧩", desc: "Work on a puzzle" },
+  { label: "Bible study", icon: "✝️", desc: "Faith time together" },
+  { label: "Bake", icon: "🍪", desc: "Make something together" },
+  { label: "Writing", icon: "✏️", desc: "Creative writing time" },
+];
+
+function KidsTimeScreen() {
+  const [options, setOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    sb.from("kids_time_options").select("*").order("sort_order").then(({ data }) => {
+      setOptions(data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  return (
+    <div className="fade" style={{ padding: "0 0 100px" }}>
+      <div style={{ padding: "32px 20px 28px" }}>
+        <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4 }}>Kids Time</div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>Time with the little ones</div>
+      </div>
+      {loading ? <Spinner /> : (
+        <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {options.map(opt => (
+            <div key={opt.id} style={{ padding: "20px 14px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
+              <span style={{ fontSize: 32 }}>{opt.icon}</span>
+              <div style={{ fontSize: 14, color: "var(--text)", fontWeight: 500 }}>{opt.label}</div>
+              {opt.description && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.4 }}>{opt.description}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CONNECT SCREEN ───────────────────────────────────────────────────────────
 const CONTACTS = [
   { id: "mary",   name: "Mary",   role: "Friend",  notes: "Works reduced hours. Afternoon meets. Weekend playdates.", phone: "35677108584" },
@@ -2576,30 +2816,38 @@ const NAV = [
   { key: "plan", label: "Plan", icon: "◷" },
   { key: "inbox", label: "Inbox", icon: "✉" },
   { key: "connect", label: "Connect", icon: "♡", albaOnly: true },
+  { key: "todo", label: "Do", icon: "◉", albaOnly: true },
+  { key: "freetime", label: "Me", icon: "✦", albaOnly: true },
+  { key: "kidstime", label: "Kids", icon: "☆", albaOnly: true },
 ];
 
 function BottomNav({ active, onChange, who, onWhoReset }) {
+  const visibleNav = NAV.filter(n => !n.albaOnly || who === "alba");
   return (
     <div style={{
       position: "fixed", bottom: 0, left: 0, right: 0, maxWidth: 480, margin: "0 auto",
       background: "rgba(250,248,245,0.94)", backdropFilter: "blur(24px)",
       borderTop: "1px solid var(--border)",
-      display: "flex", padding: "10px 0 env(safe-area-inset-bottom, 20px)", zIndex: 100,
-      boxShadow: "0 -4px 24px #2C282508",
+      zIndex: 100, boxShadow: "0 -4px 24px #2C282508",
     }}>
-      {NAV.filter(n => !n.albaOnly || who === "alba").map(n => (
-        <button key={n.key} onClick={() => onChange(n.key)} style={{
-          flex: 1, background: "none", border: "none",
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-          padding: "4px 0",
-          color: active === n.key ? "var(--text)" : "var(--muted2)",
-          transition: "color 0.18s",
-        }}>
-          <span style={{ fontSize: 16, lineHeight: 1 }}>{n.icon}</span>
-          <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.8px", textTransform: "uppercase" }}>{n.label}</span>
-          {active === n.key && <div style={{ width: 16, height: 2, borderRadius: 1, background: "var(--text)", marginTop: 1 }} />}
-        </button>
-      ))}
+      <div style={{
+        display: "flex", overflowX: "auto", padding: "10px 0 env(safe-area-inset-bottom, 20px)",
+        scrollbarWidth: "none", msOverflowStyle: "none",
+      }}>
+        {visibleNav.map(n => (
+          <button key={n.key} onClick={() => onChange(n.key)} style={{
+            flex: "0 0 auto", minWidth: 60, background: "none", border: "none",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+            padding: "4px 8px",
+            color: active === n.key ? "var(--text)" : "var(--muted2)",
+            transition: "color 0.18s",
+          }}>
+            <span style={{ fontSize: 16, lineHeight: 1 }}>{n.icon}</span>
+            <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.8px", textTransform: "uppercase" }}>{n.label}</span>
+            {active === n.key && <div style={{ width: 16, height: 2, borderRadius: 1, background: "var(--text)", marginTop: 1 }} />}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2683,6 +2931,9 @@ export default function App() {
     plan: <PlanScreen />,
     inbox: <InboxScreen who={who} />,
     connect: <ConnectScreen />,
+    todo: <ThingsToDoScreen />,
+    freetime: <FreeTimeScreen />,
+    kidstime: <KidsTimeScreen />,
   };
 
   const SIDEBAR_W = 220;
