@@ -1429,11 +1429,16 @@ function PlanScreen() {
       </div>
 
       {loading ? <Spinner /> : (
-        <div style={{ padding: "0 12px" }}>
+        <div style={{ padding: "0 16px" }}>
           {years.map(year => (
             <div key={year} style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10, paddingLeft: 4 }}>{year}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+              <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10, paddingLeft: 2 }}>{year}</div>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, 1fr)",
+                gap: 6,
+                width: "100%",
+              }}>
                 {months.map((mon, mi) => {
                   const key = monthKey(year, mi);
                   const past = isPast(year, mi);
@@ -1444,25 +1449,26 @@ function PlanScreen() {
                     <div key={key}
                       onClick={() => setSelectedMonth(isSelected ? null : key)}
                       style={{
-                        borderRadius: 10, padding: "8px 7px",
-                        background: isSelected ? "var(--sage)" : current ? "var(--surface)" : "var(--surface)",
+                        borderRadius: 12, padding: "10px 10px",
+                        background: isSelected ? "var(--sage)" : "var(--surface)",
                         border: `1px solid ${isSelected ? "transparent" : current ? "var(--sage)" : "var(--border)"}`,
                         opacity: past ? 0.38 : 1,
                         cursor: past ? "default" : "pointer",
                         minHeight: 72,
+                        overflow: "hidden",
                         transition: "all 0.18s",
                         boxShadow: current && !isSelected ? "0 0 0 1.5px var(--sage)44" : "none",
                       }}
                     >
-                      <div style={{ fontSize: 12, fontWeight: isSelected || current ? 500 : 400, color: isSelected ? "#fff" : "var(--text)", marginBottom: 3 }}>{mon}</div>
+                      <div style={{ fontSize: 11, fontWeight: isSelected || current ? 500 : 400, color: isSelected ? "#fff" : "var(--text)", marginBottom: 4 }}>{mon}</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         {evs.slice(0, 2).map((e, i) => (
-                          <div key={i} style={{ fontSize: 9, color: isSelected ? "rgba(255,255,255,0.85)" : "var(--planning)", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <div key={i} style={{ fontSize: 10, color: isSelected ? "rgba(255,255,255,0.85)" : "var(--planning)", fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.5 }}>
                             {e.text.replace(/^Plan /, "")}
                           </div>
                         ))}
                         {evs.length > 2 && (
-                          <div style={{ fontSize: 9, color: isSelected ? "rgba(255,255,255,0.6)" : "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>+{evs.length - 2} more</div>
+                          <div style={{ fontSize: 10, color: isSelected ? "rgba(255,255,255,0.6)" : "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>+{evs.length - 2}</div>
                         )}
                       </div>
                     </div>
