@@ -9,7 +9,50 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 // ─── GOOGLE CALENDAR ──────────────────────────────────────────────────────────
 const GCAL_CLIENT_ID = "283368801613-lku2v6o5uvaqh5ttkci8u2d47bu9etdm.apps.googleusercontent.com";
 const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GCAL_REDIRECT_URI = "https://albacamilleri-source.github.io/mental-load";
 
+// Redirect-based OAuth — works in iOS standalone PWA (popups are blocked there).
+// Flow: signIn() redirects to Google → Google redirects back with #access_token=...
+// On load, parseTokenFromHash() grabs it and stores in sessionStorage.
+const signInWithRedirect = () => {
+  const params = new URLSearchParams({
+    client_id: GCAL_CLIENT_ID,
+    redirect_uri: GCAL_REDIRECT_URI,
+    response_type: "token",
+    scope: GCAL_SCOPE,
+    prompt: "consent",
+  });
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+};
+
+const parseTokenFromHash = () => {
+  const hash = window.location.hash.slice(1);
+  if (!hash) return null;
+  const params = new URLSearchParams(hash);
+  const token = params.get("access_token");
+  const expiresIn = params.get("expires_in");
+  if (!token) return null;
+  // Store with expiry
+  const expiry = Date.now() + (parseInt(expiresIn || "3600", 10) * 1000);
+  sessionStorage.setItem("gcal_token", token);
+  sessionStorage.setItem("gcal_expiry", String(expiry));
+  // Clean the hash from the URL without triggering a reload
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  return token;
+};
+
+const getStoredToken = () => {
+  const token = sessionStorage.getItem("gcal_token");
+  const expiry = parseInt(sessionStorage.getItem("gcal_expiry") || "0", 10);
+  if (!token || Date.now() > expiry) {
+    sessionStorage.removeItem("gcal_token");
+    sessionStorage.removeItem("gcal_expiry");
+    return null;
+  }
+  return token;
+};
+
+// Legacy popup path kept for desktop browsers where it still works fine
 const loadGoogleScript = () => new Promise((resolve, reject) => {
   if (window.google?.accounts?.oauth2) return resolve();
   const existing = document.getElementById("google-gsi");
@@ -127,7 +170,7 @@ const GlobalStyles = () => {
         --muted:    var(--ml-quiet);
         --muted2:   var(--ml-muted);
 
-        /* ── Semantic product colors (never used for brand surfaces) ── */
+        /* ── Semantic product colors ── */
         --sage:     #7C9E8A;
         --morning:  #C4A882;
         --evening:  #4A7D8A;
@@ -145,40 +188,21 @@ const GlobalStyles = () => {
         --font-serif: 'Lora', Georgia, serif;
         --font-sans:  'Outfit', system-ui, sans-serif;
         --font-mono:  'DM Mono', ui-monospace, monospace;
-        --size-display: 60px;
-        --size-h1:      40px;
-        --size-h2:      32px;
-        --size-body:    20px;
-        --size-ui:      17px;
-        --size-caption: 14px;
-        --size-mono:    14px;
-        --size-micro:   11px;
-        --tr-display:   -0.03em;
-        --tr-h1:        -0.02em;
-        --tr-h2:        -0.015em;
-        --tr-mono:      0.18em;
-        --tr-micro:     0.22em;
+        --size-display: 60px; --size-h1: 40px; --size-h2: 32px;
+        --size-body: 20px; --size-ui: 17px; --size-caption: 14px;
+        --size-mono: 14px; --size-micro: 11px;
+        --tr-display: -0.03em; --tr-h1: -0.02em; --tr-h2: -0.015em;
+        --tr-mono: 0.18em; --tr-micro: 0.22em;
 
-        /* ── Spacing scale ── */
-        --space-1:  4px;
-        --space-2:  8px;
-        --space-3:  12px;
-        --space-4:  16px;
-        --space-5:  20px;
-        --space-6:  24px;
-        --space-8:  32px;
-        --space-10: 40px;
-        --space-12: 48px;
-        --space-16: 64px;
-        --space-20: 80px;
+        /* ── Spacing ── */
+        --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;
+        --space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;
+        --space-12:48px;--space-16:64px;--space-20:80px;
 
         /* ── Radii & elevation ── */
-        --radius-pill:   999px;
-        --radius-card:   14px;
-        --radius-row:    12px;
-        --radius-button: 10px;
-        --shadow-card:   0 1px 4px rgba(28, 26, 24, 0.04);
-        --shadow-elev:   0 4px 20px rgba(28, 26, 24, 0.08);
+        --radius-pill:999px;--radius-card:14px;--radius-row:12px;--radius-button:10px;
+        --shadow-card:0 1px 4px rgba(28,26,24,0.04);
+        --shadow-elev:0 4px 20px rgba(28,26,24,0.08);
       }
       input, textarea, select { font-family: 'Outfit', sans-serif; }
       button { cursor: pointer; font-family: 'Outfit', sans-serif; }
@@ -890,6 +914,7 @@ function TasksScreen({ who }) {
   const [addingWF, setAddingWF] = useState(false);
   const [newWF, setNewWF] = useState("");
   const [loading, setLoading] = useState(true);
+  const isDesktop = window.innerWidth >= 768;
 
   const load = useCallback(async () => {
     const [{ data: t }, { data: w }] = await Promise.all([
@@ -1009,21 +1034,23 @@ function TasksScreen({ who }) {
           <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>Next Actions<span style={{ color: "var(--sage)" }}>.</span></div>
 
         </div>
-        <div style={{ display: "flex", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
-          {[["list","List"],["schedule","Scheduler"]].map(([mode, label]) => (
-            <button key={mode} onClick={() => setViewMode(mode)} style={{
-              padding: "7px 14px", border: "none",
-              background: viewMode === mode ? "var(--text)" : "transparent",
-              color: viewMode === mode ? "var(--bg)" : "var(--muted)",
-              fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono', monospace",
-              letterSpacing: "0.3px", transition: "all 0.18s",
-            }}>{label}</button>
-          ))}
-        </div>
+        {isDesktop && (
+          <div style={{ display: "flex", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+            {[["list","List"],["schedule","Scheduler"]].map(([mode, label]) => (
+              <button key={mode} onClick={() => setViewMode(mode)} style={{
+                padding: "7px 14px", border: "none",
+                background: viewMode === mode ? "var(--text)" : "transparent",
+                color: viewMode === mode ? "var(--bg)" : "var(--muted)",
+                fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono', monospace",
+                letterSpacing: "0.3px", transition: "all 0.18s",
+              }}>{label}</button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Schedule view */}
-      {viewMode === "schedule" && (
+      {/* Schedule view — desktop only */}
+      {isDesktop && viewMode === "schedule" && (
         <div style={{ padding: "0 20px" }}>
           <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
             {/* Unscheduled tasks */}
@@ -1093,8 +1120,8 @@ function TasksScreen({ who }) {
         </div>
       )}
 
-      {/* List view */}
-      {viewMode === "list" && <>
+      {/* List view — always on mobile, conditionally on desktop */}
+      {(!isDesktop || viewMode === "list") && <>
       <div style={{ padding: "0 20px 16px", display: "flex", gap: 6 }}>
         {CONTEXTS.map(c => (
           <button key={c.key} onClick={() => setContext(c.key)} style={{
@@ -2180,11 +2207,33 @@ function InboxScreen({ who }) {
 
 // ─── GOOGLE CALENDAR HOOK ─────────────────────────────────────────────────────
 function useGoogleCalendar() {
-  const [token, setToken] = useState(null);
+  const [token, setToken] = useState(() => getStoredToken() || getGCalToken());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // On mount: check if we just came back from a Google redirect
+  useEffect(() => {
+    const redirectToken = parseTokenFromHash();
+    if (redirectToken) {
+      setGCalToken(redirectToken);
+      setToken(redirectToken);
+      return;
+    }
+    // Restore from session (handles page refresh)
+    const stored = getStoredToken();
+    if (stored) { setGCalToken(stored); setToken(stored); }
+  }, []);
+
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+    || window.navigator.standalone === true;
+
   const signIn = useCallback(async () => {
+    // iOS standalone PWA: popups are blocked — use redirect flow
+    if (isStandalone) {
+      signInWithRedirect();
+      return;
+    }
+    // Desktop / Safari tab: use popup flow
     setLoading(true);
     setError(null);
     try {
@@ -2206,12 +2255,7 @@ function useGoogleCalendar() {
       setError(e.message);
     }
     setLoading(false);
-  }, []);
-
-  // Auto-restore token from module-level cache
-  useEffect(() => {
-    if (getGCalToken()) setToken(getGCalToken());
-  }, []);
+  }, [isStandalone]);
 
   return { token, signIn, loading, error };
 }
