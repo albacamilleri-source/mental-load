@@ -233,7 +233,7 @@ function Spinner() {
 function useWeather() {
   const [weather, setWeather] = useState(null);
   useEffect(() => {
-    fetch("https://api.open-meteo.com/v1/forecast?latitude=35.9042&longitude=14.5189&current=temperature_2m,weathercode&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=Europe%2FMalta&forecast_days=4")
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=35.9042&longitude=14.5189&current=temperature_2m,weathercode,apparent_temperature,relative_humidity_2m,windspeed_10m,precipitation_probability&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=Europe%2FMalta&forecast_days=2")
       .then(r => r.json())
       .then(setWeather)
       .catch(console.error);
@@ -269,37 +269,39 @@ function WeatherStrip({ weather }) {
   if (!weather) return null;
   const cur = weather.current;
   const daily = weather.daily;
+  const sunrise = daily.sunrise?.[0] ? new Date(daily.sunrise[0]).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Malta" }) : null;
+  const sunset = daily.sunset?.[0] ? new Date(daily.sunset[0]).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Malta" }) : null;
   return (
     <div style={{ padding: "0 20px 20px" }}>
       <div style={{ borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", padding: "14px 16px", boxShadow: "0 1px 4px #2C282508" }}>
-        {/* Current */}
+        {/* Main temp + condition */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 32, lineHeight: 1 }}>{wmoEmoji(cur.weathercode)}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 36, lineHeight: 1 }}>{wmoEmoji(cur.weathercode)}</span>
             <div>
-              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 32, fontWeight: 300, color: "var(--text)", lineHeight: 1, letterSpacing: "-1px" }}>{Math.round(cur.temperature_2m)}°</div>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 36, fontWeight: 300, color: "var(--text)", lineHeight: 1, letterSpacing: "-1px" }}>{Math.round(cur.temperature_2m)}°</div>
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{wmoLabel(cur.weathercode)}</div>
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 12, color: "var(--text)", fontWeight: 500 }}>H: {Math.round(daily.temperature_2m_max[0])}°</div>
-            <div style={{ fontSize: 12, color: "var(--muted)" }}>L: {Math.round(daily.temperature_2m_min[0])}°</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>H: {Math.round(daily.temperature_2m_max[0])}° · L: {Math.round(daily.temperature_2m_min[0])}°</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>Feels like {Math.round(cur.apparent_temperature)}°</div>
           </div>
         </div>
-        {/* 3-day strip */}
-        <div style={{ display: "flex", gap: 6 }}>
-          {[1,2,3].map(i => {
-            const d = new Date();
-            d.setDate(d.getDate() + i);
-            return (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 4px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)" }}>
-                <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{WEEK_DAYS[d.getDay()]}</div>
-                <div style={{ fontSize: 18 }}>{wmoEmoji(daily.weathercode[i])}</div>
-                <div style={{ fontSize: 11, color: "var(--text)", fontWeight: 500 }}>{Math.round(daily.temperature_2m_max[i])}°</div>
-                <div style={{ fontSize: 10, color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{Math.round(daily.temperature_2m_min[i])}°</div>
-              </div>
-            );
-          })}
+        {/* Detail row */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {[
+            { label: "Humidity", value: `${cur.relative_humidity_2m}%` },
+            { label: "Wind", value: `${Math.round(cur.windspeed_10m)} km/h` },
+            { label: "Rain chance", value: `${cur.precipitation_probability ?? daily.precipitation_probability_max?.[0] ?? "—"}%` },
+            sunrise && { label: "Sunrise", value: sunrise },
+            sunset && { label: "Sunset", value: sunset },
+          ].filter(Boolean).map((item, i) => (
+            <div key={i} style={{ flex: "1 1 80px", padding: "8px 10px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)", textAlign: "center" }}>
+              <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>{item.label}</div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text)" }}>{item.value}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
