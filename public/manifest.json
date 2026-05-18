@@ -1,0 +1,25 @@
+{
+  "short_name": "mental load.",
+  "name": "mental load.",
+  "description": "Household mental load management for Alba & Josh.",
+  "start_url": "/mental-load/",
+  "scope": "/mental-load/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F4F0",
+  "theme_color": "#F7F4F0",
+  "icons": [
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
