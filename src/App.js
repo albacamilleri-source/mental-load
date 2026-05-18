@@ -106,25 +106,79 @@ const GlobalStyles = () => {
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
       html, body { background: #FAF8F5; color: #2C2825; font-family: 'Outfit', sans-serif; overscroll-behavior: none; height: 100%; }
       :root {
-        --bg: #F7F4F0;
-        --surface: #FFFFFF;
-        --surface2: #F0EDE8;
-        --border: #E4DED6;
-        --text: #1C1A18;
-        --muted: #7A706A;
-        --muted2: #B8B0A6;
-        --sage: #7C9E8A;
-        --morning: #C4A882;
-        --evening: #4A7D8A;
-        --chores: #7C9E8A;
-        --admin: #7A6AA8;
-        --meals: #C4623A;
+        /* ── Brand layer (locked) ── */
+        --ml-bone:        #F7F4F0;
+        --ml-vellum:      #EFEAE0;
+        --ml-paper:       #FAF8F5;
+        --ml-ink:         #1C1A18;
+        --ml-quiet:       #7A706A;
+        --ml-muted:       #B8B0A6;
+        --ml-border:      #E4DED6;
+        --ml-accent:      #8A6B52;
+        --ml-accent-soft: #8A6B5215;
+        --ml-ink-soft:    #1C1A1810;
+
+        /* ── Existing tokens — now reference brand layer ── */
+        --bg:       var(--ml-bone);
+        --surface:  #FFFFFF;
+        --surface2: var(--ml-vellum);
+        --border:   var(--ml-border);
+        --text:     var(--ml-ink);
+        --muted:    var(--ml-quiet);
+        --muted2:   var(--ml-muted);
+
+        /* ── Semantic product colors (never used for brand surfaces) ── */
+        --sage:     #7C9E8A;
+        --morning:  #C4A882;
+        --evening:  #4A7D8A;
+        --chores:   #7C9E8A;
+        --admin:    #7A6AA8;
+        --meals:    #C4623A;
         --planning: #C4A882;
-        --josh: #3A8A72;
-        --danger: #C44A4A;
-        --rose: #D4A8A0;
-        --pebble: #7A706B;
-        --birch: #D5CEC6;
+        --josh:     #3A8A72;
+        --danger:   #C44A4A;
+        --rose:     #D4A8A0;
+        --pebble:   #7A706B;
+        --birch:    #D5CEC6;
+
+        /* ── Type tokens ── */
+        --font-serif: 'Lora', Georgia, serif;
+        --font-sans:  'Outfit', system-ui, sans-serif;
+        --font-mono:  'DM Mono', ui-monospace, monospace;
+        --size-display: 60px;
+        --size-h1:      40px;
+        --size-h2:      32px;
+        --size-body:    20px;
+        --size-ui:      17px;
+        --size-caption: 14px;
+        --size-mono:    14px;
+        --size-micro:   11px;
+        --tr-display:   -0.03em;
+        --tr-h1:        -0.02em;
+        --tr-h2:        -0.015em;
+        --tr-mono:      0.18em;
+        --tr-micro:     0.22em;
+
+        /* ── Spacing scale ── */
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-10: 40px;
+        --space-12: 48px;
+        --space-16: 64px;
+        --space-20: 80px;
+
+        /* ── Radii & elevation ── */
+        --radius-pill:   999px;
+        --radius-card:   14px;
+        --radius-row:    12px;
+        --radius-button: 10px;
+        --shadow-card:   0 1px 4px rgba(28, 26, 24, 0.04);
+        --shadow-elev:   0 4px 20px rgba(28, 26, 24, 0.08);
       }
       input, textarea, select { font-family: 'Outfit', sans-serif; }
       button { cursor: pointer; font-family: 'Outfit', sans-serif; }
@@ -133,6 +187,7 @@ const GlobalStyles = () => {
       @keyframes fade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
       .pop { animation: pop 0.22s cubic-bezier(.34,1.56,.64,1) forwards; }
       @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+      @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
       .app-sidebar { display: none; }
       .app-nav-mobile { display: block; }
       .app-settings-mobile { display: block; }
@@ -2954,52 +3009,89 @@ function SettingsIcon({ onPress }) {
 }
 
 function WelcomeScreen({ onChoose }) {
-  // Animation phases: 0=nothing, 1=mental visible, 2=load. typed, 3=rest visible
-  const [phase, setPhase] = useState(0);
+  const [mentalVisible, setMentalVisible] = useState(false);
+  const [typedChars, setTypedChars] = useState(0);
+  const [restVisible, setRestVisible] = useState(false);
+
+  const WORD = "load.";
 
   useEffect(() => {
-    // mental fades in immediately
-    const t1 = setTimeout(() => setPhase(1), 100);
-    // load. appears after mental settles
-    const t2 = setTimeout(() => setPhase(2), 900);
-    // question + buttons appear
-    const t3 = setTimeout(() => setPhase(3), 2000);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    // mental fades in first
+    const t1 = setTimeout(() => setMentalVisible(true), 150);
+
+    // typewriter starts after mental settles — each char 110ms apart, period 280ms pause
+    const timers = [];
+    let elapsed = 1000;
+    WORD.split("").forEach((char, i) => {
+      const gap = char === "." ? 280 : 110;
+      elapsed += (i === 0 ? 0 : gap);
+      timers.push(setTimeout(() => setTypedChars(i + 1), elapsed));
+      elapsed += (char === "." ? 0 : gap);
+    });
+
+    // rest appears after typing finishes
+    const t2 = setTimeout(() => setRestVisible(true), elapsed + 500);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      timers.forEach(clearTimeout);
+    };
   }, []);
+
+  const typed = WORD.slice(0, typedChars);
+  const loadPart = typed.replace(".", "");
+  const hasPeriod = typed.includes(".");
+  const isTyping = typedChars > 0 && typedChars < WORD.length;
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 0, background: "var(--bg)" }}>
 
       {/* App name */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 52 }}>
-        {/* "mental" — fades in first */}
+
+        {/* "mental" — fades in, italic per brand spec */}
         <div style={{
-          fontFamily: "'Lora', Georgia, serif", fontWeight: 400, fontSize: 42,
-          color: "var(--text)", lineHeight: 1.1, letterSpacing: "-0.3px", textAlign: "center",
-          opacity: phase >= 1 ? 1 : 0,
-          transform: phase >= 1 ? "translateY(0)" : "translateY(8px)",
-          transition: "opacity 0.8s ease, transform 0.8s ease",
+          fontFamily: "'Lora', Georgia, serif", fontWeight: 400, fontStyle: "italic",
+          fontSize: 42, color: "var(--text)", lineHeight: 1.1,
+          letterSpacing: "-0.025em", textAlign: "center",
+          opacity: mentalVisible ? 1 : 0,
+          transform: mentalVisible ? "translateY(0)" : "translateY(8px)",
+          transition: "opacity 0.9s ease, transform 0.9s ease",
         }}>
           mental
         </div>
-        {/* "load." — appears after, types in feel via delayed opacity */}
+
+        {/* "load." — typed character by character, roman per brand spec */}
         <div style={{
-          fontFamily: "'Lora', Georgia, serif", fontWeight: 400, fontStyle: "italic",
-          fontSize: 42, lineHeight: 1.1, letterSpacing: "-0.3px", textAlign: "center",
-          opacity: phase >= 2 ? 1 : 0,
-          transform: phase >= 2 ? "translateY(0)" : "translateY(6px)",
-          transition: "opacity 0.6s ease, transform 0.6s ease",
+          fontFamily: "'Lora', Georgia, serif", fontWeight: 500, fontStyle: "normal",
+          fontSize: 42, lineHeight: 1.1, letterSpacing: "-0.025em", textAlign: "center",
+          minHeight: "1.1em", display: "flex", alignItems: "baseline", justifyContent: "center",
         }}>
-          load<span style={{ color: "var(--sage)" }}>.</span>
+          <span style={{ color: "var(--text)" }}>{loadPart}</span>
+          {hasPeriod && (
+            <span style={{
+              display: "inline-block", width: "0.16em", height: "0.16em",
+              background: "var(--ml-ink)", borderRadius: "50%",
+              marginLeft: "0.04em", verticalAlign: "baseline", flexShrink: 0,
+            }} />
+          )}
+          {isTyping && (
+            <span style={{
+              display: "inline-block", width: 2, height: "0.75em",
+              background: "var(--text)", marginLeft: 1, verticalAlign: "middle",
+              animation: "blink 0.7s step-end infinite",
+            }} />
+          )}
         </div>
       </div>
 
-      {/* Who's here — appears last */}
+      {/* Who's here — appears after typing */}
       <div style={{
         display: "flex", flexDirection: "column", alignItems: "center", gap: 20,
         width: "100%", maxWidth: 280,
-        opacity: phase >= 3 ? 1 : 0,
-        transform: phase >= 3 ? "translateY(0)" : "translateY(10px)",
+        opacity: restVisible ? 1 : 0,
+        transform: restVisible ? "translateY(0)" : "translateY(10px)",
         transition: "opacity 0.7s ease, transform 0.7s ease",
       }}>
         <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1.5px", textTransform: "uppercase" }}>Who's here?</div>
@@ -3019,7 +3111,6 @@ function WelcomeScreen({ onChoose }) {
     </div>
   );
 }
-
 export default function App() {
   const [who, chooseWho] = useWho();
   const [screen, setScreen] = useState("today");
@@ -3066,8 +3157,8 @@ export default function App() {
         borderRight: "1px solid var(--border)", background: "var(--surface)",
         padding: "32px 0 24px", position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 100,
       }}>
-        <div style={{ padding: "0 20px 28px", fontFamily: "'Lora', Georgia, serif", fontSize: 22, fontWeight: 300, color: "var(--text)", letterSpacing: "-0.3px" }}>
-          <span style={{ fontStyle: "normal" }}>mental </span><span style={{ fontStyle: "italic", color: "var(--sage)" }}>load.</span>
+        <div style={{ padding: "0 20px 28px", fontFamily: "'Lora', Georgia, serif", fontSize: 22, letterSpacing: "-0.025em", lineHeight: 1.0, color: "var(--text)", whiteSpace: "nowrap" }}>
+          <span style={{ fontStyle: "italic", fontWeight: 400 }}>mental </span><span style={{ fontStyle: "normal", fontWeight: 500 }}>load<span style={{ display: "inline-block", width: "0.16em", height: "0.16em", background: "currentColor", borderRadius: "50%", marginLeft: "0.04em", verticalAlign: "baseline" }} /></span>
         </div>
         {NAV.filter(n => !n.albaOnly || who === "alba").map(n => (
           <button key={n.key} onClick={() => setScreen(n.key)} style={{
