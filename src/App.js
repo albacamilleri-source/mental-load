@@ -696,7 +696,6 @@ function WeekScreen({ who }) {
     <div className="fade" style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>This Week<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>Resets every Monday</div>
       </div>
 
       {loading ? <Spinner /> : <>
@@ -953,7 +952,7 @@ function TasksScreen({ who }) {
       <div style={{ padding: "72px 20px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <div>
           <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>Next Actions<span style={{ color: "var(--sage)" }}>.</span></div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>{active.length} to do</div>
+
         </div>
         <div style={{ display: "flex", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
           {[["list","List"],["schedule","Scheduler"]].map(([mode, label]) => (
@@ -1209,7 +1208,6 @@ function MonthScreen({ who }) {
     <div className="fade" style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>This Month<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>{monthName} · resets 1st</div>
       </div>
 
       {/* Monthly recurring tasks */}
@@ -1349,11 +1347,11 @@ function PlanScreen() {
       </div>
 
       {loading ? <Spinner /> : (
-        <div style={{ padding: "0 16px" }}>
+        <div style={{ padding: "0 12px" }}>
           {years.map(year => (
             <div key={year} style={{ marginBottom: 28 }}>
               <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10, paddingLeft: 4 }}>{year}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
                 {months.map((mon, mi) => {
                   const key = monthKey(year, mi);
                   const past = isPast(year, mi);
@@ -1364,7 +1362,7 @@ function PlanScreen() {
                     <div key={key}
                       onClick={() => setSelectedMonth(isSelected ? null : key)}
                       style={{
-                        borderRadius: 12, padding: "10px 10px 10px",
+                        borderRadius: 10, padding: "8px 7px",
                         background: isSelected ? "var(--sage)" : current ? "var(--surface)" : "var(--surface)",
                         border: `1px solid ${isSelected ? "transparent" : current ? "var(--sage)" : "var(--border)"}`,
                         opacity: past ? 0.38 : 1,
@@ -1374,7 +1372,7 @@ function PlanScreen() {
                         boxShadow: current && !isSelected ? "0 0 0 1.5px var(--sage)44" : "none",
                       }}
                     >
-                      <div style={{ fontSize: 13, fontWeight: isSelected || current ? 500 : 400, color: isSelected ? "#fff" : "var(--text)", marginBottom: 4 }}>{mon}</div>
+                      <div style={{ fontSize: 12, fontWeight: isSelected || current ? 500 : 400, color: isSelected ? "#fff" : "var(--text)", marginBottom: 3 }}>{mon}</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         {evs.slice(0, 2).map((e, i) => (
                           <div key={i} style={{ fontSize: 9, color: isSelected ? "rgba(255,255,255,0.85)" : "var(--planning)", fontFamily: "'DM Mono', monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -2956,29 +2954,60 @@ function SettingsIcon({ onPress }) {
 }
 
 function WelcomeScreen({ onChoose }) {
+  // Animation phases: 0=nothing, 1=mental visible, 2=load. typed, 3=rest visible
+  const [phase, setPhase] = useState(0);
 
+  useEffect(() => {
+    // mental fades in immediately
+    const t1 = setTimeout(() => setPhase(1), 100);
+    // load. appears after mental settles
+    const t2 = setTimeout(() => setPhase(2), 900);
+    // question + buttons appear
+    const t3 = setTimeout(() => setPhase(3), 2000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, []);
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 0, background: "var(--bg)" }}>
 
       {/* App name */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 52 }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontWeight: 400, fontSize: 42, color: "var(--text)", lineHeight: 1.1, letterSpacing: "-0.3px", textAlign: "center" }}>
+        {/* "mental" — fades in first */}
+        <div style={{
+          fontFamily: "'Lora', Georgia, serif", fontWeight: 400, fontSize: 42,
+          color: "var(--text)", lineHeight: 1.1, letterSpacing: "-0.3px", textAlign: "center",
+          opacity: phase >= 1 ? 1 : 0,
+          transform: phase >= 1 ? "translateY(0)" : "translateY(8px)",
+          transition: "opacity 0.8s ease, transform 0.8s ease",
+        }}>
           mental
         </div>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontWeight: 400, fontStyle: "italic", fontSize: 42, lineHeight: 1.1, letterSpacing: "-0.3px", textAlign: "center" }}>
+        {/* "load." — appears after, types in feel via delayed opacity */}
+        <div style={{
+          fontFamily: "'Lora', Georgia, serif", fontWeight: 400, fontStyle: "italic",
+          fontSize: 42, lineHeight: 1.1, letterSpacing: "-0.3px", textAlign: "center",
+          opacity: phase >= 2 ? 1 : 0,
+          transform: phase >= 2 ? "translateY(0)" : "translateY(6px)",
+          transition: "opacity 0.6s ease, transform 0.6s ease",
+        }}>
           load<span style={{ color: "var(--sage)" }}>.</span>
         </div>
       </div>
 
-      {/* Who's here */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20, width: "100%", maxWidth: 280 }}>
+      {/* Who's here — appears last */}
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 20,
+        width: "100%", maxWidth: 280,
+        opacity: phase >= 3 ? 1 : 0,
+        transform: phase >= 3 ? "translateY(0)" : "translateY(10px)",
+        transition: "opacity 0.7s ease, transform 0.7s ease",
+      }}>
         <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1.5px", textTransform: "uppercase" }}>Who's here?</div>
         <div style={{ display: "flex", gap: 12, width: "100%" }}>
           {[["alba", "var(--sage)"], ["josh", "var(--josh)"]].map(([w, c]) => (
             <button key={w} onClick={() => onChoose(w)} style={{
               flex: 1, padding: "16px 0", borderRadius: 12,
-              background: "var(--sage)", border: "none",
+              background: c, border: "none",
               color: "#fff", fontSize: 15, fontWeight: 500,
               textTransform: "capitalize", letterSpacing: "0.5px",
               boxShadow: `0 4px 20px ${c}55`,
