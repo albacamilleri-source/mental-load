@@ -228,6 +228,84 @@ function Spinner() {
   return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "1px" }}>loading…</div>;
 }
 
+
+// ─── WEATHER HOOK ─────────────────────────────────────────────────────────────
+function useWeather() {
+  const [weather, setWeather] = useState(null);
+  useEffect(() => {
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=35.9042&longitude=14.5189&current=temperature_2m,weathercode&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=Europe%2FMalta&forecast_days=4")
+      .then(r => r.json())
+      .then(setWeather)
+      .catch(console.error);
+  }, []);
+  return weather;
+}
+
+const wmoLabel = (code) => {
+  if (code === 0) return "Clear";
+  if (code <= 2) return "Partly cloudy";
+  if (code === 3) return "Overcast";
+  if (code <= 49) return "Fog";
+  if (code <= 69) return "Rain";
+  if (code <= 79) return "Snow";
+  if (code <= 84) return "Showers";
+  return "Thunderstorm";
+};
+
+const wmoEmoji = (code) => {
+  if (code === 0) return "☀️";
+  if (code <= 2) return "⛅";
+  if (code === 3) return "☁️";
+  if (code <= 49) return "🌫️";
+  if (code <= 69) return "🌧️";
+  if (code <= 79) return "❄️";
+  if (code <= 84) return "🌦️";
+  return "⛈️";
+};
+
+const WEEK_DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function WeatherStrip({ weather }) {
+  if (!weather) return null;
+  const cur = weather.current;
+  const daily = weather.daily;
+  return (
+    <div style={{ padding: "0 20px 20px" }}>
+      <div style={{ borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", padding: "14px 16px", boxShadow: "0 1px 4px #2C282508" }}>
+        {/* Current */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 32, lineHeight: 1 }}>{wmoEmoji(cur.weathercode)}</span>
+            <div>
+              <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 32, fontWeight: 300, color: "var(--text)", lineHeight: 1, letterSpacing: "-1px" }}>{Math.round(cur.temperature_2m)}°</div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{wmoLabel(cur.weathercode)}</div>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 12, color: "var(--text)", fontWeight: 500 }}>H: {Math.round(daily.temperature_2m_max[0])}°</div>
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>L: {Math.round(daily.temperature_2m_min[0])}°</div>
+          </div>
+        </div>
+        {/* 3-day strip */}
+        <div style={{ display: "flex", gap: 6 }}>
+          {[1,2,3].map(i => {
+            const d = new Date();
+            d.setDate(d.getDate() + i);
+            return (
+              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 4px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{WEEK_DAYS[d.getDay()]}</div>
+                <div style={{ fontSize: 18 }}>{wmoEmoji(daily.weathercode[i])}</div>
+                <div style={{ fontSize: 11, color: "var(--text)", fontWeight: 500 }}>{Math.round(daily.temperature_2m_max[i])}°</div>
+                <div style={{ fontSize: 10, color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{Math.round(daily.temperature_2m_min[i])}°</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── TODAY SCREEN ─────────────────────────────────────────────────────────────
 function TodayScreen({ who }) {
   const [tasks, setTasks] = useState([]);
@@ -236,6 +314,7 @@ function TodayScreen({ who }) {
   const [loading, setLoading] = useState(true);
   const [todayPlans, setTodayPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
+  const weather = useWeather();
 
   const pKey = dailyKey();
   const color = tab === "morning" ? "var(--morning)" : "var(--evening)";
@@ -323,6 +402,8 @@ function TodayScreen({ who }) {
       </div>
 
       {/* 3 tab switcher */}
+      <WeatherStrip weather={weather} />
+
       <div style={{ padding: "0 20px 20px", display: "flex", gap: 6 }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
@@ -2536,89 +2617,10 @@ function SettingsIcon({ onPress }) {
 }
 
 function WelcomeScreen({ onChoose }) {
-  const [weather, setWeather] = useState(null);
 
-  useEffect(() => {
-    const fetchWeather = async () => {
-      try {
-        const res = await fetch(
-          "https://api.open-meteo.com/v1/forecast?latitude=35.9042&longitude=14.5189&current=temperature_2m,weathercode,windspeed_10m&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=Europe%2FMalta&forecast_days=4"
-        );
-        const data = await res.json();
-        setWeather(data);
-      } catch (e) { console.error("Weather fetch failed", e); }
-    };
-    fetchWeather();
-  }, []);
-
-  const wmoLabel = (code) => {
-    if (code === 0) return "Clear";
-    if (code <= 2) return "Partly cloudy";
-    if (code === 3) return "Overcast";
-    if (code <= 9) return "Fog";
-    if (code <= 19) return "Drizzle";
-    if (code <= 29) return "Rain";
-    if (code <= 39) return "Snow";
-    if (code <= 49) return "Fog";
-    if (code <= 59) return "Drizzle";
-    if (code <= 69) return "Rain";
-    if (code <= 79) return "Snow";
-    if (code <= 84) return "Showers";
-    if (code <= 94) return "Thunderstorm";
-    return "Storm";
-  };
-
-  const wmoEmoji = (code) => {
-    if (code === 0) return "☀️";
-    if (code <= 2) return "⛅";
-    if (code === 3) return "☁️";
-    if (code <= 49) return "🌫️";
-    if (code <= 69) return "🌧️";
-    if (code <= 79) return "❄️";
-    if (code <= 84) return "🌦️";
-    return "⛈️";
-  };
-
-  const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-
-  const cur = weather?.current;
-  const daily = weather?.daily;
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, gap: 0, background: "var(--bg)" }}>
-
-      {/* Weather block */}
-      {weather && cur && (
-        <div style={{ marginBottom: 36, textAlign: "center" }}>
-          <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 6 }}>{wmoEmoji(cur.weathercode)}</div>
-          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: 52, fontWeight: 300, color: "var(--text)", lineHeight: 1, letterSpacing: "-2px" }}>
-            {Math.round(cur.temperature_2m)}°
-          </div>
-          <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 4 }}>{wmoLabel(cur.weathercode)}</div>
-          {daily && (
-            <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", marginTop: 4 }}>
-              H: {Math.round(daily.temperature_2m_max[0])}° · L: {Math.round(daily.temperature_2m_min[0])}°
-            </div>
-          )}
-          {/* 4-day forecast strip */}
-          {daily && (
-            <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "center" }}>
-              {[1,2,3].map(i => {
-                const d = new Date();
-                d.setDate(d.getDate() + i);
-                return (
-                  <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 12px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", minWidth: 56 }}>
-                    <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{days[d.getDay()]}</div>
-                    <div style={{ fontSize: 16 }}>{wmoEmoji(daily.weathercode[i])}</div>
-                    <div style={{ fontSize: 11, color: "var(--text)", fontWeight: 500 }}>{Math.round(daily.temperature_2m_max[i])}°</div>
-                    <div style={{ fontSize: 10, color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{Math.round(daily.temperature_2m_min[i])}°</div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* App name */}
       <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 300, fontSize: 44, letterSpacing: "-0.5px", color: "var(--text)", display: "flex", alignItems: "baseline", marginBottom: 48 }}>
