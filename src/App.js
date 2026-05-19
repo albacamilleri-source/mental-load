@@ -269,7 +269,7 @@ function SectionLabel({ text, color, done, total }) {
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.18em", fontWeight: 500 }}>{text}</span>
+        <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 400 }}>{text}</span>
         {total !== undefined && <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{done}/{total}</span>}
       </div>
       {total !== undefined && <Bar done={done} total={total} color={color} />}
@@ -293,7 +293,7 @@ function TaskRow({ text, done, onToggle, color, sub, overdue, dueDate, badge }) 
         <div style={{ flex: 1 }} onClick={() => sub && setOpen(!open)}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, fontWeight: 400, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s", color: done ? "var(--muted2)" : "var(--text)" }}>{text}</span>
-            {overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>overdue {dueDate}</span>}
+            {overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>overdue {dueDate}</span>}
             {dueDate && !overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{dueDate}</span>}
             {badge && <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : badge}</span>}
           </div>
@@ -310,7 +310,7 @@ function TaskRow({ text, done, onToggle, color, sub, overdue, dueDate, badge }) 
 }
 
 function Spinner() {
-  return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>loading…</div>;
+  return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>loading…</div>;
 }
 
 
@@ -364,7 +364,7 @@ function WeatherStrip({ weather }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 36, lineHeight: 1 }}>{wmoEmoji(cur.weathercode)}</span>
             <div>
-              <div style={{ fontFamily: "'Lora', serif", fontSize: 36, fontWeight: 400, color: "var(--text)", lineHeight: 1, letterSpacing: "-0.025em" }}>{Math.round(cur.temperature_2m)}°</div>
+              <div style={{ fontFamily: "'Lora', serif", fontSize: 40, fontWeight: 400, color: "var(--text)", lineHeight: 1, letterSpacing: "-0.025em" }}>{Math.round(cur.temperature_2m)}°</div>
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{wmoLabel(cur.weathercode)}</div>
             </div>
           </div>
@@ -383,7 +383,7 @@ function WeatherStrip({ weather }) {
             sunset && { label: "Sunset", value: sunset },
           ].filter(Boolean).map((item, i) => (
             <div key={i} style={{ flex: "1 1 80px", padding: "8px 10px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)", textAlign: "center" }}>
-              <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 3 }}>{item.label}</div>
+              <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: 3 }}>{item.label}</div>
               <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text)" }}>{item.value}</div>
             </div>
           ))}
@@ -483,8 +483,8 @@ function TodayScreen({ who }) {
   return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 16px" }}>
-        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6 }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Malta" })}</div>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.02em", lineHeight: 1.1 }}>Good {greeting.toLowerCase()}, {who === "alba" ? "Alba" : "Josh"}<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: 6 }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Malta" })}</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.02em", lineHeight: 1.1 }}>Good {greeting.toLowerCase()}, {who === "alba" ? "Alba" : "Josh"}<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
       {/* 3 tab switcher */}
@@ -509,12 +509,12 @@ function TodayScreen({ who }) {
       {(tab === "morning" || tab === "evening") && (<>
         <div style={{ padding: "0 20px 14px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.18em" }}>{tab === "morning" ? "Morning Routine" : "Evening Shutdown"}</span>
+            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.22em" }}>{tab === "morning" ? "Morning Routine" : "Evening Shutdown"}</span>
             <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>{doneCount}/{visible.length}</span>
           </div>
           <Bar done={doneCount} total={visible.length} color={color} />
           {doneCount === visible.length && visible.length > 0 && (
-            <div style={{ marginTop: 10, padding: "10px 16px", background: `${color}12`, borderRadius: 10, color, border: `1px solid ${color}22`, fontStyle: "italic", fontFamily: "'Lora', serif", fontSize: 16 }}>All done ✦</div>
+            <div style={{ marginTop: 10, padding: "10px 16px", background: `${color}12`, borderRadius: 10, color, border: `1px solid ${color}22`, fontStyle: "italic", fontFamily: "'Lora', serif", fontSize: 16 }}>off—loaded.</div>
           )}
         </div>
         {loading ? <Spinner /> : (
@@ -532,7 +532,7 @@ function TodayScreen({ who }) {
         {/* Meeting block if today */}
         {meetingIsToday && (
           <div style={{ marginBottom: 16, padding: "14px 16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
-            <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--josh)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 4 }}>↔ Alba & Josh Weekly</div>
+            <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--josh)", textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: 4 }}>↔ Alba & Josh Weekly</div>
             <div style={{ fontSize: 13, color: "var(--text)" }}>Weekly meeting today</div>
             <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>See Week tab for agenda</div>
           </div>
@@ -542,7 +542,7 @@ function TodayScreen({ who }) {
         {!plansLoading && todayPlans.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.18em", fontWeight: 500 }}>Due Today</span>
+              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 400 }}>Due Today</span>
               <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{todayPlans.length}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -561,7 +561,7 @@ function TodayScreen({ who }) {
         {/* Calendar events */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.18em", fontWeight: 500 }}>Today</span>
+            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 400 }}>Today</span>
           </div>
           <TodayCalendarTab />
         </div>
@@ -665,10 +665,10 @@ function JoshMeetingBlock({ isWed }) {
                   </div>
                 ))}
                 {items.length === 0 && !adding && (
-                  <div style={{ fontSize: 12, color: "var(--muted2)", padding: "4px 0" }}>Nothing to discuss yet</div>
+                  <div style={{ fontSize: 12, color: "var(--muted2)", padding: "4px 0" }}>Nothing off—loaded yet. yet</div>
                 )}
                 {!adding ? (
-                  <button onClick={() => setAdding(true)} style={{ marginTop: 4, padding: "7px 0", background: "none", border: `1.5px dashed var(--josh)44`, borderRadius: 10, color: "var(--josh)", fontSize: 12, width: "100%" }}>+ Add item</button>
+                  <button onClick={() => setAdding(true)} style={{ marginTop: 4, padding: "7px 0", background: "none", border: `1.5px dashed var(--josh)44`, borderRadius: 10, color: "var(--josh)", fontSize: 12, width: "100%" }}>+ load it in</button>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
                     <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
@@ -776,7 +776,7 @@ function WeekScreen({ who }) {
   return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>This Week<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>This Week<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
       {loading ? <Spinner /> : <>
@@ -1033,7 +1033,7 @@ function TasksScreen({ who }) {
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <div>
-          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Next Actions<span style={{ color: "var(--sage)" }}>.</span></div>
+          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Next Actions<span style={{ color: "var(--sage)" }}>.</span></div>
 
         </div>
         {isDesktop && (
@@ -1057,7 +1057,7 @@ function TasksScreen({ who }) {
           <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
             {/* Unscheduled tasks */}
             <div style={{ width: 200, flexShrink: 0 }}>
-              <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 10 }}>Unscheduled · {unscheduled.length}</div>
+              <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: 10 }}>Unscheduled · {unscheduled.length}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {unscheduled.map(t => (
                   <div key={t.id}
@@ -1077,7 +1077,7 @@ function TasksScreen({ who }) {
                     {t.notes && <div style={{ fontSize: 10, color: "var(--muted)", lineHeight: 1.4, marginTop: 4, whiteSpace: "pre-wrap" }}>{t.notes}</div>}
                   </div>
                 ))}
-                {unscheduled.length === 0 && <div style={{ fontSize: 12, color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>All scheduled ✦</div>}
+                {unscheduled.length === 0 && <div style={{ fontSize: 12, color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>All scheduled</div>}
               </div>
             </div>
 
@@ -1101,7 +1101,7 @@ function TasksScreen({ who }) {
                       background: isDrop ? "var(--sage)08" : isToday ? "var(--morning)05" : "var(--surface)",
                       padding: "10px 12px", minHeight: 60, transition: "all 0.15s",
                     }}>
-                    <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: isToday ? "var(--morning)" : "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: dayTasks.length ? 8 : 0 }}>
+                    <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: isToday ? "var(--morning)" : "var(--muted)", textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: dayTasks.length ? 8 : 0 }}>
                       {d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
                       {isToday && <span style={{ marginLeft: 6, fontSize: 8, padding: "1px 5px", borderRadius: 10, background: "var(--morning)", color: "#fff" }}>today</span>}
                     </div>
@@ -1152,7 +1152,7 @@ function TasksScreen({ who }) {
 
       <div style={{ padding: "12px 20px 0" }}>
         {!adding ? (
-          <button onClick={() => setAdding(true)} style={{ width: "100%", padding: "10px", background: "none", border: "1.5px dashed var(--border)", borderRadius: 10, color: "var(--muted)", fontSize: 13 }}>+ Add action</button>
+          <button onClick={() => setAdding(true)} style={{ width: "100%", padding: "10px", background: "none", border: "1.5px dashed var(--border)", borderRadius: 10, color: "var(--muted)", fontSize: 13 }}>+ load it in</button>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "var(--surface)", borderRadius: 14, padding: 16, border: "1px solid var(--border)", boxShadow: "0 2px 12px rgba(28,26,24,0.06)" }}>
             <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
@@ -1189,7 +1189,7 @@ function TasksScreen({ who }) {
 
 
       <div style={{ padding: "24px 20px 0" }}>
-        <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.18em" }}>Waiting For</div>
+        <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.22em" }}>Waiting For</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {waiting.map(w => (
             <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
@@ -1291,7 +1291,7 @@ function MonthScreen({ who }) {
   return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>This Month<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>This Month<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
       {/* Monthly recurring tasks */}
@@ -1309,7 +1309,7 @@ function MonthScreen({ who }) {
       {/* Plan items surfaced this month */}
       {!loading && planItems.length > 0 && (
         <div style={{ padding: "0 20px" }}>
-          <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 10 }}>From Plan</div>
+          <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: 10 }}>From Plan</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {planItems.map(e => (
               <div key={e.id} style={{ padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--planning)44" }}>
@@ -1421,10 +1421,10 @@ function PlanScreen() {
   return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 20px" }}>
-        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: 8 }}>
           {new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
         </div>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.02em" }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.02em" }}>
           Plan<span style={{ color: "var(--sage)" }}>.</span>
         </div>
         <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", marginTop: 4 }}>Tap a month to see events</div>
@@ -1434,7 +1434,7 @@ function PlanScreen() {
         <div style={{ padding: "0 16px" }}>
           {years.map(year => (
             <div key={year} style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 10, paddingLeft: 2 }}>{year}</div>
+              <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: 10, paddingLeft: 2 }}>{year}</div>
               <div style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(2, 1fr)",
@@ -1462,7 +1462,7 @@ function PlanScreen() {
                         boxShadow: current && !isSelected ? "0 0 0 1.5px var(--sage)44" : "none",
                       }}
                     >
-                      <div style={{ fontSize: 11, fontWeight: isSelected || current ? 500 : 400, color: isSelected ? "#fff" : "var(--text)", marginBottom: 4 }}>{mon}</div>
+                      <div style={{ fontSize: 11, fontWeight: isSelected || current ? 500 : 400, fontFamily: "'Outfit', system-ui, sans-serif", color: isSelected ? "#fff" : "var(--text)", marginBottom: 4 }}>{mon}</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         {evs.slice(0, 2).map((e, i) => (
                           <div key={i} style={{ fontSize: 10, color: isSelected ? "rgba(255,255,255,0.85)" : "var(--planning)", fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.5 }}>
@@ -1482,19 +1482,19 @@ function PlanScreen() {
               {years.indexOf(year) >= 0 && selectedMonth && selectedMonth.endsWith(`/${year}`) && (
                 <div style={{ marginTop: 10, padding: "14px 16px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 12px rgba(28,26,24,0.06)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ fontSize: 10, color: "var(--sage)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.18em" }}>
+                    <div style={{ fontSize: 10, color: "var(--sage)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.22em" }}>
                       {months[parseInt(selectedMonth.split("/")[0]) - 1]} {selectedMonth.split("/")[1]}
                     </div>
                     <button onClick={() => { setAddMonth(selectedMonth); setShowAddModal(true); }} style={{ background: "none", border: "none", color: "var(--sage)", fontSize: 12, fontFamily: "'DM Mono', monospace", cursor: "pointer" }}>+ Add event</button>
                   </div>
                   {selectedEvents.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "var(--muted2)", textAlign: "center", padding: "8px 0" }}>No events this month</div>
+                    <div style={{ fontSize: 13, color: "var(--muted2)", fontFamily: "'Outfit', system-ui, sans-serif", textAlign: "center", padding: "8px 0" }}>No events this month</div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {selectedEvents.map(e => (
                         <div key={e.id} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 14, color: "var(--text)", fontWeight: 400, display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ fontSize: 14, color: "var(--text)", fontFamily: "'Outfit', system-ui, sans-serif", fontWeight: 400, display: "flex", alignItems: "center", gap: 8 }}>
                               {e.text}
                               {e.recurring && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 20, border: "1px solid var(--border)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>↻ annual</span>}
                             </div>
@@ -1514,7 +1514,7 @@ function PlanScreen() {
           <button onClick={() => { setAddMonth(""); setShowAddModal(true); }} style={{
             width: "100%", padding: "12px", background: "none",
             border: "1.5px dashed var(--border)", borderRadius: 12,
-            color: "var(--muted)", fontSize: 13, cursor: "pointer",
+            color: "var(--muted)", fontSize: 13, fontFamily: "'Outfit', system-ui, sans-serif", cursor: "pointer",
           }}>+ Add event</button>
         </div>
       )}
@@ -1559,7 +1559,7 @@ function PlanEventModal({ event, onSave, onDelete, onClose }) {
         padding: "24px 20px 40px", display: "flex", flexDirection: "column", gap: 12,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>
+          <div style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>
             {event.id ? "Edit Event" : "Add Event"}
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 22 }}>×</button>
@@ -1615,8 +1615,8 @@ function HistorySection() {
 
   return (
     <div style={{ padding: "0 20px 40px" }}>
-      <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 26, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>History</div>
-      <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>Everything you've actioned</div>
+      <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 32, fontWeight: 500, color: "var(--text)", marginBottom: 4 }}>History</div>
+      <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: 16 }}>Everything you've actioned</div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
         {[["all","All"],["next_action","Tasks"],["waiting_for","Waiting"],["josh_meeting","Meeting"]].map(([k,l]) => (
@@ -1631,7 +1631,7 @@ function HistorySection() {
 
       {loading ? <Spinner /> : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {filtered.length === 0 && <div style={{ fontSize: 13, color: "var(--muted2)", textAlign: "center", padding: "20px 0" }}>Nothing here yet</div>}
+          {filtered.length === 0 && <div style={{ fontSize: 13, color: "var(--muted2)", textAlign: "center", padding: "20px 0" }}>Load us up.</div>}
           {filtered.map(item => (
             <div key={item.id} style={{ padding: "10px 14px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: item.notes ? 3 : 0 }}>
@@ -1689,7 +1689,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
 
   return (
     <div style={{ marginBottom: 28 }}>
-      <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 10 }}>{title}</div>
+      <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: 10 }}>{title}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {items.map((item, i) => (
           editingIdx === i ? (
@@ -1949,8 +1949,8 @@ function EditScreen({ onBack }) {
       <div style={{ padding: "28px 20px 20px", display: "flex", alignItems: "center", gap: 14 }}>
         <button onClick={onBack} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 16, boxShadow: "0 1px 4px rgba(28,26,24,0.06)" }}>←</button>
         <div>
-          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 30, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.02em" }}>Edit Lists</div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>Tap a section to expand</div>
+          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 32, fontWeight: 500, color: "var(--text)", letterSpacing: "-0.02em" }}>Edit Lists</div>
+          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>Tap a section to expand</div>
         </div>
       </div>
 
@@ -2082,8 +2082,8 @@ function InboxScreen({ who }) {
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <div>
-          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Inbox<span style={{ color: "var(--sage)" }}>.</span></div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>{visible.length} emails</div>
+          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Inbox<span style={{ color: "var(--sage)" }}>.</span></div>
+          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>{visible.length} emails</div>
         </div>
         <button onClick={fetchEmails} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "7px 12px", fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace" }}>↻ Refresh</button>
       </div>
@@ -2098,7 +2098,7 @@ function InboxScreen({ who }) {
       {!loading && !error && (
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 8 }}>
           {visible.length === 0 && (
-            <div style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", fontSize: 13, color: "var(--muted)", textAlign: "center" }}>Inbox is empty ✦</div>
+            <div style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", fontSize: 13, color: "var(--muted)", textAlign: "center" }}>Inbox is empty</div>
           )}
           {visible.map(email => {
             const isExpanded = expanded === email.id;
@@ -2132,7 +2132,7 @@ function InboxScreen({ who }) {
                         {emailDetail[email.id].messages?.map((msg, mi) => (
                           <div key={msg.id} style={{ marginTop: 12 }}>
                             {emailDetail[email.id].messages.length > 1 && (
-                              <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 6 }}>
+                              <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: 6 }}>
                                 {msg.from} · {msg.date}
                               </div>
                             )}
@@ -2141,7 +2141,7 @@ function InboxScreen({ who }) {
                             </div>
                             {msg.attachments?.length > 0 && (
                               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
-                                <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em" }}>Attachments</div>
+                                <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.22em" }}>Attachments</div>
                                 {msg.attachments.map((att, i) => (
                                   <div key={i} style={{ fontSize: 12, color: "var(--sage)", padding: "7px 10px", background: "var(--surface2)", borderRadius: 10, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
                                     <span>📎</span>
@@ -2351,7 +2351,7 @@ function TodayCalendarTab() {
   return (
     <div style={{ padding: "0 20px" }}>
       {events.length === 0 ? (
-        <div style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", fontSize: 13, color: "var(--muted)", textAlign: "center" }}>Nothing in the calendar today ✦</div>
+        <div style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", fontSize: 13, color: "var(--muted)", textAlign: "center" }}>Nothing in the calendar today</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {events.map(evt => {
@@ -2447,8 +2447,8 @@ function CalendarScreen() {
   if (!token) return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>All your calendars</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>All your calendars</div>
       </div>
       <div style={{ padding: "0 20px" }}>
         <div style={{ padding: "24px 20px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", textAlign: "center" }}>
@@ -2466,7 +2466,7 @@ function CalendarScreen() {
   return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 12px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
       <div style={{ display: "flex", gap: 0 }}>
@@ -2501,7 +2501,7 @@ function CalendarScreen() {
             <button onClick={() => { setMonthOffset(m => m - 1); setSelectedDay(null); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 18, padding: "4px 8px" }}>‹</button>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", color: "var(--text)", letterSpacing: "0.18em" }}>{monthLabel}</div>
-              <button onClick={() => { setMonthOffset(0); setSelectedDay(today.getDate()); }} style={{ fontSize: 9, padding: "3px 8px", borderRadius: 20, background: monthOffset === 0 ? "var(--surface2)" : "var(--morning)", border: `1px solid ${monthOffset === 0 ? "var(--border)" : "transparent"}`, color: monthOffset === 0 ? "var(--muted)" : "#fff", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>today</button>
+              <button onClick={() => { setMonthOffset(0); setSelectedDay(today.getDate()); }} style={{ fontSize: 9, padding: "3px 8px", borderRadius: 20, background: monthOffset === 0 ? "var(--surface2)" : "var(--morning)", border: `1px solid ${monthOffset === 0 ? "var(--border)" : "transparent"}`, color: monthOffset === 0 ? "var(--muted)" : "#fff", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>today</button>
             </div>
             <button onClick={() => { setMonthOffset(m => m + 1); setSelectedDay(null); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 18, padding: "4px 8px" }}>›</button>
           </div>
@@ -2551,7 +2551,7 @@ function CalendarScreen() {
       {/* Selected day events */}
       {selectedDay && (
         <div style={{ padding: "16px 20px 0" }}>
-          <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: 10 }}>
             {new Date(viewDate.getFullYear(), viewDate.getMonth(), selectedDay).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
           </div>
           {selectedDayEvents.length === 0 ? (
@@ -2685,8 +2685,8 @@ function ThingsToDoScreen() {
   return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Things To Do<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>{filtered.length} places</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Things To Do<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>{filtered.length} places</div>
       </div>
 
       {/* Indoor/Outdoor toggle */}
@@ -2747,7 +2747,7 @@ const FREE_TIME_OPTIONS = [
   { label: "Read", icon: "📖", action: "link", url: "kindle://", desc: "Open Kindle" },
   { label: "Netflix", icon: "🎬", action: "link", url: "https://netflix.com", desc: "Open Netflix" },
   { label: "Newsletters", icon: "📬", action: "link", url: "https://mail.google.com", desc: "Open Gmail" },
-  { label: "Workout", icon: "💪", action: "none", desc: "Time to move" },
+  { label: "Workout", icon: "", action: "none", desc: "Time to move" },
 ];
 
 function FreeTimeScreen() {
@@ -2764,8 +2764,8 @@ function FreeTimeScreen() {
   return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 28px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Free Time<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>What will you do?</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Free Time<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>What will you do?</div>
       </div>
       {loading ? <Spinner /> : (
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -2813,8 +2813,8 @@ function KidsTimeScreen() {
   return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 28px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Kids Time<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>Time with the little ones</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Kids Time<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>Time with the little ones</div>
       </div>
       {loading ? <Spinner /> : (
         <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -2891,7 +2891,7 @@ function ContactCard({ contact, calToken }) {
         </div>
         <div>
           <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>{contact.name}</div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>{contact.role}</div>
+          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>{contact.role}</div>
         </div>
         <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{contact.notes}</div>
         <div style={{ fontSize: 10, color: "var(--muted2)", transition: "0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</div>
@@ -2904,7 +2904,7 @@ function ContactCard({ contact, calToken }) {
             <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>searching calendar…</div>
           ) : nextEvent?.date ? (
             <div style={{ fontSize: 12, color: "var(--text)", textAlign: "center", lineHeight: 1.5 }}>
-              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.18em", display: "block", marginBottom: 4 }}>Next meetup</span>
+              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", display: "block", marginBottom: 4 }}>Next meetup</span>
               <span style={{ fontWeight: 500 }}>{nextEvent.date}</span>
               {nextEvent.title && <span style={{ display: "block", fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{nextEvent.title}</span>}
             </div>
@@ -2935,8 +2935,8 @@ function ConnectScreen() {
   return (
     <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 20px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Connect<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>Your people</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Connect<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>Your people</div>
       </div>
       <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         {CONTACTS.map(c => <ContactCard key={c.id} contact={c} calToken={token} />)}
@@ -2958,7 +2958,7 @@ const NAV_MORE = [
   { key: "inbox", label: "Inbox", icon: "✉" },
   { key: "connect", label: "Connect", icon: "♡", albaOnly: true },
   { key: "todo", label: "Do", icon: "◉", albaOnly: true },
-  { key: "freetime", label: "Me", icon: "✦", albaOnly: true },
+  { key: "freetime", label: "Me", icon: "", albaOnly: true },
   { key: "kidstime", label: "Kids", icon: "☆", albaOnly: true },
 ];
 
@@ -2991,7 +2991,7 @@ function BottomNav({ active, onChange, who }) {
               padding: "8px 0 4px",
             }}
           >
-            <div style={{ padding: "4px 16px 10px", fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)", textTransform: "uppercase", letterSpacing: "0.18em" }}>More</div>
+            <div style={{ padding: "4px 16px 10px", fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)", textTransform: "uppercase", letterSpacing: "0.22em" }}>More</div>
             {visibleMore.map(n => (
               <button key={n.key} onClick={() => { onChange(n.key); setShowMore(false); }} style={{
                 width: "100%", padding: "13px 20px", background: "none", border: "none",
@@ -3028,7 +3028,7 @@ function BottomNav({ active, onChange, who }) {
               transition: "color 0.18s",
             }}>
               <span style={{ fontSize: 18, lineHeight: 1 }}>{n.icon}</span>
-              <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>{n.label}</span>
+              <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>{n.label}</span>
               <div style={{ width: 16, height: 2, borderRadius: 1, background: active === n.key ? "var(--sage)" : "transparent", marginTop: 1, transition: "background 0.18s" }} />
             </button>
           ))}
@@ -3041,7 +3041,7 @@ function BottomNav({ active, onChange, who }) {
             transition: "color 0.18s",
           }}>
             <span style={{ fontSize: 18, lineHeight: 1 }}>•••</span>
-            <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>More</span>
+            <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>More</span>
             <div style={{ width: 16, height: 2, borderRadius: 1, background: isMoreActive || showMore ? "var(--sage)" : "transparent", marginTop: 1, transition: "background 0.18s" }} />
           </button>
         </div>
@@ -3128,7 +3128,7 @@ function WelcomeScreen({ onChoose }) {
           {hasPeriod && (
             <span style={{
               display: "inline-block", width: "0.16em", height: "0.16em",
-              background: "var(--ml-ink)", borderRadius: "50%",
+              background: "currentColor", borderRadius: "50%",
               marginLeft: "0.04em", verticalAlign: "baseline", flexShrink: 0,
             }} />
           )}
@@ -3150,7 +3150,7 @@ function WelcomeScreen({ onChoose }) {
         transform: restVisible ? "translateY(0)" : "translateY(10px)",
         transition: "opacity 0.7s ease, transform 0.7s ease",
       }}>
-        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>Who's here?</div>
+        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>Who's here?</div>
         <div style={{ display: "flex", gap: 12, width: "100%" }}>
           {[["alba", "var(--sage)"], ["josh", "var(--josh)"]].map(([w, c]) => (
             <button key={w} onClick={() => onChoose(w)} style={{
