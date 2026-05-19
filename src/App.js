@@ -35,7 +35,17 @@ let _gcalToken = null;
 const getGCalToken = () => _gcalToken;
 const setGCalToken = (t) => { _gcalToken = t; };
 
-// ── Token storage helpers ──────────────────────────────────────────────────────
+// ── Clear any legacy implicit-flow tokens on load ─────────────────────────────
+// Old flow stored tokens differently — wipe them so the new code starts clean.
+(function clearLegacyTokens() {
+  const token = localStorage.getItem("gcal_token");
+  const expiry = parseInt(localStorage.getItem("gcal_expiry") || "0", 10);
+  // If there's a token but no ever_connected flag, it's from the old flow — clear it
+  if (token && !localStorage.getItem("gcal_ever_connected")) {
+    localStorage.removeItem("gcal_token");
+    localStorage.removeItem("gcal_expiry");
+  }
+})();
 const storeToken = (token, expiresIn = 3600) => {
   const expiry = Date.now() + (parseInt(expiresIn, 10) * 1000) - 60000; // 1min buffer
   localStorage.setItem("gcal_token", token);
@@ -1484,6 +1494,41 @@ function PlanScreen() {
         <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", marginTop: 4 }}>Tap a month to see events</div>
       </div>
 
+      {/* Event panel — shown immediately below header when a month is selected */}
+      {selectedMonth && (
+        <div style={{ padding: "0 16px 16px" }}>
+          <div style={{ padding: "14px 16px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 12px rgba(28,26,24,0.06)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontSize: 10, color: "var(--sage)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.22em" }}>
+                {months[parseInt(selectedMonth.split("/")[0]) - 1]} {selectedMonth.split("/")[1]}
+              </div>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <button onClick={() => { setAddMonth(selectedMonth); setShowAddModal(true); }} style={{ background: "none", border: "none", color: "var(--sage)", fontSize: 12, fontFamily: "'DM Mono', monospace", cursor: "pointer" }}>+ Add event</button>
+                <button onClick={() => setSelectedMonth(null)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>×</button>
+              </div>
+            </div>
+            {selectedEvents.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--muted2)", textAlign: "center", padding: "8px 0", fontFamily: "'DM Mono', monospace" }}>No events — add one above.</div>
+            ) : selectedEvents.map(ev => (
+              <div key={ev.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
+                      {ev.text}
+                      {ev.recurring && (
+                        <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 10, border: "1px solid var(--border)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>↻ annual</span>
+                      )}
+                    </div>
+                    {ev.notes && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>{ev.notes}</div>}
+                  </div>
+                  <button onClick={() => setEditingEvent(ev)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "0 0 0 8px" }}>✏️</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading ? <Spinner /> : (
         <div style={{ padding: "0 16px" }}>
           {years.map(year => (
@@ -1533,36 +1578,6 @@ function PlanScreen() {
                   );
                 })}
               </div>
-
-              {/* Expanded events for selected month in this year */}
-              {years.indexOf(year) >= 0 && selectedMonth && selectedMonth.endsWith(`/${year}`) && (
-                <div ref={eventPanelRef} style={{ marginTop: 10, padding: "14px 16px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 12px rgba(28,26,24,0.06)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ fontSize: 10, color: "var(--sage)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.22em" }}>
-                      {months[parseInt(selectedMonth.split("/")[0]) - 1]} {selectedMonth.split("/")[1]}
-                    </div>
-                    <button onClick={() => { setAddMonth(selectedMonth); setShowAddModal(true); }} style={{ background: "none", border: "none", color: "var(--sage)", fontSize: 12, fontFamily: "'DM Mono', monospace", cursor: "pointer" }}>+ Add event</button>
-                  </div>
-                  {selectedEvents.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "var(--muted2)", fontFamily: "'Outfit', system-ui, sans-serif", textAlign: "center", padding: "8px 0" }}>No events this month</div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {selectedEvents.map(e => (
-                        <div key={e.id} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 14, color: "var(--text)", fontFamily: "'Outfit', system-ui, sans-serif", fontWeight: 400, display: "flex", alignItems: "center", gap: 8 }}>
-                              {e.text}
-                              {e.recurring && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 20, border: "1px solid var(--border)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>↻ annual</span>}
-                            </div>
-                            {e.notes && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3, lineHeight: 1.5 }}>{e.notes}</div>}
-                          </div>
-                          <button onClick={() => setEditingEvent(e)} style={{ background: "none", border: "none", fontSize: 14, cursor: "pointer", color: "var(--muted2)", flexShrink: 0, padding: "2px 4px" }}>✏️</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           ))}
 
@@ -2067,7 +2082,11 @@ async function fetchAllCalendars(token) {
   const res = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error("Calendar list failed");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg = body?.error?.message || `HTTP ${res.status}`;
+    throw new Error(`Calendar list failed: ${msg}`);
+  }
   const data = await res.json();
   return data.items || [];
 }
@@ -2191,7 +2210,14 @@ function TodayCalendarTab() {
   );
 
   if (loading) return <Spinner />;
-  if (error) return <div style={{ padding: "0 20px", fontSize: 13, color: "var(--danger)" }}>{error}</div>;
+  if (error) return (
+    <div style={{ padding: "0 20px" }}>
+      <div style={{ padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", textAlign: "center" }}>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>Calendar session expired.</div>
+        <button onClick={signIn} style={{ padding: "8px 20px", background: "var(--planning)", border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Reconnect</button>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ padding: "0 20px" }}>
