@@ -147,7 +147,7 @@ const GlobalStyles = () => {
     style.id = id;
     style.textContent = `
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-      html, body { background: #FAF8F5; color: #2C2825; font-family: 'Outfit', sans-serif; overscroll-behavior: none; height: 100%; }
+      html, body { background: #FAF8F5; color: var(--ml-ink); font-family: 'Outfit', sans-serif; overscroll-behavior: none; height: 100%; }
       :root {
         /* ── Brand layer (locked) ── */
         --ml-bone:        #F7F4F0;
@@ -207,8 +207,10 @@ const GlobalStyles = () => {
       input, textarea, select { font-family: 'Outfit', sans-serif; }
       button { cursor: pointer; font-family: 'Outfit', sans-serif; }
       ::-webkit-scrollbar { display: none; }
-      .fade { animation: fade 0.3s ease forwards; }
-      @keyframes fade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+      .slide-left  { animation: slideLeft  0.28s cubic-bezier(0.32,0,0.24,1) forwards; }
+      .slide-right { animation: slideRight 0.28s cubic-bezier(0.32,0,0.24,1) forwards; }
+      @keyframes slideLeft  { from { opacity: 0; transform: translateX(28px);  } to { opacity: 1; transform: translateX(0); } }
+      @keyframes slideRight { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: translateX(0); } }
       .pop { animation: pop 0.22s cubic-bezier(.34,1.56,.64,1) forwards; }
       @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
       @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
@@ -267,7 +269,7 @@ function SectionLabel({ text, color, done, total }) {
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 500 }}>{text}</span>
+        <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.18em", fontWeight: 500 }}>{text}</span>
         {total !== undefined && <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{done}/{total}</span>}
       </div>
       {total !== undefined && <Bar done={done} total={total} color={color} />}
@@ -284,14 +286,14 @@ function TaskRow({ text, done, onToggle, color, sub, overdue, dueDate, badge }) 
         padding: "11px 14px", borderRadius: 12,
         background: done ? "transparent" : "var(--surface)",
         border: `1px solid ${done ? "transparent" : overdue ? "#C44A4A22" : "var(--border)"}`,
-        boxShadow: done ? "none" : "0 1px 4px #2C282508",
+        boxShadow: done ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
         transition: "all 0.18s"
       }}>
         <Checkbox checked={done} onChange={onToggle} color={color} />
         <div style={{ flex: 1 }} onClick={() => sub && setOpen(!open)}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, fontWeight: 400, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s", color: done ? "var(--muted2)" : "var(--text)" }}>{text}</span>
-            {overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.5px" }}>overdue {dueDate}</span>}
+            {overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>overdue {dueDate}</span>}
             {dueDate && !overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{dueDate}</span>}
             {badge && <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : badge}</span>}
           </div>
@@ -300,7 +302,7 @@ function TaskRow({ text, done, onToggle, color, sub, overdue, dueDate, badge }) 
       </div>
       {sub && open && (
         <div style={{ marginLeft: 48, marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
-          {sub.map((s, i) => <div key={i} style={{ fontSize: 12, color: "var(--muted)", padding: "5px 12px", background: "var(--surface2)", borderRadius: 8, border: "1px solid var(--border)" }}>· {s}</div>)}
+          {sub.map((s, i) => <div key={i} style={{ fontSize: 12, color: "var(--muted)", padding: "5px 12px", background: "var(--surface2)", borderRadius: 10, border: "1px solid var(--border)" }}>· {s}</div>)}
         </div>
       )}
     </div>
@@ -308,7 +310,7 @@ function TaskRow({ text, done, onToggle, color, sub, overdue, dueDate, badge }) 
 }
 
 function Spinner() {
-  return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "1px" }}>loading…</div>;
+  return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>loading…</div>;
 }
 
 
@@ -356,13 +358,13 @@ function WeatherStrip({ weather }) {
   const sunset = daily.sunset?.[0] ? new Date(daily.sunset[0]).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Malta" }) : null;
   return (
     <div style={{ padding: "0 20px 20px" }}>
-      <div style={{ borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", padding: "14px 16px", boxShadow: "0 1px 4px #2C282508" }}>
+      <div style={{ borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", padding: "14px 16px", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
         {/* Main temp + condition */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 36, lineHeight: 1 }}>{wmoEmoji(cur.weathercode)}</span>
             <div>
-              <div style={{ fontFamily: "'Lora', serif", fontSize: 36, fontWeight: 300, color: "var(--text)", lineHeight: 1, letterSpacing: "-1px" }}>{Math.round(cur.temperature_2m)}°</div>
+              <div style={{ fontFamily: "'Lora', serif", fontSize: 36, fontWeight: 400, color: "var(--text)", lineHeight: 1, letterSpacing: "-0.025em" }}>{Math.round(cur.temperature_2m)}°</div>
               <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{wmoLabel(cur.weathercode)}</div>
             </div>
           </div>
@@ -381,7 +383,7 @@ function WeatherStrip({ weather }) {
             sunset && { label: "Sunset", value: sunset },
           ].filter(Boolean).map((item, i) => (
             <div key={i} style={{ flex: "1 1 80px", padding: "8px 10px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)", textAlign: "center" }}>
-              <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 3 }}>{item.label}</div>
+              <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 3 }}>{item.label}</div>
               <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text)" }}>{item.value}</div>
             </div>
           ))}
@@ -479,10 +481,10 @@ function TodayScreen({ who }) {
   ];
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 16px" }}>
-        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 6 }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Malta" })}</div>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 300, color: "var(--text)", letterSpacing: "-0.5px", lineHeight: 1.1 }}>Good {greeting.toLowerCase()}, {who === "alba" ? "Alba" : "Josh"}<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6 }}>{new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Malta" })}</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.02em", lineHeight: 1.1 }}>Good {greeting.toLowerCase()}, {who === "alba" ? "Alba" : "Josh"}<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
       {/* 3 tab switcher */}
@@ -507,7 +509,7 @@ function TodayScreen({ who }) {
       {(tab === "morning" || tab === "evening") && (<>
         <div style={{ padding: "0 20px 14px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "1px" }}>{tab === "morning" ? "Morning Routine" : "Evening Shutdown"}</span>
+            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.18em" }}>{tab === "morning" ? "Morning Routine" : "Evening Shutdown"}</span>
             <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>{doneCount}/{visible.length}</span>
           </div>
           <Bar done={doneCount} total={visible.length} color={color} />
@@ -530,7 +532,7 @@ function TodayScreen({ who }) {
         {/* Meeting block if today */}
         {meetingIsToday && (
           <div style={{ marginBottom: 16, padding: "14px 16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
-            <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--josh)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 4 }}>↔ Alba & Josh Weekly</div>
+            <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--josh)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 4 }}>↔ Alba & Josh Weekly</div>
             <div style={{ fontSize: 13, color: "var(--text)" }}>Weekly meeting today</div>
             <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>See Week tab for agenda</div>
           </div>
@@ -540,7 +542,7 @@ function TodayScreen({ who }) {
         {!plansLoading && todayPlans.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 500 }}>Due Today</span>
+              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.18em", fontWeight: 500 }}>Due Today</span>
               <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{todayPlans.length}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -559,7 +561,7 @@ function TodayScreen({ who }) {
         {/* Calendar events */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "1.2px", fontWeight: 500 }}>Today</span>
+            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.18em", fontWeight: 500 }}>Today</span>
           </div>
           <TodayCalendarTab />
         </div>
@@ -630,7 +632,7 @@ function JoshMeetingBlock({ isWed }) {
   return (
     <div style={{ padding: "0 20px 16px" }}>
       <SectionLabel text="Alba & Josh Weekly" color="var(--josh)" done={0} total={items.length} />
-      <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 1px 4px #2C282506" }}>
+      <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
         {/* Collapsible header — matches room card style */}
         <button onClick={() => setOpen(o => !o)} style={{ width: "100%", padding: "13px 15px", background: "none", border: "none", outline: "none", display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--text)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -666,21 +668,21 @@ function JoshMeetingBlock({ isWed }) {
                   <div style={{ fontSize: 12, color: "var(--muted2)", padding: "4px 0" }}>Nothing to discuss yet</div>
                 )}
                 {!adding ? (
-                  <button onClick={() => setAdding(true)} style={{ marginTop: 4, padding: "7px 0", background: "none", border: `1.5px dashed var(--josh)44`, borderRadius: 8, color: "var(--josh)", fontSize: 12, width: "100%" }}>+ Add item</button>
+                  <button onClick={() => setAdding(true)} style={{ marginTop: 4, padding: "7px 0", background: "none", border: `1.5px dashed var(--josh)44`, borderRadius: 10, color: "var(--josh)", fontSize: 12, width: "100%" }}>+ Add item</button>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
                     <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter") addItem(); if (e.key === "Escape") setAdding(false); }}
                       placeholder="What to discuss…"
-                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
                     />
                     <input value={newNotes} onChange={e => setNewNotes(e.target.value)}
                       placeholder="Notes (optional)"
-                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
                     />
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={addItem} style={{ flex: 1, padding: "8px", background: "var(--sage)", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 500 }}>Add</button>
-                      <button onClick={() => { setAdding(false); setNewText(""); setNewNotes(""); }} style={{ padding: "8px 12px", background: "var(--surface2)", border: "none", borderRadius: 8, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
+                      <button onClick={addItem} style={{ flex: 1, padding: "8px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500 }}>Add</button>
+                      <button onClick={() => { setAdding(false); setNewText(""); setNewNotes(""); }} style={{ padding: "8px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
                     </div>
                   </div>
                 )}
@@ -692,7 +694,7 @@ function JoshMeetingBlock({ isWed }) {
 
       {/* Date picker modal */}
       {editingDate && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(44,40,37,0.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}
+        <div style={{ position: "fixed", inset: 0, background: "rgba(28,26,24,0.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}
           onClick={() => setEditingDate(false)}>
           <div onClick={e => e.stopPropagation()} style={{
             width: "100%", maxWidth: 400,
@@ -700,7 +702,7 @@ function JoshMeetingBlock({ isWed }) {
             padding: "24px 20px 24px", display: "flex", flexDirection: "column", gap: 10,
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <div style={{ fontFamily: "'Lora', serif", fontSize: 20, fontWeight: 300, color: "var(--text)" }}>Schedule meeting</div>
+              <div style={{ fontFamily: "'Lora', serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>Schedule meeting</div>
               <button onClick={() => setEditingDate(false)} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 20 }}>×</button>
             </div>
             <input
@@ -772,9 +774,9 @@ function WeekScreen({ who }) {
   const roomTasksFor = (roomId) => roomTasks.filter(t => t.id.startsWith(`wr_${roomId}_`));
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>This Week<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>This Week<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
       {loading ? <Spinner /> : <>
@@ -788,7 +790,7 @@ function WeekScreen({ who }) {
               const allDone = rts.length > 0 && done === rts.length;
               const isOpen = openRoom === room.id;
               return (
-                <div key={room.id} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid var(--border)`, background: "var(--surface)", boxShadow: "0 1px 4px #2C282506" }}>
+                <div key={room.id} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid var(--border)`, background: "var(--surface)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
                   <button onClick={() => setOpenRoom(isOpen ? null : room.id)} style={{ width: "100%", padding: "13px 15px", background: "none", border: "none", display: "flex", alignItems: "center", justifyContent: "space-between", color: allDone ? "var(--muted2)" : "var(--text)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div style={{ width: 7, height: 7, borderRadius: "50%", background: allDone ? "var(--muted)" : "var(--chores)", flexShrink: 0 }} />
@@ -846,20 +848,20 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   };
 
   if (editing) return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--surface)", borderRadius: 12, border: `1px solid ${color}44`, marginBottom: 3, boxShadow: "0 2px 8px #2C282510" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--surface)", borderRadius: 12, border: `1px solid ${color}44`, marginBottom: 3, boxShadow: "0 2px 8px rgba(28,26,24,0.06)" }}>
       <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
         onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
       />
       <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)}
         placeholder="Notes — optional"
         rows={3}
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 12, outline: "none", resize: "vertical", lineHeight: 1.45 }}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 12, outline: "none", resize: "vertical", lineHeight: 1.45 }}
       />
       <div style={{ display: "flex", gap: 5 }}>
         {[["phone","📱"],["errand","🚗"],["home","🏠"]].map(([k,l]) => (
           <button key={k} onClick={() => setEditContext(k)} style={{
-            flex: 1, padding: "6px", borderRadius: 8, border: "none", fontSize: 13,
+            flex: 1, padding: "6px", borderRadius: 10, border: "none", fontSize: 13,
             background: editContext === k ? color : "var(--surface2)",
             color: editContext === k ? "#fff" : "var(--muted)",
           }}>{l}</button>
@@ -867,17 +869,17 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
       </div>
       <input value={editDate} onChange={e => setEditDate(e.target.value)}
         placeholder="Due date (DD/MM/YYYY) — optional"
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "7px 11px", color: "var(--text)", fontSize: 12, outline: "none" }}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "7px 11px", color: "var(--text)", fontSize: 12, outline: "none" }}
       />
       <div style={{ display: "flex", gap: 6 }}>
-        <button onClick={save} style={{ flex: 1, padding: "7px", background: color, border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 500 }}>Save</button>
-        <button onClick={() => setEditing(false)} style={{ padding: "7px 12px", background: "var(--surface2)", border: "none", borderRadius: 8, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
+        <button onClick={save} style={{ flex: 1, padding: "7px", background: color, border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500 }}>Save</button>
+        <button onClick={() => setEditing(false)} style={{ padding: "7px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
       </div>
     </div>
   );
 
   return (
-    <div style={{ marginBottom: 3, display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: `1px solid ${task.overdue ? "#C44A4A22" : "var(--border)"}`, boxShadow: "0 1px 4px #2C282508" }}>
+    <div style={{ marginBottom: 3, display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: `1px solid ${task.overdue ? "#C44A4A22" : "var(--border)"}`, boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
       <Checkbox checked={false} onChange={onToggle} color={color} />
       <div style={{ flex: 1 }} onClick={() => setEditing(true)}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -1028,10 +1030,10 @@ function TasksScreen({ who }) {
   const unscheduled = tasks.filter(t => !t.due_date && !t.done);
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <div>
-          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>Next Actions<span style={{ color: "var(--sage)" }}>.</span></div>
+          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Next Actions<span style={{ color: "var(--sage)" }}>.</span></div>
 
         </div>
         {isDesktop && (
@@ -1042,7 +1044,7 @@ function TasksScreen({ who }) {
                 background: viewMode === mode ? "var(--text)" : "transparent",
                 color: viewMode === mode ? "var(--bg)" : "var(--muted)",
                 fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono', monospace",
-                letterSpacing: "0.3px", transition: "all 0.18s",
+                letterSpacing: "0.18em", transition: "all 0.18s",
               }}>{label}</button>
             ))}
           </div>
@@ -1055,7 +1057,7 @@ function TasksScreen({ who }) {
           <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
             {/* Unscheduled tasks */}
             <div style={{ width: 200, flexShrink: 0 }}>
-              <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10 }}>Unscheduled · {unscheduled.length}</div>
+              <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 10 }}>Unscheduled · {unscheduled.length}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {unscheduled.map(t => (
                   <div key={t.id}
@@ -1066,7 +1068,7 @@ function TasksScreen({ who }) {
                       padding: "8px 10px", borderRadius: 10, background: "var(--surface)",
                       border: "1px solid var(--border)", fontSize: 12, color: "var(--text)",
                       cursor: "grab", userSelect: "none",
-                      boxShadow: "0 1px 4px #2C282508",
+                      boxShadow: "0 1px 4px rgba(28,26,24,0.04)",
                     }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 10 }}>{t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : "🏠"}</span>
@@ -1099,13 +1101,13 @@ function TasksScreen({ who }) {
                       background: isDrop ? "var(--sage)08" : isToday ? "var(--morning)05" : "var(--surface)",
                       padding: "10px 12px", minHeight: 60, transition: "all 0.15s",
                     }}>
-                    <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: isToday ? "var(--morning)" : "var(--muted)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: dayTasks.length ? 8 : 0 }}>
+                    <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: isToday ? "var(--morning)" : "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: dayTasks.length ? 8 : 0 }}>
                       {d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
                       {isToday && <span style={{ marginLeft: 6, fontSize: 8, padding: "1px 5px", borderRadius: 10, background: "var(--morning)", color: "#fff" }}>today</span>}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       {dayTasks.map(t => (
-                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 8, background: "var(--surface2)", fontSize: 11, color: "var(--text)" }}>
+                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 10, background: "var(--surface2)", fontSize: 11, color: "var(--text)" }}>
                           <span>{t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : "🏠"}</span>
                           <span style={{ flex: 1, lineHeight: 1.3 }}>{t.text}</span>
                           <button onClick={() => unscheduleTask(t)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, cursor: "pointer", padding: 0, flexShrink: 0 }}>×</button>
@@ -1152,21 +1154,21 @@ function TasksScreen({ who }) {
         {!adding ? (
           <button onClick={() => setAdding(true)} style={{ width: "100%", padding: "10px", background: "none", border: "1.5px dashed var(--border)", borderRadius: 10, color: "var(--muted)", fontSize: 13 }}>+ Add action</button>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "var(--surface)", borderRadius: 14, padding: 16, border: "1px solid var(--border)", boxShadow: "0 2px 12px #2C282510" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "var(--surface)", borderRadius: 14, padding: 16, border: "1px solid var(--border)", boxShadow: "0 2px 12px rgba(28,26,24,0.06)" }}>
             <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") addTask(); if (e.key === "Escape") setAdding(false); }}
               placeholder="What needs doing?"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 12px", color: "var(--text)", fontSize: 14, outline: "none" }}
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", color: "var(--text)", fontSize: 14, outline: "none" }}
             />
             <textarea value={newNotes} onChange={e => setNewNotes(e.target.value)}
               placeholder="Notes — optional"
               rows={3}
-              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px", color: "var(--text)", fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.45 }}
+              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: "var(--text)", fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.45 }}
             />
             <div style={{ display: "flex", gap: 6 }}>
               {[["phone","📱 Phone"],["errand","🚗 Errand"],["home","🏠 Home"]].map(([k,l]) => (
                 <button key={k} onClick={() => setNewContext(k)} style={{
-                  flex: 1, padding: "7px 4px", borderRadius: 8, border: "none",
+                  flex: 1, padding: "7px 4px", borderRadius: 10, border: "none",
                   background: newContext === k ? "var(--sage)" : "var(--surface2)",
                   color: newContext === k ? "#fff" : "var(--muted)", fontSize: 12,
                 }}>{l}</button>
@@ -1174,11 +1176,11 @@ function TasksScreen({ who }) {
             </div>
             <input value={newDate} onChange={e => setNewDate(e.target.value)}
               placeholder="Due date (DD/MM/YYYY) — optional"
-              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px", color: "var(--text)", fontSize: 13, outline: "none" }}
+              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: "var(--text)", fontSize: 13, outline: "none" }}
             />
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={addTask} style={{ flex: 1, padding: "9px", background: "var(--sage)", border: "none", borderRadius: 8, color: "#fff", fontSize: 13, fontWeight: 500 }}>Add</button>
-              <button onClick={() => setAdding(false)} style={{ padding: "9px 16px", background: "var(--surface2)", border: "none", borderRadius: 8, color: "var(--muted)", fontSize: 13 }}>Cancel</button>
+              <button onClick={addTask} style={{ flex: 1, padding: "9px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 500 }}>Add</button>
+              <button onClick={() => setAdding(false)} style={{ padding: "9px 16px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 13 }}>Cancel</button>
             </div>
           </div>
         )}
@@ -1187,10 +1189,10 @@ function TasksScreen({ who }) {
 
 
       <div style={{ padding: "24px 20px 0" }}>
-        <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Waiting For</div>
+        <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.18em" }}>Waiting For</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {waiting.map(w => (
-            <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", boxShadow: "0 1px 4px #2C282506" }}>
+            <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
               <Checkbox checked={false} onChange={() => tickWF(w)} color="var(--sage)" size={18} />
               <span style={{ flex: 1, fontSize: 14, color: "var(--text)" }}>{w.text}</span>
               <button onClick={() => removeWF(w.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 14 }} title="Delete permanently">×</button>
@@ -1203,9 +1205,9 @@ function TasksScreen({ who }) {
               <input autoFocus value={newWF} onChange={e => setNewWF(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") addWF(); if (e.key === "Escape") setAddingWF(false); }}
                 placeholder="Waiting for…"
-                style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "9px 12px", color: "var(--text)", fontSize: 14, outline: "none" }}
+                style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 12px", color: "var(--text)", fontSize: 14, outline: "none" }}
               />
-              <button onClick={addWF} style={{ padding: "9px 14px", background: "var(--sage)", border: "none", borderRadius: 8, color: "#fff", fontSize: 13 }}>Add</button>
+              <button onClick={addWF} style={{ padding: "9px 14px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13 }}>Add</button>
             </div>
           )}
         </div>
@@ -1287,9 +1289,9 @@ function MonthScreen({ who }) {
   // localThisMonth comes from Supabase via planItems state
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>This Month<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>This Month<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
       {/* Monthly recurring tasks */}
@@ -1307,7 +1309,7 @@ function MonthScreen({ who }) {
       {/* Plan items surfaced this month */}
       {!loading && planItems.length > 0 && (
         <div style={{ padding: "0 20px" }}>
-          <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10 }}>From Plan</div>
+          <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 10 }}>From Plan</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {planItems.map(e => (
               <div key={e.id} style={{ padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--planning)44" }}>
@@ -1417,12 +1419,12 @@ function PlanScreen() {
   };
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 20px" }}>
-        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 8 }}>
+        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 8 }}>
           {new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
         </div>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.3px" }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.02em" }}>
           Plan<span style={{ color: "var(--sage)" }}>.</span>
         </div>
         <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", marginTop: 4 }}>Tap a month to see events</div>
@@ -1432,7 +1434,7 @@ function PlanScreen() {
         <div style={{ padding: "0 16px" }}>
           {years.map(year => (
             <div key={year} style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 10, paddingLeft: 2 }}>{year}</div>
+              <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 10, paddingLeft: 2 }}>{year}</div>
               <div style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(2, 1fr)",
@@ -1480,7 +1482,7 @@ function PlanScreen() {
               {years.indexOf(year) >= 0 && selectedMonth && selectedMonth.endsWith(`/${year}`) && (
                 <div style={{ marginTop: 10, padding: "14px 16px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 12px rgba(28,26,24,0.06)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                    <div style={{ fontSize: 10, color: "var(--sage)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "1px" }}>
+                    <div style={{ fontSize: 10, color: "var(--sage)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.18em" }}>
                       {months[parseInt(selectedMonth.split("/")[0]) - 1]} {selectedMonth.split("/")[1]}
                     </div>
                     <button onClick={() => { setAddMonth(selectedMonth); setShowAddModal(true); }} style={{ background: "none", border: "none", color: "var(--sage)", fontSize: 12, fontFamily: "'DM Mono', monospace", cursor: "pointer" }}>+ Add event</button>
@@ -1613,8 +1615,8 @@ function HistorySection() {
 
   return (
     <div style={{ padding: "0 20px 40px" }}>
-      <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 26, fontWeight: 300, color: "var(--text)", marginBottom: 4 }}>History</div>
-      <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase", marginBottom: 16 }}>Everything you've actioned</div>
+      <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 26, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>History</div>
+      <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16 }}>Everything you've actioned</div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
         {[["all","All"],["next_action","Tasks"],["waiting_for","Waiting"],["josh_meeting","Meeting"]].map(([k,l]) => (
@@ -1687,34 +1689,34 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
 
   return (
     <div style={{ marginBottom: 28 }}>
-      <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10 }}>{title}</div>
+      <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 10 }}>{title}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {items.map((item, i) => (
           editingIdx === i ? (
             <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6, background: "var(--surface2)", borderRadius: 10, padding: 12, border: `1px solid ${color}44` }}>
               <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") submitEdit(); if (e.key === "Escape") setEditingIdx(null); }}
-                style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+                style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
               />
               {extraFields && extraFields.map(f => (
                 f.type === "checkbox" ? (
-                  <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", background: "var(--surface)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)" }}>
                     <div onClick={() => setEditExtra(x => ({ ...x, [f.key]: !x[f.key] }))}
-                      style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${editExtra[f.key] ? color : "#444"}`, background: editExtra[f.key] ? color : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-                      {editExtra[f.key] && <svg width="11" height="11" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="#0F0F0F" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${editExtra[f.key] ? color : "var(--border)"}`, background: editExtra[f.key] ? color : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                      {editExtra[f.key] && <svg width="11" height="11" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="var(--ml-ink)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
                     <span style={{ fontSize: 13, color: "var(--text)", cursor: "pointer" }} onClick={() => setEditExtra(x => ({ ...x, [f.key]: !x[f.key] }))}>{f.placeholder}</span>
                   </div>
                 ) : (
                   <input key={f.key} value={editExtra[f.key] || ""} onChange={e => setEditExtra(x => ({ ...x, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
-                    style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
                   />
                 )
               ))}
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={submitEdit} style={{ flex: 1, padding: "7px", background: "var(--sage)", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 500 }}>Save</button>
-                <button onClick={() => setEditingIdx(null)} style={{ padding: "7px 12px", background: "var(--surface)", border: "none", borderRadius: 8, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
+                <button onClick={submitEdit} style={{ flex: 1, padding: "7px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500 }}>Save</button>
+                <button onClick={() => setEditingIdx(null)} style={{ padding: "7px 12px", background: "var(--surface)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
               </div>
             </div>
           ) : (
@@ -1735,27 +1737,27 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
             <input autoFocus value={text} onChange={e => setText(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") setAdding(false); }}
               placeholder={placeholder || "Add item…"}
-              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
             />
             {extraFields && extraFields.map(f => (
               f.type === "checkbox" ? (
-                <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", background: "var(--surface2)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                <div key={f.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", background: "var(--surface2)", borderRadius: 10, border: "1px solid var(--border)" }}>
                   <div onClick={() => setExtra(x => ({ ...x, [f.key]: !x[f.key] }))}
-                    style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${extra[f.key] ? color : "#444"}`, background: extra[f.key] ? color : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-                    {extra[f.key] && <svg width="11" height="11" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="#0F0F0F" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${extra[f.key] ? color : "var(--border)"}`, background: extra[f.key] ? color : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                    {extra[f.key] && <svg width="11" height="11" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="var(--ml-ink)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
                   <span style={{ fontSize: 13, color: "var(--text)", cursor: "pointer" }} onClick={() => setExtra(x => ({ ...x, [f.key]: !x[f.key] }))}>{f.placeholder}</span>
                 </div>
               ) : (
                 <input key={f.key} value={extra[f.key] || ""} onChange={e => setExtra(x => ({ ...x, [f.key]: e.target.value }))}
                   placeholder={f.placeholder}
-                  style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+                  style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
                 />
               )
             ))}
             <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={submit} style={{ flex: 1, padding: "8px", background: "var(--sage)", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, fontWeight: 500 }}>Add</button>
-              <button onClick={() => { setAdding(false); setText(""); setExtra({}); }} style={{ padding: "8px 12px", background: "var(--surface2)", border: "none", borderRadius: 8, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
+              <button onClick={submit} style={{ flex: 1, padding: "8px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500 }}>Add</button>
+              <button onClick={() => { setAdding(false); setText(""); setExtra({}); }} style={{ padding: "8px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
             </div>
           </div>
         )}
@@ -1942,13 +1944,13 @@ function EditScreen({ onBack }) {
   };
 
   return (
-    <div className="fade" style={{ padding: "0 0 40px" }}>
+    <div style={{ padding: "0 0 40px" }}>
       {/* Header */}
       <div style={{ padding: "28px 20px 20px", display: "flex", alignItems: "center", gap: 14 }}>
-        <button onClick={onBack} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 16, boxShadow: "0 1px 4px #2C282510" }}>←</button>
+        <button onClick={onBack} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 16, boxShadow: "0 1px 4px rgba(28,26,24,0.06)" }}>←</button>
         <div>
-          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 30, fontWeight: 300, color: "var(--text)", letterSpacing: "-0.3px" }}>Edit Lists</div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>Tap a section to expand</div>
+          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 30, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.02em" }}>Edit Lists</div>
+          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>Tap a section to expand</div>
         </div>
       </div>
 
@@ -2077,11 +2079,11 @@ function InboxScreen({ who }) {
   const visible = emails.filter(e => !archived.has(e.id));
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <div>
-          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>Inbox<span style={{ color: "var(--sage)" }}>.</span></div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>{visible.length} emails</div>
+          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Inbox<span style={{ color: "var(--sage)" }}>.</span></div>
+          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>{visible.length} emails</div>
         </div>
         <button onClick={fetchEmails} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "7px 12px", fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace" }}>↻ Refresh</button>
       </div>
@@ -2101,7 +2103,7 @@ function InboxScreen({ who }) {
           {visible.map(email => {
             const isExpanded = expanded === email.id;
             return (
-              <div key={email.id} style={{ borderRadius: 14, background: "var(--surface)", border: `1px solid ${email.unread ? "var(--sage)44" : "var(--border)"}`, boxShadow: "0 1px 6px #2C282508", overflow: "hidden" }}>
+              <div key={email.id} style={{ borderRadius: 14, background: "var(--surface)", border: `1px solid ${email.unread ? "var(--sage)44" : "var(--border)"}`, boxShadow: "0 1px 6px rgba(28,26,24,0.04)", overflow: "hidden" }}>
                 {/* Email header — tap to expand */}
                 <div onClick={() => toggleExpand(email)} style={{ padding: "13px 15px", cursor: "pointer" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 3, alignItems: "center" }}>
@@ -2130,7 +2132,7 @@ function InboxScreen({ who }) {
                         {emailDetail[email.id].messages?.map((msg, mi) => (
                           <div key={msg.id} style={{ marginTop: 12 }}>
                             {emailDetail[email.id].messages.length > 1 && (
-                              <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 6 }}>
+                              <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 6 }}>
                                 {msg.from} · {msg.date}
                               </div>
                             )}
@@ -2139,9 +2141,9 @@ function InboxScreen({ who }) {
                             </div>
                             {msg.attachments?.length > 0 && (
                               <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
-                                <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "1px" }}>Attachments</div>
+                                <div style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em" }}>Attachments</div>
                                 {msg.attachments.map((att, i) => (
-                                  <div key={i} style={{ fontSize: 12, color: "var(--sage)", padding: "7px 10px", background: "var(--surface2)", borderRadius: 8, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+                                  <div key={i} style={{ fontSize: 12, color: "var(--sage)", padding: "7px 10px", background: "var(--surface2)", borderRadius: 10, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
                                     <span>📎</span>
                                     <div style={{ flex: 1 }}>
                                       <div style={{ fontWeight: 500 }}>{att.name}</div>
@@ -2179,10 +2181,10 @@ function InboxScreen({ who }) {
 
       {/* Task action sheet */}
       {acting && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(44,40,37,0.5)", zIndex: 300, display: "flex", alignItems: "flex-end" }}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(28,26,24,0.5)", zIndex: 300, display: "flex", alignItems: "flex-end" }}>
           <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "var(--bg)", borderRadius: "20px 20px 0 0", padding: "24px 20px 48px", display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <div style={{ fontFamily: "'Lora', serif", fontSize: 20, fontWeight: 300, color: "var(--text)" }}>Add to Tasks</div>
+              <div style={{ fontFamily: "'Lora', serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>Add to Tasks</div>
               <button onClick={() => { setActing(null); setNewText(""); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 20 }}>×</button>
             </div>
             <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{acting.email.subject}</div>
@@ -2193,7 +2195,7 @@ function InboxScreen({ who }) {
             <div style={{ display: "flex", gap: 6 }}>
               {[["phone","📱 Phone"],["errand","🚗 Errand"],["home","🏠 Home"]].map(([k,l]) => (
                 <button key={k} onClick={() => setNewContext(k)} style={{
-                  flex: 1, padding: "8px 4px", borderRadius: 8, border: "none", fontSize: 12,
+                  flex: 1, padding: "8px 4px", borderRadius: 10, border: "none", fontSize: 12,
                   background: newContext === k ? "var(--sage)" : "var(--surface2)",
                   color: newContext === k ? "#fff" : "var(--muted)",
                 }}>{l}</button>
@@ -2365,7 +2367,7 @@ function TodayCalendarTab() {
                 borderRadius: 12, background: "var(--surface)",
                 border: "1px solid var(--border)",
                 borderLeft: `3px solid ${evt.calendarColor}`,
-                boxShadow: "0 1px 4px #2C282508",
+                boxShadow: "0 1px 4px rgba(28,26,24,0.04)",
               }}>
                 <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "var(--muted)", minWidth: 44, paddingTop: 1 }}>
                   {startTime}{endTime ? <><br/>{endTime}</> : null}
@@ -2417,7 +2419,7 @@ function CalendarScreen() {
           const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
           if (res.ok) {
             const data = await res.json();
-            (data.items || []).forEach(e => allEvents.push({ ...e, calendarColor: cal.backgroundColor || "#9A7A42", calendarName: cal.summary }));
+            (data.items || []).forEach(e => allEvents.push({ ...e, calendarColor: cal.backgroundColor || "var(--morning)", calendarName: cal.summary }));
           }
         } catch {}
       }
@@ -2443,10 +2445,10 @@ function CalendarScreen() {
   const selectedDayEvents = selectedDay ? eventsForDay(selectedDay) : [];
 
   if (!token) return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>All your calendars</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>All your calendars</div>
       </div>
       <div style={{ padding: "0 20px" }}>
         <div style={{ padding: "24px 20px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", textAlign: "center" }}>
@@ -2462,9 +2464,9 @@ function CalendarScreen() {
   );
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 12px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
       <div style={{ display: "flex", gap: 0 }}>
@@ -2498,8 +2500,8 @@ function CalendarScreen() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingRight: 4 }}>
             <button onClick={() => { setMonthOffset(m => m - 1); setSelectedDay(null); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 18, padding: "4px 8px" }}>‹</button>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", color: "var(--text)", letterSpacing: "0.5px" }}>{monthLabel}</div>
-              <button onClick={() => { setMonthOffset(0); setSelectedDay(today.getDate()); }} style={{ fontSize: 9, padding: "3px 8px", borderRadius: 20, background: monthOffset === 0 ? "var(--surface2)" : "var(--morning)", border: `1px solid ${monthOffset === 0 ? "var(--border)" : "transparent"}`, color: monthOffset === 0 ? "var(--muted)" : "#fff", fontFamily: "'DM Mono', monospace", letterSpacing: "0.5px" }}>today</button>
+              <div style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", color: "var(--text)", letterSpacing: "0.18em" }}>{monthLabel}</div>
+              <button onClick={() => { setMonthOffset(0); setSelectedDay(today.getDate()); }} style={{ fontSize: 9, padding: "3px 8px", borderRadius: 20, background: monthOffset === 0 ? "var(--surface2)" : "var(--morning)", border: `1px solid ${monthOffset === 0 ? "var(--border)" : "transparent"}`, color: monthOffset === 0 ? "var(--muted)" : "#fff", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>today</button>
             </div>
             <button onClick={() => { setMonthOffset(m => m + 1); setSelectedDay(null); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 18, padding: "4px 8px" }}>›</button>
           </div>
@@ -2522,7 +2524,7 @@ function CalendarScreen() {
                 const isSelected = selectedDay === day;
                 return (
                   <button key={day} onClick={() => setSelectedDay(isSelected ? null : day)} style={{
-                    aspectRatio: "1/1", borderRadius: 8, border: "none",
+                    aspectRatio: "1/1", borderRadius: 10, border: "none",
                     background: isSelected ? "var(--text)" : isToday ? "var(--morning)15" : "transparent",
                     cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center",
                     padding: "3px 2px", gap: 2, position: "relative",
@@ -2549,7 +2551,7 @@ function CalendarScreen() {
       {/* Selected day events */}
       {selectedDay && (
         <div style={{ padding: "16px 20px 0" }}>
-          <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 10 }}>
             {new Date(viewDate.getFullYear(), viewDate.getMonth(), selectedDay).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
           </div>
           {selectedDayEvents.length === 0 ? (
@@ -2650,9 +2652,13 @@ const PLACES = [
 
 const PLACE_TYPES = ["All", "Activity", "Hike", "Picnic", "Playground", "Play Area", "Restaurant", "Stroller walk"];
 const TYPE_COLORS = {
-  Activity: "#D4854A", Hike: "#4A8C6A", Picnic: "#9A7A42",
-  Playground: "#4A7D8A", "Play Area": "#7A6AA8", Restaurant: "#993556",
-  "Stroller walk": "#085041",
+  Activity:        "var(--morning)",
+  Hike:            "var(--sage)",
+  Picnic:          "var(--morning)",
+  Playground:      "var(--evening)",
+  "Play Area":     "var(--admin)",
+  Restaurant:      "var(--danger)",
+  "Stroller walk": "var(--josh)",
 };
 
 function ThingsToDoScreen() {
@@ -2677,10 +2683,10 @@ function ThingsToDoScreen() {
   });
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4 }}>Things To Do<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>{filtered.length} places</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Things To Do<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>{filtered.length} places</div>
       </div>
 
       {/* Indoor/Outdoor toggle */}
@@ -2722,8 +2728,8 @@ function ThingsToDoScreen() {
                 {p.type && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, fontFamily: "'DM Mono', monospace" }}>{p.type}</div>}
               </div>
               <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, flexShrink: 0, marginLeft: 8,
-                background: p.setting === "Both" ? "var(--surface2)" : p.setting === "Indoor" ? "#EEEDFE" : "#E1F5EE",
-                color: p.setting === "Both" ? "var(--muted)" : p.setting === "Indoor" ? "#3C3489" : "#085041",
+                background: p.setting === "Both" ? "var(--surface2)" : p.setting === "Indoor" ? "rgba(122,106,168,0.12)" : "rgba(124,158,138,0.14)",
+                color: p.setting === "Both" ? "var(--muted)" : p.setting === "Indoor" ? "var(--admin)" : "var(--josh)",
                 fontFamily: "'DM Mono', monospace" }}>
                 {p.setting === "Both" ? "In/Out" : p.setting}
               </span>
@@ -2756,10 +2762,10 @@ function FreeTimeScreen() {
   }, []);
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 28px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4 }}>Free Time<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>What will you do?</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Free Time<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>What will you do?</div>
       </div>
       {loading ? <Spinner /> : (
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -2805,10 +2811,10 @@ function KidsTimeScreen() {
   }, []);
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 28px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4 }}>Kids Time<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>Time with the little ones</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Kids Time<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>Time with the little ones</div>
       </div>
       {loading ? <Spinner /> : (
         <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -2834,10 +2840,10 @@ const CONTACTS = [
 ];
 
 const AVATAR_COLORS = {
-  mary:   { bg: "#FBEAF0", color: "#993556" },
-  martha: { bg: "#EEEDFE", color: "#3C3489" },
-  luke:   { bg: "#E1F5EE", color: "#085041" },
-  josh:   { bg: "#FAEEDA", color: "#633806" },
+  mary:   { bg: "rgba(212,168,160,0.18)", color: "var(--danger)"  },
+  martha: { bg: "rgba(122,106,168,0.12)", color: "var(--admin)"   },
+  luke:   { bg: "rgba(124,158,138,0.14)", color: "var(--josh)"    },
+  josh:   { bg: "rgba(196,168,130,0.18)", color: "var(--morning)" },
 };
 
 function ContactCard({ contact, calToken }) {
@@ -2877,7 +2883,7 @@ function ContactCard({ contact, calToken }) {
   };
 
   return (
-    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       {/* Card top — always visible, tappable */}
       <div onClick={toggle} style={{ cursor: "pointer", padding: "18px 14px 12px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 10 }}>
         <div style={{ width: 60, height: 60, borderRadius: "50%", background: av.bg, color: av.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 500, flexShrink: 0 }}>
@@ -2885,7 +2891,7 @@ function ContactCard({ contact, calToken }) {
         </div>
         <div>
           <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>{contact.name}</div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.3px" }}>{contact.role}</div>
+          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>{contact.role}</div>
         </div>
         <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{contact.notes}</div>
         <div style={{ fontSize: 10, color: "var(--muted2)", transition: "0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</div>
@@ -2898,7 +2904,7 @@ function ContactCard({ contact, calToken }) {
             <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>searching calendar…</div>
           ) : nextEvent?.date ? (
             <div style={{ fontSize: 12, color: "var(--text)", textAlign: "center", lineHeight: 1.5 }}>
-              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.8px", display: "block", marginBottom: 4 }}>Next meetup</span>
+              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.18em", display: "block", marginBottom: 4 }}>Next meetup</span>
               <span style={{ fontWeight: 500 }}>{nextEvent.date}</span>
               {nextEvent.title && <span style={{ display: "block", fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{nextEvent.title}</span>}
             </div>
@@ -2927,10 +2933,10 @@ function ConnectScreen() {
   const { token } = useGoogleCalendar();
 
   return (
-    <div className="fade" style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 20px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 300, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.3px" }}>Connect<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>Your people</div>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 36, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Connect<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>Your people</div>
       </div>
       <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         {CONTACTS.map(c => <ContactCard key={c.id} contact={c} calToken={token} />)}
@@ -2985,7 +2991,7 @@ function BottomNav({ active, onChange, who }) {
               padding: "8px 0 4px",
             }}
           >
-            <div style={{ padding: "4px 16px 10px", fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)", textTransform: "uppercase", letterSpacing: "1px" }}>More</div>
+            <div style={{ padding: "4px 16px 10px", fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)", textTransform: "uppercase", letterSpacing: "0.18em" }}>More</div>
             {visibleMore.map(n => (
               <button key={n.key} onClick={() => { onChange(n.key); setShowMore(false); }} style={{
                 width: "100%", padding: "13px 20px", background: "none", border: "none",
@@ -3022,7 +3028,7 @@ function BottomNav({ active, onChange, who }) {
               transition: "color 0.18s",
             }}>
               <span style={{ fontSize: 18, lineHeight: 1 }}>{n.icon}</span>
-              <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.8px", textTransform: "uppercase" }}>{n.label}</span>
+              <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>{n.label}</span>
               <div style={{ width: 16, height: 2, borderRadius: 1, background: active === n.key ? "var(--sage)" : "transparent", marginTop: 1, transition: "background 0.18s" }} />
             </button>
           ))}
@@ -3035,7 +3041,7 @@ function BottomNav({ active, onChange, who }) {
             transition: "color 0.18s",
           }}>
             <span style={{ fontSize: 18, lineHeight: 1 }}>•••</span>
-            <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.8px", textTransform: "uppercase" }}>More</span>
+            <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>More</span>
             <div style={{ width: 16, height: 2, borderRadius: 1, background: isMoreActive || showMore ? "var(--sage)" : "transparent", marginTop: 1, transition: "background 0.18s" }} />
           </button>
         </div>
@@ -3103,7 +3109,7 @@ function WelcomeScreen({ onChoose }) {
         {/* "mental" — fades in, italic per brand spec */}
         <div style={{
           fontFamily: "'Lora', Georgia, serif", fontWeight: 400, fontStyle: "italic",
-          fontSize: 42, color: "var(--text)", lineHeight: 1.1,
+          fontSize: 40, color: "var(--text)", lineHeight: 1.1,
           letterSpacing: "-0.025em", textAlign: "center",
           opacity: mentalVisible ? 1 : 0,
           transform: mentalVisible ? "translateY(0)" : "translateY(8px)",
@@ -3115,7 +3121,7 @@ function WelcomeScreen({ onChoose }) {
         {/* "load." — typed character by character, roman per brand spec */}
         <div style={{
           fontFamily: "'Lora', Georgia, serif", fontWeight: 500, fontStyle: "normal",
-          fontSize: 42, lineHeight: 1.1, letterSpacing: "-0.025em", textAlign: "center",
+          fontSize: 40, lineHeight: 1.1, letterSpacing: "-0.025em", textAlign: "center",
           minHeight: "1.1em", display: "flex", alignItems: "baseline", justifyContent: "center",
         }}>
           <span style={{ color: "var(--text)" }}>{loadPart}</span>
@@ -3144,7 +3150,7 @@ function WelcomeScreen({ onChoose }) {
         transform: restVisible ? "translateY(0)" : "translateY(10px)",
         transition: "opacity 0.7s ease, transform 0.7s ease",
       }}>
-        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1.5px", textTransform: "uppercase" }}>Who's here?</div>
+        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", textTransform: "uppercase" }}>Who's here?</div>
         <div style={{ display: "flex", gap: 12, width: "100%" }}>
           {[["alba", "var(--sage)"], ["josh", "var(--josh)"]].map(([w, c]) => (
             <button key={w} onClick={() => onChoose(w)} style={{
@@ -3164,9 +3170,18 @@ function WelcomeScreen({ onChoose }) {
 export default function App() {
   const [who, chooseWho] = useWho();
   const [screen, setScreen] = useState("today");
+  const [slideDir, setSlideDir] = useState("left");
   const [editing, setEditing] = useState(false);
   const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
   const [desktop, setDesktop] = useState(isDesktop);
+
+  const navigateTo = (next) => {
+    const order = NAV.map(n => n.key);
+    const from = order.indexOf(screen);
+    const to   = order.indexOf(next);
+    setSlideDir(to >= from ? "left" : "right");
+    setScreen(next);
+  };
 
   useEffect(() => {
     const handler = () => setDesktop(window.innerWidth >= 768);
@@ -3211,7 +3226,7 @@ export default function App() {
           <span style={{ fontStyle: "italic", fontWeight: 400 }}>mental </span><span style={{ fontStyle: "normal", fontWeight: 500 }}>load<span style={{ display: "inline-block", width: "0.16em", height: "0.16em", background: "currentColor", borderRadius: "50%", marginLeft: "0.04em", verticalAlign: "baseline" }} /></span>
         </div>
         {NAV.filter(n => !n.albaOnly || who === "alba").map(n => (
-          <button key={n.key} onClick={() => setScreen(n.key)} style={{
+          <button key={n.key} onClick={() => navigateTo(n.key)} style={{
             width: "100%", padding: "11px 20px", border: "none",
             display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
             background: screen === n.key ? "var(--surface2)" : "transparent",
@@ -3234,12 +3249,12 @@ export default function App() {
 
       {/* Main content */}
       <div style={{ marginLeft: desktop ? SIDEBAR_W : 0, paddingBottom: desktop ? 0 : 100 }}>
-        <div key={screen} className="fade" style={{ maxWidth: desktop ? 800 : "100%" }}>{screens[screen]}</div>
+        <div key={screen} className={`slide-${slideDir}`} style={{ maxWidth: desktop ? 800 : "100%" }}>{screens[screen]}</div>
       </div>
 
       {/* Mobile bottom nav + settings */}
       {!desktop && <>
-        <BottomNav active={screen} onChange={setScreen} who={who} />
+        <BottomNav active={screen} onChange={navigateTo} who={who} />
         {/* Mobile top bar — avatar + settings */}
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 200,
@@ -3272,7 +3287,7 @@ export default function App() {
             borderRadius: 10, width: 34, height: 34,
             display: "flex", alignItems: "center", justifyContent: "center",
             color: "var(--muted)", fontSize: 14,
-            boxShadow: "0 1px 4px rgba(28,26,24,0.08)",
+            boxShadow: "0 1px 4px rgba(28,26,24,0.04)",
           }}>⚙</button>
         </div>
       </>}
