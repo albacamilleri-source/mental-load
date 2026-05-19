@@ -2028,6 +2028,420 @@ function EditScreen({ onBack }) {
 }
 
 
+function useGoogleCalendar() {
+  const [token, setToken] = useState(() => getStoredToken() || getGCalToken());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // On mount: check if we just came back from a Google redirect
+  useEffect(() => {
+    const redirectToken = parseTokenFromHash();
+    if (redirectToken) {
+      setGCalToken(redirectToken);
+      setToken(redirectToken);
+      return;
+    }
+    const stored = getStoredToken();
+    if (stored) { setGCalToken(stored); setToken(stored); }
+  }, []);
+
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+    || window.navigator.standalone === true;
+
+  const signIn = useCallback(async () => {
+    if (isStandalone) {
+      signInWithRedirect();
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      await loadGoogleScript();
+      const tk = await new Promise((resolve, reject) => {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: GCAL_CLIENT_ID,
+          scope: GCAL_SCOPE,
+          callback: (resp) => {
+            if (resp.error) reject(new Error(resp.error));
+            else resolve(resp.access_token);
+          },
+        });
+        client.requestAccessToken({ prompt: "consent" });
+      });
+      setGCalToken(tk);
+      setToken(tk);
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  }, [isStandalone]);
+
+  return { token, signIn, loading, error };
+}
+
+function TodayCalendarTab() {
+  const { token, signIn, loading: authLoading } = useGoogleCalendar();
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!token) return;
+    const loadToday = async () => {
+      setLoading(true);
+      try {
+        // Get all calendars then fetch today's events from each
+        const cals = await fetchAllCalendars(token);
+        const todayStart = new Date();
+        todayStart.setHours(0,0,0,0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23,59,59,999);
+        
+        const allEvents = [];
+        for (const cal of cals.slice(0, 10)) {
+          try {
+            const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${todayStart.toISOString()}&timeMax=${todayEnd.toISOString()}&singleEvents=true&orderBy=startTime&maxResults=20`;
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+            if (res.ok) {
+              const data = await res.json();
+              (data.items || []).forEach(e => allEvents.push({ ...e, calendarColor: cal.backgroundColor || "var(--planning)", calendarName: cal.summary }));
+            }
+          } catch {}
+        }
+        allEvents.sort((a, b) => {
+          const aTime = a.start?.dateTime || a.start?.date || "";
+          const bTime = b.start?.dateTime || b.start?.date || "";
+          return aTime.localeCompare(bTime);
+        });
+        setEvents(allEvents);
+      } catch (e) {
+        setError(e.message);
+      }
+      setLoading(false);
+    };
+    loadToday();
+  }, [token]);
+
+  if (!token) return (
+    <div style={{ padding: "0 20px" }}>
+      <div style={{ padding: "20px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", textAlign: "center" }}>
+        <div style={{ fontSize: 14, color: "var(--text)", marginBottom: 8 }}>Connect Google Calendar</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>See today's events alongside your routines</div>
+        <button onClick={signIn} disabled={authLoading} style={{
+          padding: "10px 24px", background: "var(--planning)", border: "none", borderRadius: 10,
+          color: "#fff", fontSize: 13, fontWeight: 500,
+        }}>{authLoading ? "Connecting…" : "Connect Calendar"}</button>
+      </div>
+    </div>
+  );
+
+  if (loading) return <Spinner />;
+  if (error) return <div style={{ padding: "0 20px", fontSize: 13, color: "var(--danger)" }}>{error}</div>;
+
+  return (
+    <div style={{ padding: "0 20px" }}>
+      {events.length === 0 ? (
+        <div style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", fontSize: 13, color: "var(--muted)", textAlign: "center" }}>Nothing in the calendar today ✦</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {events.map(evt => {
+            const startTime = evt.start?.dateTime
+              ? new Date(evt.start.dateTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Malta" })
+              : "All day";
+            const endTime = evt.end?.dateTime
+              ? new Date(evt.end.dateTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Malta" })
+              : null;
+            return (
+              <div key={evt.id} style={{
+                display: "flex", gap: 12, padding: "12px 14px",
+                borderRadius: 12, background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderLeft: `3px solid ${evt.calendarColor}`,
+                boxShadow: "0 1px 4px rgba(28,26,24,0.04)",
+              }}>
+                <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "var(--muted)", minWidth: 44, paddingTop: 1 }}>
+                  {startTime}{endTime ? <><br/>{endTime}</> : null}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, color: "var(--text)", fontWeight: 500, marginBottom: 2 }}>{evt.summary || "Untitled"}</div>
+                  {evt.location && <div style={{ fontSize: 11, color: "var(--muted)" }}>📍 {evt.location}</div>}
+                  <div style={{ fontSize: 10, color: evt.calendarColor, fontFamily: "'DM Mono', monospace", marginTop: 3 }}>{evt.calendarName}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── CALENDAR SCREEN ──────────────────────────────────────────────────────────
+function CalendarScreen() {
+  const { token, signIn, loading: authLoading, error: authError } = useGoogleCalendar();
+  const [calendars, setCalendars] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [selectedCals, setSelectedCals] = useState(new Set());
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchAllCalendars(token).then(cals => {
+      setCalendars(cals);
+      setSelectedCals(new Set(cals.map(c => c.id)));
+    }).catch(console.error);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || calendars.length === 0) return;
+    const loadEvents = async () => {
+      setLoading(true);
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + monthOffset + 1, 0, 23, 59, 59);
+      const allEvents = [];
+      for (const cal of calendars) {
+        if (!selectedCals.has(cal.id)) continue;
+        try {
+          const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${monthStart.toISOString()}&timeMax=${monthEnd.toISOString()}&singleEvents=true&orderBy=startTime&maxResults=100`;
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          if (res.ok) {
+            const data = await res.json();
+            (data.items || []).forEach(e => allEvents.push({ ...e, calendarColor: cal.backgroundColor || "#9A7A42", calendarName: cal.summary }));
+          }
+        } catch {}
+      }
+      allEvents.sort((a, b) => (a.start?.dateTime || a.start?.date || "").localeCompare(b.start?.dateTime || b.start?.date || ""));
+      setEvents(allEvents);
+      setLoading(false);
+    };
+    loadEvents();
+  }, [token, calendars, selectedCals, monthOffset]);
+
+  const now = new Date();
+  const viewDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+  const monthLabel = viewDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+  const firstDayOfWeek = (viewDate.getDay() + 6) % 7; // Mon=0
+  const today = new Date();
+
+  const eventsForDay = (day) => {
+    const dateStr = `${viewDate.getFullYear()}-${String(viewDate.getMonth() + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    return events.filter(e => (e.start?.dateTime || e.start?.date || "").startsWith(dateStr));
+  };
+
+  const selectedDayEvents = selectedDay ? eventsForDay(selectedDay) : [];
+
+  if (!token) return (
+    <div className="fade" style={{ padding: "0 0 100px" }}>
+      <div style={{ padding: "72px 20px 18px" }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>All your calendars</div>
+      </div>
+      <div style={{ padding: "0 20px" }}>
+        <div style={{ padding: "24px 20px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", textAlign: "center" }}>
+          <div style={{ fontSize: 16, fontFamily: "'Lora', serif", color: "var(--text)", marginBottom: 8 }}>Connect Google Calendar</div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 20, lineHeight: 1.6 }}>Sign in once to see all your calendars and events.</div>
+          <button onClick={signIn} disabled={authLoading} style={{ padding: "12px 28px", background: "var(--planning)", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 500 }}>
+            {authLoading ? "Connecting…" : "Connect Calendar"}
+          </button>
+          {authError && <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 12 }}>{authError}</div>}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fade" style={{ padding: "0 0 100px" }}>
+      <div style={{ padding: "72px 20px 12px" }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Calendar<span style={{ color: "var(--sage)" }}>.</span></div>
+      </div>
+
+      <div style={{ display: "flex", gap: 0 }}>
+        {/* Sidebar calendar toggles */}
+        <div style={{ width: 110, flexShrink: 0, padding: "0 8px 0 12px", display: "flex", flexDirection: "column", gap: 7, paddingTop: 8 }}>
+          {calendars.map(cal => (
+            <button key={cal.id} onClick={() => setSelectedCals(s => {
+              const n = new Set(s); n.has(cal.id) ? n.delete(cal.id) : n.add(cal.id); return n;
+            })} style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "none", border: "none", cursor: "pointer",
+              opacity: selectedCals.has(cal.id) ? 1 : 0.35,
+              transition: "opacity 0.18s", textAlign: "left", padding: 0,
+            }}>
+              <div style={{
+                width: 10, height: 10, borderRadius: "50%", flexShrink: 0,
+                background: cal.backgroundColor || "var(--planning)",
+              }} />
+              <span style={{
+                fontSize: 9, color: "var(--text)", fontFamily: "'DM Mono', monospace",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                maxWidth: 84,
+              }}>{cal.summary}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Main calendar area */}
+        <div style={{ flex: 1, paddingRight: 12 }}>
+          {/* Month navigation */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, paddingRight: 4 }}>
+            <button onClick={() => { setMonthOffset(m => m - 1); setSelectedDay(null); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 18, padding: "4px 8px" }}>‹</button>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 13, fontFamily: "'DM Mono', monospace", color: "var(--text)", letterSpacing: "0.18em" }}>{monthLabel}</div>
+              <button onClick={() => { setMonthOffset(0); setSelectedDay(today.getDate()); }} style={{ fontSize: 9, padding: "3px 8px", borderRadius: 20, background: monthOffset === 0 ? "var(--surface2)" : "var(--morning)", border: `1px solid ${monthOffset === 0 ? "var(--border)" : "transparent"}`, color: monthOffset === 0 ? "var(--muted)" : "#fff", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>today</button>
+            </div>
+            <button onClick={() => { setMonthOffset(m => m + 1); setSelectedDay(null); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 18, padding: "4px 8px" }}>›</button>
+          </div>
+
+          {/* Day headers */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 4 }}>
+            {["M","T","W","T","F","S","S"].map((d, i) => (
+              <div key={i} style={{ fontSize: 9, textAlign: "center", color: "var(--muted2)", fontFamily: "'DM Mono', monospace", paddingBottom: 4 }}>{d}</div>
+            ))}
+          </div>
+
+          {/* Calendar grid */}
+          {loading ? <Spinner /> : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
+              {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`e${i}`} />)}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day = i + 1;
+                const dayEvts = eventsForDay(day);
+                const isToday = today.getDate() === day && today.getMonth() === viewDate.getMonth() && today.getFullYear() === viewDate.getFullYear();
+                const isSelected = selectedDay === day;
+                return (
+                  <button key={day} onClick={() => setSelectedDay(isSelected ? null : day)} style={{
+                    aspectRatio: "1/1", borderRadius: 10, border: "none",
+                    background: isSelected ? "var(--text)" : isToday ? "var(--morning)15" : "transparent",
+                    cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center",
+                    padding: "3px 2px", gap: 2, position: "relative",
+                  }}>
+                    <span style={{
+                      fontSize: 11, fontWeight: isToday ? 600 : 400,
+                      color: isSelected ? "var(--bg)" : isToday ? "var(--morning)" : "var(--text)",
+                      lineHeight: 1,
+                    }}>{day}</span>
+                    {/* Event dots */}
+                    <div style={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "center" }}>
+                      {dayEvts.slice(0, 3).map((e, ei) => (
+                        <div key={ei} style={{ width: 4, height: 4, borderRadius: "50%", background: isSelected ? "rgba(255,255,255,0.7)" : e.calendarColor }} />
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Selected day events */}
+      {selectedDay && (
+        <div style={{ padding: "16px 20px 0" }}>
+          <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: 10 }}>
+            {new Date(viewDate.getFullYear(), viewDate.getMonth(), selectedDay).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+          </div>
+          {selectedDayEvents.length === 0 ? (
+            <div style={{ fontSize: 13, color: "var(--muted2)", textAlign: "center", padding: "14px" }}>Nothing on this day</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {selectedDayEvents.map(evt => {
+                const startTime = evt.start?.dateTime
+                  ? new Date(evt.start.dateTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Malta" })
+                  : "All day";
+                const endTime = evt.end?.dateTime
+                  ? new Date(evt.end.dateTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Malta" })
+                  : null;
+                return (
+                  <div key={evt.id} style={{ display: "flex", gap: 12, padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", borderLeft: `3px solid ${evt.calendarColor}` }}>
+                    <div style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: "var(--muted)", minWidth: 44 }}>
+                      {startTime}{endTime && <><br />{endTime}</>}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, color: "var(--text)", fontWeight: 500, marginBottom: 2 }}>{evt.summary || "Untitled"}</div>
+                      {evt.location && <div style={{ fontSize: 11, color: "var(--muted)" }}>📍 {evt.location}</div>}
+                      <div style={{ fontSize: 10, color: evt.calendarColor, fontFamily: "'DM Mono', monospace", marginTop: 3 }}>{evt.calendarName}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
+// ─── THINGS TO DO SCREEN ──────────────────────────────────────────────────────
+const PLACES = [
+  { name: "Aquarium", type: "Activity", setting: "Indoor" },
+  { name: "Playtopia", type: "Activity", setting: "Indoor" },
+  { name: "Gravity at Shoreline", type: "Activity", setting: "Indoor" },
+  { name: "The Eden", type: "Activity", setting: "Indoor" },
+  { name: "Multimaxx Bay Street", type: "Activity", setting: "Indoor" },
+  { name: "Kidz World", type: "Activity", setting: "Indoor" },
+  { name: "Play Cafe", type: "Activity", setting: "Indoor" },
+  { name: "Multimaxx Pavi", type: "Activity", setting: "Indoor" },
+  { name: "Library", type: "Activity", setting: "Indoor" },
+  { name: "Rainforest Cafe", type: "Restaurant", setting: "Indoor" },
+  { name: "Trattoria Riccardo", type: "Restaurant", setting: "Indoor" },
+  { name: "Festacci", type: "Restaurant", setting: "Indoor" },
+  { name: "Spinola Kids Park", type: "Play Area", setting: "Indoor" },
+  { name: "Ohana", type: "Play Area", setting: "Indoor" },
+  { name: "L-Arka ta Noe", type: "Activity", setting: "Outdoor" },
+  { name: "Blue Grotto Cave", type: "Activity", setting: "Outdoor" },
+  { name: "Montekristo Animal Park", type: "Activity", setting: "Outdoor" },
+  { name: "Playmobil", type: "Activity", setting: "Both" },
+  { name: "Esplora", type: "Activity", setting: "Both" },
+  { name: "Popeye village", type: "Activity", setting: "Both" },
+  { name: "Majjistral park near Radisson", type: "Hike", setting: "Outdoor" },
+  { name: "Misrah Ghar il Kbir", type: "Hike", setting: "Outdoor" },
+  { name: "Fawwara", type: "Hike", setting: "Outdoor" },
+  { name: "Dingli cliffs", type: "Hike", setting: "Outdoor" },
+  { name: "Wied il-Għasel", type: "Hike", setting: "Outdoor" },
+  { name: "Wied Qirda", type: "Hike", setting: "Outdoor" },
+  { name: "Ghajn Hadid", type: "Hike", setting: "Outdoor" },
+  { name: "Qannotta Valley", type: "Hike", setting: "Outdoor" },
+  { name: "Bingemma punic tombs", type: "Hike", setting: "Outdoor" },
+  { name: "Xemxija Heritage Trail", type: "Hike", setting: "Outdoor" },
+  { name: "Ghajn Znuber Tower trail", type: "Hike", setting: "Outdoor" },
+  { name: "Calpham junction", type: "Hike", setting: "Outdoor" },
+  { name: "Ras id Dawwara (Sunset)", type: "Hike", setting: "Outdoor" },
+  { name: "Ghadira Nature Reserve", type: "Hike", setting: "Outdoor" },
+  { name: "Foresta 2000", type: "Hike", setting: "Outdoor" },
+  { name: "Dwejra", type: "Hike, Picnic", setting: "Outdoor" },
+  { name: "Xrobb l ghagin", type: "Hike, Picnic", setting: "Outdoor" },
+  { name: "Ahrax", type: "Picnic", setting: "Outdoor" },
+  { name: "Ta'Qali", type: "Picnic, Playground, Stroller walk", setting: "Outdoor" },
+  { name: "San Klement", type: "Picnic, Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Salini park", type: "Picnic, Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Gnien fuq il glaziz", type: "Picnic, Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Chinese Garden", type: "Picnic, Stroller walk", setting: "Outdoor" },
+  { name: "Buskett", type: "Picnic, Stroller walk", setting: "Outdoor" },
+  { name: "Chadwick lakes", type: "Picnic, Stroller walk", setting: "Outdoor" },
+  { name: "Gnien Stazzjon Attard", type: "Playground", setting: "Outdoor" },
+  { name: "Lapsi", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Romeo Romano Gardens", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Sant Antnin Family Park", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Gnien l Gharusa tal Mosta", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Pembroke Playground", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Qui-si-Sana Playground", type: "Playground, Stroller walk", setting: "Outdoor" },
+  { name: "Wied fulija", type: "Stroller walk", setting: "Outdoor" },
+  { name: "Simar Nature Reserve", type: "Stroller walk", setting: "Outdoor" },
+  { name: "Birgu", type: "Stroller walk", setting: "Outdoor" },
+  { name: "St Thomas to il Hofra il Kbira via munxar path", type: "Stroller walk", setting: "Outdoor" },
+  { name: "Mdina", type: "Stroller walk", setting: "Outdoor" },
+  { name: "Il Qolla", type: "Stroller walk", setting: "Outdoor" },
+];
+
+const PLACE_TYPES = ["All", "Activity", "Hike", "Picnic", "Playground", "Play Area", "Restaurant", "Stroller walk"];
+
 const TYPE_COLORS = {
   Activity:        "var(--morning)",
   Hike:            "var(--sage)",
@@ -2063,7 +2477,7 @@ function ThingsToDoScreen() {
     <div className="fade" style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px" }}>
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Things To Do<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>{filtered.length} places</div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>{filtered.length} places</div>
       </div>
 
       {/* Indoor/Outdoor toggle */}
@@ -2142,7 +2556,7 @@ function FreeTimeScreen() {
     <div className="fade" style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 28px" }}>
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Free Time<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>What will you do?</div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>What will you do?</div>
       </div>
       {loading ? <Spinner /> : (
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -2191,7 +2605,7 @@ function KidsTimeScreen() {
     <div className="fade" style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 28px" }}>
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Kids Time<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>Time with the little ones</div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>Time with the little ones</div>
       </div>
       {loading ? <Spinner /> : (
         <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -2268,7 +2682,7 @@ function ContactCard({ contact, calToken }) {
         </div>
         <div>
           <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>{contact.name}</div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.3px" }}>{contact.role}</div>
+          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>{contact.role}</div>
         </div>
         <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{contact.notes}</div>
         <div style={{ fontSize: 10, color: "var(--muted2)", transition: "0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</div>
@@ -2281,7 +2695,7 @@ function ContactCard({ contact, calToken }) {
             <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>searching calendar…</div>
           ) : nextEvent?.date ? (
             <div style={{ fontSize: 12, color: "var(--text)", textAlign: "center", lineHeight: 1.5 }}>
-              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.8px", display: "block", marginBottom: 4 }}>Next meetup</span>
+              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", display: "block", marginBottom: 4 }}>Next meetup</span>
               <span style={{ fontWeight: 500 }}>{nextEvent.date}</span>
               {nextEvent.title && <span style={{ display: "block", fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{nextEvent.title}</span>}
             </div>
