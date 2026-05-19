@@ -2748,7 +2748,7 @@ const NAV_MORE = [
   { key: "month", label: "Month", icon: "◫" },
   { key: "connect", label: "Connect", icon: "♡", albaOnly: true },
   { key: "todo", label: "Do", icon: "◉", albaOnly: true },
-  { key: "freetime", label: "Me", icon: "", albaOnly: true },
+  { key: "freetime", label: "Me", icon: "◌", albaOnly: true },
   { key: "kidstime", label: "Kids", icon: "☆", albaOnly: true },
 ];
 
