@@ -2028,6 +2028,15 @@ function EditScreen({ onBack }) {
 }
 
 
+async function fetchAllCalendars(token) {
+  const res = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Calendar list failed");
+  const data = await res.json();
+  return data.items || [];
+}
+
 function useGoogleCalendar() {
   const [token, setToken] = useState(() => getStoredToken() || getGCalToken());
   const [loading, setLoading] = useState(false);
