@@ -2010,6 +2010,274 @@ function EditScreen({ onBack }) {
 }
 
 
+function ThingsToDoScreen() {
+  const [places, setPlaces] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [setting, setSetting] = useState("All");
+  const [type, setType] = useState("All");
+
+  useEffect(() => {
+    sb.from("places").select("*").order("name").then(({ data }) => {
+      setPlaces(data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  const types = ["All", ...Array.from(new Set(places.map(p => p.type).filter(Boolean))).sort()];
+
+  const filtered = places.filter(p => {
+    const settingMatch = setting === "All" || p.setting === setting || p.setting === "Both";
+    const typeMatch = type === "All" || p.type === type;
+    return settingMatch && typeMatch;
+  });
+
+  return (
+    <div className="fade" style={{ padding: "0 0 100px" }}>
+      <div style={{ padding: "72px 20px 18px" }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Things To Do<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>{filtered.length} places</div>
+      </div>
+
+      {/* Indoor/Outdoor toggle */}
+      <div style={{ padding: "0 20px 12px", display: "flex", gap: 6 }}>
+        {["All", "Indoor", "Outdoor"].map(s => (
+          <button key={s} onClick={() => setSetting(s)} style={{
+            flex: 1, padding: "9px 4px", borderRadius: 20,
+            background: setting === s ? "var(--text)" : "var(--surface)",
+            border: `1px solid ${setting === s ? "transparent" : "var(--border)"}`,
+            color: setting === s ? "var(--bg)" : "var(--muted)",
+            fontSize: 12, fontWeight: setting === s ? 500 : 400, transition: "all 0.18s",
+          }}>{s}</button>
+        ))}
+      </div>
+
+      {/* Type filter */}
+      <div style={{ padding: "0 20px 16px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {types.map(t => (
+          <button key={t} onClick={() => setType(t)} style={{
+            padding: "6px 12px", borderRadius: 20,
+            background: type === t ? (TYPE_COLORS[t] || "var(--text)") : "var(--surface)",
+            border: `1px solid ${type === t ? "transparent" : "var(--border)"}`,
+            color: type === t ? "#fff" : "var(--muted)",
+            fontSize: 11, transition: "all 0.18s",
+          }}>{t}</button>
+        ))}
+      </div>
+
+      {/* Places list */}
+      {loading ? <Spinner /> : (
+        <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: 16, textAlign: "center", fontSize: 13, color: "var(--muted)" }}>No places match these filters</div>
+          )}
+          {filtered.map(p => (
+            <div key={p.id} style={{ padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 14, color: "var(--text)", fontWeight: 400 }}>{p.name}</div>
+                {p.type && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, fontFamily: "'DM Mono', monospace" }}>{p.type}</div>}
+              </div>
+              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, flexShrink: 0, marginLeft: 8,
+                background: p.setting === "Both" ? "var(--surface2)" : p.setting === "Indoor" ? "#EEEDFE" : "#E1F5EE",
+                color: p.setting === "Both" ? "var(--muted)" : p.setting === "Indoor" ? "#3C3489" : "#085041",
+                fontFamily: "'DM Mono', monospace" }}>
+                {p.setting === "Both" ? "In/Out" : p.setting}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── FREE TIME SCREEN ─────────────────────────────────────────────────────────
+const FREE_TIME_OPTIONS = [
+  { label: "Research", icon: "🔍", action: "link", url: "https://drive.google.com/drive/folders/1G1xtRQSf_3x1WVdNcsFI2OVFXCBT3WuQ?usp=drive_link", desc: "Open research folder" },
+  { label: "Read", icon: "📖", action: "link", url: "kindle://", desc: "Open Kindle" },
+  { label: "Netflix", icon: "🎬", action: "link", url: "https://netflix.com", desc: "Open Netflix" },
+  { label: "Newsletters", icon: "📬", action: "link", url: "https://mail.google.com", desc: "Open Gmail" },
+  { label: "Workout", icon: "💪", action: "none", desc: "Time to move" },
+];
+
+function FreeTimeScreen() {
+  const [options, setOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    sb.from("free_time_options").select("*").order("sort_order").then(({ data }) => {
+      setOptions(data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  return (
+    <div className="fade" style={{ padding: "0 0 100px" }}>
+      <div style={{ padding: "72px 20px 28px" }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Free Time<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>What will you do?</div>
+      </div>
+      {loading ? <Spinner /> : (
+        <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {options.map(opt => (
+            <a key={opt.id} href={opt.url || undefined}
+              target="_blank" rel="noopener noreferrer"
+              style={{ textDecoration: "none" }}>
+              <div style={{ padding: "16px 18px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}>
+                <span style={{ fontSize: 24, flexShrink: 0 }}>{opt.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, color: "var(--text)", fontWeight: 500 }}>{opt.label}</div>
+                  {opt.description && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{opt.description}</div>}
+                </div>
+                {opt.url && <span style={{ fontSize: 14, color: "var(--muted2)" }}>→</span>}
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── KIDS TIME SCREEN ─────────────────────────────────────────────────────────
+const KIDS_TIME_OPTIONS = [
+  { label: "Read", icon: "📚", desc: "Story time together" },
+  { label: "Board game", icon: "🎲", desc: "Pick a game and play" },
+  { label: "Puzzle", icon: "🧩", desc: "Work on a puzzle" },
+  { label: "Bible study", icon: "✝️", desc: "Faith time together" },
+  { label: "Bake", icon: "🍪", desc: "Make something together" },
+  { label: "Writing", icon: "✏️", desc: "Creative writing time" },
+];
+
+function KidsTimeScreen() {
+  const [options, setOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    sb.from("kids_time_options").select("*").order("sort_order").then(({ data }) => {
+      setOptions(data || []);
+      setLoading(false);
+    });
+  }, []);
+
+  return (
+    <div className="fade" style={{ padding: "0 0 100px" }}>
+      <div style={{ padding: "72px 20px 28px" }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Kids Time<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "1px", textTransform: "uppercase" }}>Time with the little ones</div>
+      </div>
+      {loading ? <Spinner /> : (
+        <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {options.map(opt => (
+            <div key={opt.id} style={{ padding: "20px 14px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
+              <span style={{ fontSize: 32 }}>{opt.icon}</span>
+              <div style={{ fontSize: 14, color: "var(--text)", fontWeight: 500 }}>{opt.label}</div>
+              {opt.description && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.4 }}>{opt.description}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── CONNECT SCREEN ───────────────────────────────────────────────────────────
+const CONTACTS = [
+  { id: "mary",   name: "Mary",   role: "Friend",  notes: "Works reduced hours. Afternoon meets. Weekend playdates.", phone: "35677108584" },
+  { id: "martha", name: "Martha", role: "BFF",     notes: "BFF. Check-ins. Voice notes.", phone: "35677108584" },
+  { id: "luke",   name: "Luke",   role: "BFF",     notes: "BFF. Random musings. Photos.", phone: "35677108584" },
+  { id: "josh",   name: "Josh",   role: "Husband", notes: "Love of your life. Send some love.", phone: "35677108584" },
+];
+
+const AVATAR_COLORS = {
+  mary:   { bg: "rgba(212,168,160,0.18)", color: "var(--danger)"  },
+  martha: { bg: "rgba(122,106,168,0.12)", color: "var(--admin)"   },
+  luke:   { bg: "rgba(124,158,138,0.14)", color: "var(--josh)"    },
+  josh:   { bg: "rgba(196,168,130,0.18)", color: "var(--morning)" },
+};
+
+function ContactCard({ contact, calToken }) {
+  const [expanded, setExpanded] = useState(false);
+  const [nextEvent, setNextEvent] = useState(null);
+  const [eventLoading, setEventLoading] = useState(false);
+  const av = AVATAR_COLORS[contact.id] || { bg: "var(--surface2)", color: "var(--muted)" };
+  const initials = contact.name.slice(0, 2);
+
+  const loadNextEvent = async () => {
+    if (!calToken || nextEvent !== null) return;
+    setEventLoading(true);
+    try {
+      const now = new Date().toISOString();
+      const end = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?q=${encodeURIComponent(contact.name)}&timeMin=${now}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=1`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${calToken}` } });
+      if (res.ok) {
+        const data = await res.json();
+        const evt = data.items?.[0];
+        if (evt) {
+          const dateStr = evt.start?.dateTime
+            ? new Date(evt.start.dateTime).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Malta" })
+            : new Date(evt.start.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+          setNextEvent({ title: evt.summary, date: dateStr });
+        } else {
+          setNextEvent({ title: null, date: null });
+        }
+      }
+    } catch (e) { setNextEvent({ title: null, date: null }); }
+    setEventLoading(false);
+  };
+
+  const toggle = () => {
+    setExpanded(e => !e);
+    if (!expanded) loadNextEvent();
+  };
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      {/* Card top — always visible, tappable */}
+      <div onClick={toggle} style={{ cursor: "pointer", padding: "18px 14px 12px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 10 }}>
+        <div style={{ width: 60, height: 60, borderRadius: "50%", background: av.bg, color: av.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 500, flexShrink: 0 }}>
+          {initials}
+        </div>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>{contact.name}</div>
+          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.3px" }}>{contact.role}</div>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{contact.notes}</div>
+        <div style={{ fontSize: 10, color: "var(--muted2)", transition: "0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</div>
+      </div>
+
+      {/* Expanded: next meetup */}
+      {expanded && (
+        <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px", background: "var(--surface2)" }}>
+          {eventLoading ? (
+            <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>searching calendar…</div>
+          ) : nextEvent?.date ? (
+            <div style={{ fontSize: 12, color: "var(--text)", textAlign: "center", lineHeight: 1.5 }}>
+              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.8px", display: "block", marginBottom: 4 }}>Next meetup</span>
+              <span style={{ fontWeight: 500 }}>{nextEvent.date}</span>
+              {nextEvent.title && <span style={{ display: "block", fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{nextEvent.title}</span>}
+            </div>
+          ) : !calToken ? (
+            <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>Connect calendar to see meetups</div>
+          ) : (
+            <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>No upcoming meetups found</div>
+          )}
+        </div>
+      )}
+
+      {/* WhatsApp button */}
+      <div style={{ borderTop: "1px solid var(--border)", padding: "14px", display: "flex", justifyContent: "center", marginTop: "auto" }}>
+        <a href={`https://wa.me/${contact.phone}`} style={{ width: 44, height: 44, borderRadius: "50%", background: "#25D366", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
+          target="_blank" rel="noopener noreferrer">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function ConnectScreen() {
   const { token } = useGoogleCalendar();
 
