@@ -2624,17 +2624,21 @@ function KidsTimeScreen() {
 
 // ─── CONNECT SCREEN ───────────────────────────────────────────────────────────
 const CONTACTS = [
-  { id: "mary",   name: "Mary",   role: "Friend",  notes: "Works reduced hours. Afternoon meets. Weekend playdates.", phone: "35677108584" },
-  { id: "martha", name: "Martha", role: "BFF",     notes: "BFF. Check-ins. Voice notes.", phone: "35677108584" },
-  { id: "luke",   name: "Luke",   role: "BFF",     notes: "BFF. Random musings. Photos.", phone: "35677108584" },
-  { id: "josh",   name: "Josh",   role: "Husband", notes: "Love of your life. Send some love.", phone: "35677108584" },
+  { id: "sharon",  name: "Sharon",  role: "Friend",  notes: "Works reduced hours. Afternoon meets. Weekend playdates.", phone: "35699367867" },
+  { id: "vany",    name: "Vany",    role: "BFF",     notes: "BFF. Check-ins. Voice notes.", phone: "35699396772" },
+  { id: "cristina",name: "Cristina",role: "BFF",     notes: "BFF. Random musings. Photos.", phone: "35679595179" },
+  { id: "josh",    name: "Josh",    role: "Husband", notes: "Love of your life. Send some love.", phone: "35677108584" },
+  { id: "lucia",   name: "Lucia",   role: "Friend",  notes: "Mum of 5 in the trenches. Playdates and casual hang outs.", phone: "35699115577" },
+  { id: "steffi",  name: "Steffi",  role: "Friend",  notes: "Funny mummy neighbour. Playdates and group hangs.", phone: "35679836448" },
 ];
 
 const AVATAR_COLORS = {
-  mary:   { bg: "rgba(212,168,160,0.18)", color: "var(--danger)"  },
-  martha: { bg: "rgba(122,106,168,0.12)", color: "var(--admin)"   },
-  luke:   { bg: "rgba(124,158,138,0.14)", color: "var(--josh)"    },
-  josh:   { bg: "rgba(196,168,130,0.18)", color: "var(--morning)" },
+  sharon:  { bg: "rgba(212,168,160,0.18)", color: "var(--danger)"  },
+  vany:    { bg: "rgba(122,106,168,0.12)", color: "var(--admin)"   },
+  cristina:{ bg: "rgba(124,158,138,0.14)", color: "var(--josh)"    },
+  josh:    { bg: "rgba(196,168,130,0.18)", color: "var(--morning)" },
+  lucia:   { bg: "rgba(74,125,138,0.12)",  color: "var(--evening)" },
+  steffi:  { bg: "rgba(124,158,138,0.14)", color: "var(--sage)"    },
 };
 
 function ContactCard({ contact, calToken }) {
@@ -2676,15 +2680,10 @@ function ContactCard({ contact, calToken }) {
   return (
     <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       {/* Card top — always visible, tappable */}
-      <div onClick={toggle} style={{ cursor: "pointer", padding: "18px 14px 12px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 10 }}>
-        <div style={{ width: 60, height: 60, borderRadius: "50%", background: av.bg, color: av.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 500, flexShrink: 0 }}>
-          {initials}
-        </div>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>{contact.name}</div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>{contact.role}</div>
-        </div>
-        <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6 }}>{contact.notes}</div>
+      <div onClick={toggle} style={{ cursor: "pointer", padding: "16px 14px 12px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 6 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{contact.name}</div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>{contact.role}</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 4 }}>{contact.notes}</div>
         <div style={{ fontSize: 10, color: "var(--muted2)", transition: "0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</div>
       </div>
 
@@ -2702,7 +2701,7 @@ function ContactCard({ contact, calToken }) {
           ) : !calToken ? (
             <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>Connect calendar to see meetups</div>
           ) : (
-            <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>No upcoming meetups found</div>
+            <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>Nothing scheduled — book something in!</div>
           )}
         </div>
       )}
