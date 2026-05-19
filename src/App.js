@@ -2010,6 +2010,16 @@ function EditScreen({ onBack }) {
 }
 
 
+const TYPE_COLORS = {
+  Activity:        "var(--morning)",
+  Hike:            "var(--sage)",
+  Picnic:          "var(--morning)",
+  Playground:      "var(--evening)",
+  "Play Area":     "var(--admin)",
+  Restaurant:      "var(--danger)",
+  "Stroller walk": "var(--josh)",
+};
+
 function ThingsToDoScreen() {
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
