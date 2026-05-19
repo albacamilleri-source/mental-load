@@ -25,61 +25,99 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ─── GOOGLE CALENDAR ──────────────────────────────────────────────────────────
-const GCAL_CLIENT_ID = "283368801613-lku2v6o5uvaqh5ttkci8u2d47bu9etdm.apps.googleusercontent.com";
-const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GCAL_CLIENT_ID    = "283368801613-lku2v6o5uvaqh5ttkci8u2d47bu9etdm.apps.googleusercontent.com";
+const GCAL_SCOPE        = "https://www.googleapis.com/auth/calendar.readonly";
 const GCAL_REDIRECT_URI = "https://albacamilleri-source.github.io/mental-load";
+const GCAL_EDGE_FN      = "https://qvibdnrfywisvfsqgqux.supabase.co/functions/v1/gcal-auth";
+const GCAL_APP_SECRET   = "ml-alba-2026";
 
-// Redirect-based OAuth — works in iOS standalone PWA (popups are blocked there).
-// Flow: signIn() redirects to Google → Google redirects back with #access_token=...
-// On load, parseTokenFromHash() grabs it and stores in sessionStorage.
-const signInWithRedirect = () => {
-  const params = new URLSearchParams({
-    client_id: GCAL_CLIENT_ID,
-    redirect_uri: GCAL_REDIRECT_URI,
-    response_type: "token",
-    scope: GCAL_SCOPE,
-    prompt: "consent",
-  });
-  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
-};
+let _gcalToken = null;
+const getGCalToken = () => _gcalToken;
+const setGCalToken = (t) => { _gcalToken = t; };
 
-const parseTokenFromHash = () => {
-  const hash = window.location.hash.slice(1);
-  if (!hash) return null;
-  const params = new URLSearchParams(hash);
-  const token = params.get("access_token");
-  const expiresIn = params.get("expires_in");
-  if (!token) return null;
-  // Store with expiry
-  const expiry = Date.now() + (parseInt(expiresIn || "3600", 10) * 1000);
-  sessionStorage.setItem("gcal_token", token);
-  sessionStorage.setItem("gcal_expiry", String(expiry));
-  // Clean the hash from the URL without triggering a reload
-  window.history.replaceState(null, "", window.location.pathname + window.location.search);
-  return token;
+// ── Token storage helpers ──────────────────────────────────────────────────────
+const storeToken = (token, expiresIn = 3600) => {
+  const expiry = Date.now() + (parseInt(expiresIn, 10) * 1000) - 60000; // 1min buffer
+  localStorage.setItem("gcal_token", token);
+  localStorage.setItem("gcal_expiry", String(expiry));
+  _gcalToken = token;
 };
 
 const getStoredToken = () => {
-  const token = sessionStorage.getItem("gcal_token");
-  const expiry = parseInt(sessionStorage.getItem("gcal_expiry") || "0", 10);
+  const token = localStorage.getItem("gcal_token");
+  const expiry = parseInt(localStorage.getItem("gcal_expiry") || "0", 10);
   if (!token || Date.now() > expiry) {
-    sessionStorage.removeItem("gcal_token");
-    sessionStorage.removeItem("gcal_expiry");
+    localStorage.removeItem("gcal_token");
+    localStorage.removeItem("gcal_expiry");
     return null;
   }
   return token;
 };
 
-// Legacy popup path kept for desktop browsers where it still works fine
+// ── Step 1: redirect user to Google sign-in ───────────────────────────────────
+// Uses authorization_code flow (not implicit) so we get a refresh token.
+const signInWithRedirect = () => {
+  const params = new URLSearchParams({
+    client_id:     GCAL_CLIENT_ID,
+    redirect_uri:  GCAL_REDIRECT_URI,
+    response_type: "code",
+    scope:         GCAL_SCOPE,
+    access_type:   "offline",
+    prompt:        "consent",
+  });
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+};
+
+// ── Step 2: on return from Google, exchange the code via Edge Function ─────────
+const exchangeCodeFromURL = async () => {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  if (!code) return null;
+  // Clean code from URL immediately
+  window.history.replaceState(null, "", window.location.pathname);
+  try {
+    const res = await fetch(GCAL_EDGE_FN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "exchange", code, secret: GCAL_APP_SECRET }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    storeToken(data.access_token, data.expires_in);
+    return data.access_token;
+  } catch (e) {
+    console.error("Token exchange failed:", e);
+    return null;
+  }
+};
+
+// ── Step 3: silently refresh when token expires ────────────────────────────────
+const refreshToken = async () => {
+  try {
+    const res = await fetch(GCAL_EDGE_FN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "refresh", secret: GCAL_APP_SECRET }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    storeToken(data.access_token, data.expires_in);
+    return data.access_token;
+  } catch (e) {
+    console.error("Token refresh failed:", e);
+    return null;
+  }
+};
+
+
+// Legacy popup path for desktop browsers
 const loadGoogleScript = () => new Promise((resolve, reject) => {
   if (window.google?.accounts?.oauth2) return resolve();
   const existing = document.getElementById("google-gsi");
   if (!existing) {
     const s = document.createElement("script");
-    s.id = "google-gsi";
-    s.src = "https://accounts.google.com/gsi/client";
-    s.async = true;
-    s.defer = true;
+    s.id = "google-gsi"; s.src = "https://accounts.google.com/gsi/client";
+    s.async = true; s.defer = true;
     document.head.appendChild(s);
   }
   const started = Date.now();
@@ -89,9 +127,6 @@ const loadGoogleScript = () => new Promise((resolve, reject) => {
   }, 100);
 });
 
-let _gcalToken = null;
-const getGCalToken = () => _gcalToken;
-const setGCalToken = (t) => { _gcalToken = t; };
 
 // ─── PERIOD KEYS (server-side reset logic via keys, not deletes) ──────────────
 const dailyKey = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Malta" });
@@ -683,7 +718,7 @@ function JoshMeetingBlock({ isWed }) {
                   </div>
                 ))}
                 {items.length === 0 && !adding && (
-                  <div style={{ fontSize: 12, color: "var(--muted2)", padding: "4px 0" }}>Nothing off—loaded yet. yet</div>
+                  <div style={{ fontSize: 12, color: "var(--muted2)", padding: "4px 0" }}>Nothing off—loaded yet.</div>
                 )}
                 {!adding ? (
                   <button onClick={() => setAdding(true)} style={{ marginTop: 4, padding: "7px 0", background: "none", border: `1.5px dashed var(--josh)44`, borderRadius: 10, color: "var(--josh)", fontSize: 12, width: "100%" }}>+ load it in</button>
@@ -1372,6 +1407,7 @@ function PlanScreen() {
   const [editingEvent, setEditingEvent] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addMonth, setAddMonth] = useState("");
+  const eventPanelRef = useRef(null);
 
   const load = useCallback(async () => {
     const { data } = await sb.from("planning_events").select("*").order("trigger_month");
@@ -1467,7 +1503,11 @@ function PlanScreen() {
                   const isSelected = selectedMonth === key;
                   return (
                     <div key={key}
-                      onClick={() => setSelectedMonth(isSelected ? null : key)}
+                      onClick={() => {
+                        const next = isSelected ? null : key;
+                        setSelectedMonth(next);
+                        if (next) setTimeout(() => eventPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                      }}
                       style={{
                         borderRadius: 12, padding: "10px 10px",
                         background: isSelected ? "var(--sage)" : "var(--surface)",
@@ -1498,7 +1538,7 @@ function PlanScreen() {
 
               {/* Expanded events for selected month in this year */}
               {years.indexOf(year) >= 0 && selectedMonth && selectedMonth.endsWith(`/${year}`) && (
-                <div style={{ marginTop: 10, padding: "14px 16px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 12px rgba(28,26,24,0.06)" }}>
+                <div ref={eventPanelRef} style={{ marginTop: 10, padding: "14px 16px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 12px rgba(28,26,24,0.06)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                     <div style={{ fontSize: 10, color: "var(--sage)", fontFamily: "'DM Mono', monospace", textTransform: "uppercase", letterSpacing: "0.22em" }}>
                       {months[parseInt(selectedMonth.split("/")[0]) - 1]} {selectedMonth.split("/")[1]}
@@ -1633,9 +1673,6 @@ function HistorySection() {
 
   return (
     <div style={{ padding: "0 20px 40px" }}>
-      <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 32, fontWeight: 500, color: "var(--text)", marginBottom: 4 }}>History</div>
-      <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: 16 }}>Everything you've actioned</div>
-
       <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
         {[["all","All"],["next_action","Tasks"],["waiting_for","Waiting"],["josh_meeting","Meeting"]].map(([k,l]) => (
           <button key={k} onClick={() => setFilter(k)} style={{
@@ -2042,50 +2079,61 @@ function useGoogleCalendar() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // On mount: check if we just came back from a Google redirect
   useEffect(() => {
-    const redirectToken = parseTokenFromHash();
-    if (redirectToken) {
-      setGCalToken(redirectToken);
-      setToken(redirectToken);
+    // Case 1: returning from Google with auth code in URL query string
+    if (new URLSearchParams(window.location.search).get("code")) {
+      setLoading(true);
+      exchangeCodeFromURL().then(tk => {
+        if (tk) { setGCalToken(tk); setToken(tk); }
+        else setError("Could not connect calendar. Try again.");
+        setLoading(false);
+      });
       return;
     }
+    // Case 2: valid token in storage
     const stored = getStoredToken();
-    if (stored) { setGCalToken(stored); setToken(stored); }
+    if (stored) { setGCalToken(stored); setToken(stored); return; }
+    // Case 3: token expired but refresh token exists in Supabase — refresh silently
+    if (localStorage.getItem("gcal_ever_connected")) {
+      setLoading(true);
+      refreshToken().then(tk => {
+        if (tk) { setToken(tk); }
+        setLoading(false);
+      });
+    }
   }, []);
+
+  // Auto-refresh 5 minutes before expiry
+  useEffect(() => {
+    if (!token) return;
+    const expiry = parseInt(localStorage.getItem("gcal_expiry") || "0", 10);
+    const msUntilRefresh = expiry - Date.now() - 5 * 60 * 1000;
+    if (msUntilRefresh <= 0) return;
+    const t = setTimeout(async () => {
+      const newToken = await refreshToken();
+      if (newToken) setToken(newToken);
+    }, msUntilRefresh);
+    return () => clearTimeout(t);
+  }, [token]);
 
   const isStandalone = window.matchMedia("(display-mode: standalone)").matches
     || window.navigator.standalone === true;
 
   const signIn = useCallback(async () => {
-    if (isStandalone) {
-      signInWithRedirect();
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      await loadGoogleScript();
-      const tk = await new Promise((resolve, reject) => {
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: GCAL_CLIENT_ID,
-          scope: GCAL_SCOPE,
-          callback: (resp) => {
-            if (resp.error) reject(new Error(resp.error));
-            else resolve(resp.access_token);
-          },
-        });
-        client.requestAccessToken({ prompt: "consent" });
-      });
-      setGCalToken(tk);
-      setToken(tk);
-    } catch (e) {
-      setError(e.message);
-    }
-    setLoading(false);
-  }, [isStandalone]);
+    // Always use redirect flow (works on iOS PWA and desktop)
+    localStorage.setItem("gcal_ever_connected", "1");
+    signInWithRedirect();
+  }, []);
 
-  return { token, signIn, loading, error };
+  const disconnect = useCallback(() => {
+    localStorage.removeItem("gcal_token");
+    localStorage.removeItem("gcal_expiry");
+    localStorage.removeItem("gcal_ever_connected");
+    setGCalToken(null);
+    setToken(null);
+  }, []);
+
+  return { token, signIn, disconnect, loading, error };
 }
 
 function TodayCalendarTab() {
@@ -2926,7 +2974,7 @@ function WelcomeScreen({ onChoose }) {
           {hasPeriod && (
             <span style={{
               display: "inline-block", width: "0.16em", height: "0.16em",
-              background: "currentColor", borderRadius: "50%",
+              background: "var(--sage)", borderRadius: "50%",
               marginLeft: "0.04em", verticalAlign: "baseline", flexShrink: 0,
             }} />
           )}
@@ -3024,7 +3072,7 @@ function AppInner() {
         padding: "32px 0 24px", position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 100,
       }}>
         <div style={{ padding: "0 20px 28px", fontFamily: "'Lora', Georgia, serif", fontSize: 22, letterSpacing: "-0.025em", lineHeight: 1.0, color: "var(--text)", whiteSpace: "nowrap" }}>
-          <span style={{ fontStyle: "italic", fontWeight: 400 }}>mental </span><span style={{ fontStyle: "normal", fontWeight: 500 }}>load<span style={{ display: "inline-block", width: "0.16em", height: "0.16em", background: "currentColor", borderRadius: "50%", marginLeft: "0.04em", verticalAlign: "baseline" }} /></span>
+          <span style={{ fontStyle: "italic", fontWeight: 400 }}>mental </span><span style={{ fontStyle: "normal", fontWeight: 500 }}>load<span style={{ display: "inline-block", width: "0.16em", height: "0.16em", background: "var(--sage)", borderRadius: "50%", marginLeft: "0.04em", verticalAlign: "baseline" }} /></span>
         </div>
         {NAV.filter(n => !n.albaOnly || who === "alba").map(n => (
           <button key={n.key} onClick={() => navigateTo(n.key)} style={{
