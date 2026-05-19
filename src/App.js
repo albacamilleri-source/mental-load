@@ -92,11 +92,12 @@ const exchangeCodeFromURL = async () => {
       body: JSON.stringify({ action: "exchange", code, secret: GCAL_APP_SECRET }),
     });
     const data = await res.json();
+    console.log("Exchange response:", res.status, JSON.stringify(data));
     if (data.error) throw new Error(data.error);
     storeToken(data.access_token, data.expires_in);
     return data.access_token;
   } catch (e) {
-    console.error("Token exchange failed:", e);
+    console.error("Token exchange failed:", e.message);
     return null;
   }
 };
@@ -2098,11 +2099,18 @@ function useGoogleCalendar() {
 
   useEffect(() => {
     // Case 1: returning from Google with auth code in URL query string
-    if (new URLSearchParams(window.location.search).get("code")) {
+    if (window.location.search.includes("code=") || new URLSearchParams(window.location.search).get("code")) {
       setLoading(true);
       exchangeCodeFromURL().then(tk => {
-        if (tk) { setGCalToken(tk); setToken(tk); }
-        else setError("Could not connect calendar. Try again.");
+        if (tk) {
+          setGCalToken(tk);
+          setToken(tk);
+          localStorage.setItem("gcal_ever_connected", "1");
+        } else {
+          // Exchange failed — clear ever_connected so we don't loop into refresh
+          localStorage.removeItem("gcal_ever_connected");
+          setError("Calendar connection failed. Check console for details.");
+        }
         setLoading(false);
       });
       return;
