@@ -1,6 +1,24 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
+// ─── ERROR BOUNDARY ───────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 32, fontFamily: "monospace", fontSize: 13, color: "#C44A4A", background: "#FAF8F5", minHeight: "100vh" }}>
+          <div style={{ fontWeight: 700, marginBottom: 12 }}>mental load. — crash report</div>
+          <div style={{ marginBottom: 8 }}>{this.state.error.message}</div>
+          <div style={{ color: "#7A706A", whiteSpace: "pre-wrap", fontSize: 11 }}>{this.state.error.stack}</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ─── SUPABASE ─────────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://qvibdnrfywisvfsqgqux.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2aWJkbnJmeXdpc3Zmc3FncXV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTE5MTcsImV4cCI6MjA5NDQ2NzkxN30.qPNjcpQpHPV5_SVz3U-JC18CcZ6vxio9vImA3CKg5jk";
@@ -2526,6 +2544,10 @@ function WelcomeScreen({ onChoose }) {
   );
 }
 export default function App() {
+  return <ErrorBoundary><AppInner /></ErrorBoundary>;
+}
+
+function AppInner() {
   const [who, chooseWho] = useWho();
   const [screen, setScreen] = useState("today");
   const [slideDir, setSlideDir] = useState("left");
