@@ -88,7 +88,10 @@ const exchangeCodeFromURL = async () => {
   try {
     const res = await fetch(GCAL_EDGE_FN, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON}`,
+      },
       body: JSON.stringify({ action: "exchange", code, secret: GCAL_APP_SECRET }),
     });
     const data = await res.json();
@@ -107,7 +110,10 @@ const refreshToken = async () => {
   try {
     const res = await fetch(GCAL_EDGE_FN, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON}`,
+      },
       body: JSON.stringify({ action: "refresh", secret: GCAL_APP_SECRET }),
     });
     const data = await res.json();
