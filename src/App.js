@@ -1504,9 +1504,7 @@ function PlanScreen() {
                   return (
                     <div key={key}
                       onClick={() => {
-                        const next = isSelected ? null : key;
-                        setSelectedMonth(next);
-                        if (next) setTimeout(() => eventPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                        setSelectedMonth(isSelected ? null : key);
                       }}
                       style={{
                         borderRadius: 12, padding: "10px 10px",
