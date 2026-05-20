@@ -1347,6 +1347,12 @@ function TasksScreen({ who }) {
 
 
 
+      {/* DEBUG — remove after confirmed working */}
+      <div style={{ margin: "0 20px 10px", padding: "8px 12px", background: "#C44A4A15", border: "1px solid #C44A4A44", borderRadius: 10, fontSize: 11, fontFamily: "'DM Mono', monospace", color: "var(--danger)" }}>
+        loading={String(loading)} | tasks={tasks.length} | active={active.length} | context={context}
+        {tasks.length > 0 && ` | first="${tasks[0].text}" done=${String(tasks[0].done)}`}
+      </div>
+
       {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
           {active.map(t => (
