@@ -981,8 +981,12 @@ function JoshMeetingBlock({ isWed }) {
               <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>Schedule meeting</div>
               <button onClick={() => setEditingDate(false)} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 22, cursor: "pointer" }}>×</button>
             </div>
-            <input type="date" value={meetingDate || ""} onChange={e => setMeetingDate(e.target.value)}
-              style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%", display: "block", minHeight: 52 }}
+            <input
+              type="text"
+              value={meetingDate || ""}
+              onChange={e => setMeetingDate(e.target.value)}
+              placeholder="YYYY-MM-DD"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%" }}
             />
             <button onClick={() => saveDate(meetingDate)}
               style={{ padding: "13px", background: "var(--sage)", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
@@ -1114,47 +1118,16 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   const [editNotes, setEditNotes] = useState(task.notes || "");
   const [editContext, setEditContext] = useState(task.context || "phone");
   const [editDate, setEditDate] = useState(task.due_date || "");
+  const [swipeX, setSwipeX] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const startX = useRef(null);
+  const THRESHOLD = 72;
 
   const save = () => {
     if (editText.trim()) onSave(task, editText.trim(), editContext, editDate, editNotes.trim());
     setEditing(false);
   };
 
-  if (editing) return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--surface)", borderRadius: 12, border: `1px solid ${color}44`, marginBottom: 3, boxShadow: "0 2px 8px rgba(28,26,24,0.06)" }}>
-      <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
-        onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", background: "var(--surface)" }}
-      />
-      <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)}
-        placeholder="Notes — optional"
-        rows={3}
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", resize: "vertical", lineHeight: 1.45 }}
-      />
-      <div style={{ display: "flex", gap: 5 }}>
-        {[["phone","📱"],["errand","🚗"],["home","🏠"]].map(([k,l]) => (
-          <button key={k} onClick={() => setEditContext(k)} style={{
-            flex: 1, padding: "6px", borderRadius: 10, border: "none", fontSize: 13,
-            background: editContext === k ? color : "var(--surface2)",
-            color: editContext === k ? "#fff" : "var(--muted)",
-          }}>{l}</button>
-        ))}
-      </div>
-      <input value={editDate} onChange={e => setEditDate(e.target.value)}
-        placeholder="Due date (DD/MM/YYYY) — optional"
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "7px 11px", color: "var(--text)", fontSize: 16, outline: "none" }}
-      />
-      <div style={{ display: "flex", gap: 6 }}>
-        <button onClick={save} style={{ flex: 1, padding: "7px", background: color, border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500 }}>Save</button>
-        <button onClick={() => setEditing(false)} style={{ padding: "7px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
-      </div>
-    </div>
-  );
-
-  const [swipeX, setSwipeX] = useState(0);
-  const [swiping, setSwiping] = useState(false);
-  const startX = useRef(null);
-  const THRESHOLD = 72;
   const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; setSwiping(true); };
   const handleTouchMove = (e) => {
     if (startX.current === null) return;
@@ -1167,7 +1140,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   };
   const sp = Math.abs(swipeX) / THRESHOLD;
 
-  return (
+  if (editing) return (
     <div style={{ marginBottom: 3, position: "relative", overflow: "hidden", borderRadius: 12 }}>
       <div style={{
         position: "absolute", inset: 0, borderRadius: 12,
