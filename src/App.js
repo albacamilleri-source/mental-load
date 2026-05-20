@@ -39,7 +39,6 @@ const GCAL_EDGE_FN      = "https://qvibdnrfywisvfsqgqux.supabase.co/functions/v1
 const GCAL_APP_SECRET   = "ml-alba-2026";
 
 let _gcalToken = null;
-let _gcalToken = null;
 const getGCalToken = () => _gcalToken;
 const setGCalToken = (t) => { _gcalToken = t; };
 
