@@ -282,8 +282,24 @@ const GlobalStyles = () => {
       @keyframes slideLeft  { from { opacity: 0; transform: translateX(28px);  } to { opacity: 1; transform: translateX(0); } }
       @keyframes slideRight { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: translateX(0); } }
       .pop { animation: pop 0.22s cubic-bezier(.34,1.56,.64,1) forwards; }
-      @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
-      @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+      @keyframes shimmer {
+        0%   { background-position: -400px 0; }
+        100% { background-position: 400px 0; }
+      }
+      .skeleton {
+        background: linear-gradient(90deg, var(--surface2) 25%, var(--bg) 50%, var(--surface2) 75%);
+        background-size: 800px 100%;
+        animation: shimmer 1.4s ease-in-out infinite;
+        border-radius: 8px;
+      }
+      .press {
+        transition: transform 0.1s cubic-bezier(0.34,1.56,0.64,1), opacity 0.1s ease;
+        -webkit-tap-highlight-color: transparent;
+        cursor: pointer;
+      }
+      .press:active { transform: scale(0.96); opacity: 0.85; }
+      button { -webkit-tap-highlight-color: transparent; }
+      * { -webkit-tap-highlight-color: transparent; }
       .app-sidebar { display: none; }
       .app-nav-mobile { display: block; }
       .app-settings-mobile { display: block; }
@@ -347,22 +363,72 @@ function SectionLabel({ text, color, done, total }) {
   );
 }
 
-function TaskRow({ text, done, onToggle, color, sub, overdue, dueDate, badge }) {
+function TaskRow({ text, done, onToggle, onDelete, color, sub, overdue, dueDate, badge }) {
   const [open, setOpen] = useState(false);
+  const [swipeX, setSwipeX] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const startX = useRef(null);
+  const THRESHOLD = 72;
+
+  const handleTouchStart = (e) => {
+    startX.current = e.touches[0].clientX;
+    setSwiping(true);
+  };
+
+  const handleTouchMove = (e) => {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    // Clamp: right max 80px (complete), left max -80px (delete)
+    setSwipeX(Math.max(-80, Math.min(80, dx)));
+  };
+
+  const handleTouchEnd = () => {
+    if (swipeX >= THRESHOLD) { onToggle && onToggle(); }
+    else if (swipeX <= -THRESHOLD) { onDelete && onDelete(); }
+    setSwipeX(0);
+    setSwiping(false);
+    startX.current = null;
+  };
+
+  const swipeProgress = Math.abs(swipeX) / THRESHOLD;
+  const showComplete = swipeX > 20;
+  const showDelete   = swipeX < -20;
+
   return (
-    <div style={{ marginBottom: 3 }}>
+    <div style={{ marginBottom: 3, position: "relative", overflow: "hidden", borderRadius: 12 }}>
+      {/* Background action indicators */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 12,
-        padding: "11px 14px", borderRadius: 12,
-        background: done ? "transparent" : "var(--surface)",
-        border: `1px solid ${done ? "transparent" : overdue ? "#C44A4A22" : "var(--border)"}`,
-        boxShadow: done ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
-        transition: "all 0.18s"
+        position: "absolute", inset: 0, borderRadius: 12,
+        background: showDelete ? `rgba(196,74,74,${Math.min(swipeProgress * 0.3, 0.25)})` : showComplete ? `rgba(124,158,138,${Math.min(swipeProgress * 0.3, 0.25)})` : "transparent",
+        display: "flex", alignItems: "center",
+        justifyContent: showDelete ? "flex-end" : "flex-start",
+        padding: "0 18px", pointerEvents: "none",
+        transition: swiping ? "none" : "background 0.2s",
       }}>
+        {showComplete && <span style={{ fontSize: 13, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress, 1) }}>✓ done</span>}
+        {showDelete && <span style={{ fontSize: 13, color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress, 1) }}>delete</span>}
+      </div>
+
+      {/* Main row */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "11px 14px", borderRadius: 12,
+          background: done ? "transparent" : "var(--surface)",
+          border: `1px solid ${done ? "transparent" : overdue ? "#C44A4A22" : "var(--border)"}`,
+          boxShadow: done ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
+          transform: `translateX(${swipeX}px)`,
+          transition: swiping ? "none" : "all 0.28s cubic-bezier(0.32,0,0.24,1)",
+          willChange: "transform",
+          userSelect: "none",
+        }}>
         <Checkbox checked={done} onChange={onToggle} color={color} />
         <div style={{ flex: 1 }} onClick={() => sub && setOpen(!open)}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 14, fontWeight: 400, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s", color: done ? "var(--muted2)" : "var(--text)" }}>{text}</span>
+            <span style={{ fontSize: 14, fontWeight: 400, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s" }}>{text}</span>
             {overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>overdue {dueDate}</span>}
             {dueDate && !overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{dueDate}</span>}
             {badge && <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : badge}</span>}
@@ -380,7 +446,42 @@ function TaskRow({ text, done, onToggle, color, sub, overdue, dueDate, badge }) 
 }
 
 function Spinner() {
-  return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 120, color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>loading…</div>;
+  return (
+    <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+      {[100, 75, 90, 60].map((w, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0 }} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div className="skeleton" style={{ height: 13, width: `${w}%` }} />
+            <div className="skeleton" style={{ height: 10, width: `${w * 0.6}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SkeletonCard({ rows = 3 }) {
+  return (
+    <div style={{ margin: "0 20px 12px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", overflow: "hidden", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ padding: "14px 16px", borderBottom: i < rows - 1 ? "1px solid var(--surface2)" : "none", display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="skeleton" style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0 }} />
+          <div className="skeleton" style={{ height: 13, flex: 1 }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SkeletonList({ count = 4 }) {
+  return (
+    <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 8 }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="skeleton" style={{ height: 52, borderRadius: 12 }} />
+      ))}
+    </div>
+  );
 }
 
 
@@ -587,7 +688,7 @@ function TodayScreen({ who }) {
             <div style={{ marginTop: 10, padding: "10px 16px", background: `${color}12`, borderRadius: 10, color, border: `1px solid ${color}22`, fontStyle: "italic", fontFamily: "'Lora', serif", fontSize: 16 }}>off—loaded.</div>
           )}
         </div>
-        {loading ? <Spinner /> : (
+        {loading ? <SkeletonCard rows={3} /> : (
           <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
             {visible.map(t => (
               <TaskRow key={t.id} text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} />
@@ -722,7 +823,7 @@ function JoshMeetingBlock({ isWed }) {
 
         {open && (
           <div style={{ borderTop: "1px solid var(--border)", padding: "8px 14px 12px" }}>
-            {loading ? <Spinner /> : (
+            {loading ? <SkeletonCard rows={3} /> : (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {items.map(item => (
                   <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
@@ -849,7 +950,7 @@ function WeekScreen({ who }) {
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>This Week<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
-      {loading ? <Spinner /> : <>
+      {loading ? <SkeletonCard rows={3} /> : <>
         {/* Cleaning */}
         <div style={{ padding: "0 20px 16px" }}>
           <SectionLabel text="Cleaning" color="var(--chores)" done={totalRoomDone} total={roomTasks.length} />
@@ -1209,7 +1310,7 @@ function TasksScreen({ who }) {
 
 
 
-      {loading ? <Spinner /> : (
+      {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
           {active.map(t => (
             <EditableTaskRow key={t.id} task={t} onToggle={() => toggle(t)} onSave={saveTask} onDelete={deleteTask}
@@ -1365,7 +1466,7 @@ function MonthScreen({ who }) {
       </div>
 
       {/* Monthly recurring tasks */}
-      {loading ? <Spinner /> : (
+      {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 20px 24px" }}>
           <SectionLabel text="Monthly Tasks" color="var(--planning)" done={monthDone} total={monthTasks.length} />
           <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 12 }}>
@@ -1536,7 +1637,7 @@ function PlanScreen() {
         </div>
       )}
 
-      {loading ? <Spinner /> : (
+      {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 16px" }}>
           {years.map(year => (
             <div key={year} style={{ marginBottom: 28 }}>
@@ -1704,7 +1805,7 @@ function HistorySection() {
         ))}
       </div>
 
-      {loading ? <Spinner /> : (
+      {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {filtered.length === 0 && <div style={{ fontSize: 13, color: "var(--muted2)", textAlign: "center", padding: "20px 0" }}>Load us up.</div>}
           {filtered.map(item => (
@@ -2029,7 +2130,7 @@ function EditScreen({ onBack }) {
         </div>
       </div>
 
-      {loading ? <Spinner /> : (
+      {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 20px" }}>
           {/* History section */}
           <div style={{ marginBottom: 8, borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
@@ -2223,7 +2324,7 @@ function TodayCalendarTab() {
     </div>
   );
 
-  if (loading) return <Spinner />;
+  if (loading) return <SkeletonCard rows={3} />;
   if (error) return (
     <div style={{ padding: "0 20px" }}>
       <div style={{ padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", textAlign: "center" }}>
@@ -2399,7 +2500,7 @@ function CalendarScreen() {
           </div>
 
           {/* Calendar grid */}
-          {loading ? <Spinner /> : (
+          {loading ? <SkeletonCard rows={3} /> : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2 }}>
               {Array.from({ length: firstDayOfWeek }).map((_, i) => <div key={`e${i}`} />)}
               {Array.from({ length: daysInMonth }).map((_, i) => {
@@ -2602,7 +2703,7 @@ function ThingsToDoScreen() {
       </div>
 
       {/* Places list */}
-      {loading ? <Spinner /> : (
+      {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 8 }}>
           {filtered.length === 0 && (
             <div style={{ padding: 16, textAlign: "center", fontSize: 13, color: "var(--muted)" }}>No places match these filters</div>
@@ -2653,7 +2754,7 @@ function FreeTimeScreen() {
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Free Time<span style={{ color: "var(--sage)" }}>.</span></div>
         <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>What will you do?</div>
       </div>
-      {loading ? <Spinner /> : (
+      {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
           {options.map(opt => (
             <a key={opt.id} href={opt.url || undefined}
@@ -2702,7 +2803,7 @@ function KidsTimeScreen() {
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Kids Time<span style={{ color: "var(--sage)" }}>.</span></div>
         <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>Time with the little ones</div>
       </div>
-      {loading ? <Spinner /> : (
+      {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {options.map(opt => (
             <div key={opt.id} style={{ padding: "20px 14px", borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center" }}>
@@ -2833,17 +2934,17 @@ function ConnectScreen() {
 // ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
 const NAV_PRIMARY = [
   { key: "today", label: "Today", icon: "◎" },
-  { key: "week", label: "Week", icon: "▦" },
+  { key: "week",  label: "Week",  icon: "▦" },
+  { key: "month", label: "Month", icon: "◫" },
   { key: "tasks", label: "Tasks", icon: "◈" },
-  { key: "plan", label: "Plan", icon: "◷" },
 ];
 
 const NAV_MORE = [
-  { key: "month", label: "Month", icon: "◫" },
-  { key: "connect", label: "Connect", icon: "♡", albaOnly: true },
-  { key: "todo", label: "Do", icon: "◉", albaOnly: true },
-  { key: "freetime", label: "Me", icon: "◌", albaOnly: true },
-  { key: "kidstime", label: "Kids", icon: "☆", albaOnly: true },
+  { key: "plan",     label: "Plan",    icon: "◷" },
+  { key: "connect",  label: "Connect", icon: "♡", albaOnly: true },
+  { key: "todo",     label: "Do",      icon: "◉", albaOnly: true },
+  { key: "freetime", label: "Me",      icon: "◌", albaOnly: true },
+  { key: "kidstime", label: "Kids",    icon: "☆", albaOnly: true },
 ];
 
 const NAV = [...NAV_PRIMARY, ...NAV_MORE];
@@ -2884,7 +2985,7 @@ function BottomNav({ active, onChange, who }) {
                 color: active === n.key ? "var(--text)" : "var(--muted)",
                 transition: "all 0.15s",
               }}>
-                <span style={{ fontSize: 16 }}>{n.icon}</span>
+                <span style={{ fontSize: 16, width: 20, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
                 <span style={{ fontSize: 14, fontFamily: "'Outfit', sans-serif" }}>{n.label}</span>
                 {active === n.key && <div style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: "50%", background: "var(--sage)" }} />}
               </button>
@@ -3113,7 +3214,7 @@ function AppInner() {
           <span style={{ fontStyle: "italic", fontWeight: 400 }}>mental </span><span style={{ fontStyle: "normal", fontWeight: 500 }}>load<span style={{ display: "inline-block", width: "0.16em", height: "0.16em", background: "var(--sage)", borderRadius: "50%", marginLeft: "0.04em", verticalAlign: "baseline" }} /></span>
         </div>
         {NAV.filter(n => !n.albaOnly || who === "alba").map(n => (
-          <button key={n.key} onClick={() => navigateTo(n.key)} style={{
+          <button key={n.key} onClick={() => navigateTo(n.key)} className="press" style={{
             width: "100%", padding: "11px 20px", border: "none",
             display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
             background: screen === n.key ? "var(--surface2)" : "transparent",
