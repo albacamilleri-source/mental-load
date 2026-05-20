@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
+
+// ─── HAPTIC FEEDBACK ──────────────────────────────────────────────────────────
+// Works on Android PWA. Silently ignored on iOS (Apple restricts vibration API).
+const haptic = (pattern = 8) => {
+  if (navigator.vibrate) navigator.vibrate(pattern);
+};
+
 // ─── ERROR BOUNDARY ───────────────────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -30,6 +37,53 @@ const GCAL_SCOPE        = "https://www.googleapis.com/auth/calendar.readonly";
 const GCAL_REDIRECT_URI = "https://albacamilleri-source.github.io/mental-load";
 const GCAL_EDGE_FN      = "https://qvibdnrfywisvfsqgqux.supabase.co/functions/v1/gcal-auth";
 const GCAL_APP_SECRET   = "ml-alba-2026";
+
+// ─── PUSH NOTIFICATIONS ───────────────────────────────────────────────────────
+const PUSH_EDGE_FN     = "https://qvibdnrfywisvfsqgqux.supabase.co/functions/v1/push-notify";
+const VAPID_PUBLIC_KEY = "YOUR_VAPID_PUBLIC_KEY_HERE"; // replace after generating at vapidkeys.com
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function registerPushForJosh() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+  try {
+    const reg = await navigator.serviceWorker.register("/mental-load/sw.js");
+    await navigator.serviceWorker.ready;
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return false;
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+    await fetch(PUSH_EDGE_FN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_ANON}` },
+      body: JSON.stringify({ action: "save", subscription, secret: GCAL_APP_SECRET }),
+    });
+    localStorage.setItem("push_registered_josh", "1");
+    return true;
+  } catch (e) {
+    console.error("Push registration failed:", e);
+    return false;
+  }
+}
+
+async function notifyJosh(taskText) {
+  try {
+    await fetch(PUSH_EDGE_FN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_ANON}` },
+      body: JSON.stringify({ action: "notify", taskText, secret: GCAL_APP_SECRET }),
+    });
+  } catch (e) {
+    console.error("Push notify failed:", e);
+  }
+}
 
 let _gcalToken = null;
 const getGCalToken = () => _gcalToken;
@@ -327,7 +381,7 @@ function useWho() {
 function Checkbox({ checked, onChange, color = "var(--chores)", size = 22 }) {
   const [anim, setAnim] = useState(false);
   return (
-    <button onClick={() => { setAnim(true); setTimeout(() => setAnim(false), 300); onChange(); }}
+    <button onClick={() => { setAnim(true); setTimeout(() => setAnim(false), 300); onChange(); haptic(8); }}
       className={anim ? "pop" : ""}
       style={{
         width: size, height: size, borderRadius: size * 0.3,
@@ -370,33 +424,26 @@ function TaskRow({ text, done, onToggle, onDelete, color, sub, overdue, dueDate,
   const startX = useRef(null);
   const THRESHOLD = 72;
 
-  const handleTouchStart = (e) => {
-    startX.current = e.touches[0].clientX;
-    setSwiping(true);
-  };
-
+  const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; setSwiping(true); };
   const handleTouchMove = (e) => {
     if (startX.current === null) return;
     const dx = e.touches[0].clientX - startX.current;
-    // Clamp: right max 80px (complete), left max -80px (delete)
     setSwipeX(Math.max(-80, Math.min(80, dx)));
   };
-
   const handleTouchEnd = () => {
-    if (swipeX >= THRESHOLD) { onToggle && onToggle(); }
-    else if (swipeX <= -THRESHOLD) { onDelete && onDelete(); }
-    setSwipeX(0);
-    setSwiping(false);
-    startX.current = null;
+    if (swipeX >= THRESHOLD) { haptic([8, 50, 8]); onToggle && onToggle(); }
+    else if (swipeX <= -THRESHOLD) { haptic([8, 50, 8]); onDelete && onDelete(); }
+    setSwipeX(0); setSwiping(false); startX.current = null;
   };
 
   const swipeProgress = Math.abs(swipeX) / THRESHOLD;
   const showComplete = swipeX > 20;
   const showDelete   = swipeX < -20;
 
+  const ctxLabel = badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : null;
+
   return (
     <div style={{ marginBottom: 3, position: "relative", overflow: "hidden", borderRadius: 12 }}>
-      {/* Background action indicators */}
       <div style={{
         position: "absolute", inset: 0, borderRadius: 12,
         background: showDelete ? `rgba(196,74,74,${Math.min(swipeProgress * 0.3, 0.25)})` : showComplete ? `rgba(124,158,138,${Math.min(swipeProgress * 0.3, 0.25)})` : "transparent",
@@ -405,33 +452,34 @@ function TaskRow({ text, done, onToggle, onDelete, color, sub, overdue, dueDate,
         padding: "0 18px", pointerEvents: "none",
         transition: swiping ? "none" : "background 0.2s",
       }}>
-        {showComplete && <span style={{ fontSize: 13, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress, 1) }}>✓ done</span>}
-        {showDelete && <span style={{ fontSize: 13, color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress, 1) }}>delete</span>}
+        {showComplete && <span style={{ fontSize: 11, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress, 1) }}>✓ done</span>}
+        {showDelete && <span style={{ fontSize: 11, color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress, 1) }}>delete</span>}
       </div>
 
-      {/* Main row */}
       <div
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         style={{
-          display: "flex", alignItems: "center", gap: 12,
+          display: "flex", alignItems: "center", gap: 10,
           padding: "11px 14px", borderRadius: 12,
           background: done ? "transparent" : "var(--surface)",
           border: `1px solid ${done ? "transparent" : overdue ? "#C44A4A22" : "var(--border)"}`,
           boxShadow: done ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
           transform: `translateX(${swipeX}px)`,
           transition: swiping ? "none" : "all 0.28s cubic-bezier(0.32,0,0.24,1)",
-          willChange: "transform",
           userSelect: "none",
         }}>
+        {/* Context icon — left, consistent position */}
+        {ctxLabel && (
+          <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0, opacity: done ? 0.4 : 1 }}>{ctxLabel}</span>
+        )}
         <Checkbox checked={done} onChange={onToggle} color={color} />
         <div style={{ flex: 1 }} onClick={() => sub && setOpen(!open)}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, fontWeight: 400, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s" }}>{text}</span>
             {overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>overdue {dueDate}</span>}
             {dueDate && !overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{dueDate}</span>}
-            {badge && <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : badge}</span>}
           </div>
         </div>
         {sub && <span style={{ fontSize: 10, color: "var(--muted2)", transform: open ? "rotate(180deg)" : "none", transition: "0.2s" }}>▾</span>}
@@ -565,6 +613,39 @@ function WeatherStrip({ weather }) {
 }
 
 // ─── TODAY SCREEN ─────────────────────────────────────────────────────────────
+function TodayMeetingAgenda() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    sb.from("josh_meeting_items").select("*").eq("done", false).order("created_at")
+      .then(({ data }) => setItems(data || []));
+  }, []);
+
+  const tick = async (item) => {
+    haptic(8);
+    await sb.from("josh_meeting_items").update({ done: true }).eq("id", item.id);
+    await sb.from("history_items").insert({ text: item.text, notes: item.notes || "", source: "josh_meeting" });
+    setItems(is => is.filter(i => i.id !== item.id));
+  };
+
+  return (
+    <div style={{ marginBottom: 16, borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", overflow: "hidden", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
+      <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid var(--surface2)", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--josh)" }} />
+        <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--josh)", textTransform: "uppercase", letterSpacing: "0.22em" }}>Alba & Josh Weekly</span>
+      </div>
+      {items.length === 0
+        ? <div style={{ padding: "10px 14px", fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>Nothing off—loaded yet.</div>
+        : items.map(item => (
+          <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: "1px solid var(--surface2)" }}>
+            <Checkbox checked={false} onChange={() => tick(item)} color="var(--josh)" size={18} />
+            <span style={{ fontSize: 13, color: "var(--text)", flex: 1 }}>{item.text}</span>
+          </div>
+        ))
+      }
+    </div>
+  );
+}
+
 function TodayScreen({ who }) {
   const [tasks, setTasks] = useState([]);
   const [completions, setCompletions] = useState(new Set());
@@ -641,7 +722,12 @@ function TodayScreen({ who }) {
     }
   };
 
-  const visible = tasks.filter(t => t.type === tab);
+  const visible = tasks.filter(t => {
+    if (t.type !== tab) return false;
+    // Josh only sees tasks assigned to him or not assigned to anyone
+    if (who === "josh") return !t.assigned_to || t.assigned_to === "josh";
+    return true;
+  });
   const doneCount = visible.filter(t => completions.has(t.id)).length;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Morning" : hour < 18 ? "Afternoon" : "Evening";
@@ -691,7 +777,26 @@ function TodayScreen({ who }) {
         {loading ? <SkeletonCard rows={3} /> : (
           <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
             {visible.map(t => (
-              <TaskRow key={t.id} text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} />
+              <div key={t.id} style={{ position: "relative" }}>
+                <TaskRow text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} />
+                {who === "alba" && !completions.has(t.id) && (
+                  <button
+                    onClick={async () => {
+                      await sb.from("routine_tasks").update({ assigned_to: t.assigned_to === "josh" ? null : "josh" }).eq("id", t.id);
+                      if (t.assigned_to !== "josh") notifyJosh(t.text);
+                    }}
+                    style={{
+                      position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                      background: t.assigned_to === "josh" ? "var(--josh)" : "var(--surface2)",
+                      border: "none", borderRadius: 999, padding: "3px 9px",
+                      fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em",
+                      color: t.assigned_to === "josh" ? "#fff" : "var(--muted)",
+                      cursor: "pointer", transition: "all 0.18s",
+                    }}>
+                    {t.assigned_to === "josh" ? "J" : "→J"}
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -700,13 +805,9 @@ function TodayScreen({ who }) {
       {/* ── Static Plans section — always visible below routine ── */}
       <div style={{ padding: "28px 20px 0" }}>
 
-        {/* Meeting block if today */}
+        {/* Meeting block if today — show full agenda */}
         {meetingIsToday && (
-          <div style={{ marginBottom: 16, padding: "14px 16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
-            <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--josh)", textTransform: "uppercase", letterSpacing: "0.22em", marginBottom: 4 }}>↔ Alba & Josh Weekly</div>
-            <div style={{ fontSize: 13, color: "var(--text)" }}>Weekly meeting today</div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>See Week tab for agenda</div>
-          </div>
+          <TodayMeetingAgenda />
         )}
 
         {/* Due today — next actions */}
@@ -800,64 +901,60 @@ function JoshMeetingBlock({ isWed }) {
     ? new Date(meetingDate).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
     : "Wednesday";
 
+
   return (
     <div style={{ padding: "0 20px 16px" }}>
       <SectionLabel text="Alba & Josh Weekly" color="var(--josh)" done={0} total={items.length} />
-      <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
-        {/* Collapsible header — matches room card style */}
-        <button onClick={() => setOpen(o => !o)} style={{ width: "100%", padding: "13px 15px", background: "none", border: "none", outline: "none", display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--text)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--josh)", flexShrink: 0 }} />
-            <span style={{ fontSize: 14, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
-              {dateLabel}
-              <span onClick={e => { e.stopPropagation(); setEditingDate(true); }}
-                style={{ fontSize: 14, cursor: "pointer" }}>✏️</span>
-              {isWed && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 20, background: "var(--josh)", color: "#fff", fontFamily: "'DM Mono', monospace" }}>Today</span>}
-            </span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>0/{items.length}</span>
-            <span style={{ fontSize: 10, color: "var(--muted)", transform: open ? "rotate(180deg)" : "none", transition: "0.2s" }}>▾</span>
-          </div>
-        </button>
+      <div style={{ borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)", overflow: "hidden" }}>
 
-        {open && (
-          <div style={{ borderTop: "1px solid var(--border)", padding: "8px 14px 12px" }}>
-            {loading ? <SkeletonCard rows={3} /> : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {items.map(item => (
-                  <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
-                    <Checkbox checked={false} onChange={() => tickItem(item)} color="var(--josh)" size={18} />
-                    <div style={{ flex: 1 }}>
-                      <span style={{ fontSize: 13, color: "var(--text)" }}>{item.text}</span>
-                      {item.notes && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{item.notes}</div>}
-                    </div>
-                    <button onClick={() => deleteItem(item.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 14, padding: "0 2px" }}>×</button>
-                  </div>
-                ))}
-                {items.length === 0 && !adding && (
-                  <div style={{ fontSize: 12, color: "var(--muted2)", padding: "4px 0" }}>Nothing off—loaded yet.</div>
-                )}
-                {!adding ? (
-                  <button onClick={() => setAdding(true)} style={{ marginTop: 4, padding: "7px 0", background: "none", border: `1.5px dashed var(--josh)44`, borderRadius: 10, color: "var(--josh)", fontSize: 12, width: "100%" }}>+ load it in</button>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-                    <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") addItem(); if (e.key === "Escape") setAdding(false); }}
-                      placeholder="What to discuss…"
-                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
-                    />
-                    <input value={newNotes} onChange={e => setNewNotes(e.target.value)}
-                      placeholder="Notes (optional)"
-                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
-                    />
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button onClick={addItem} style={{ flex: 1, padding: "8px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500 }}>Add</button>
-                      <button onClick={() => { setAdding(false); setNewText(""); setNewNotes(""); }} style={{ padding: "8px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12 }}>Cancel</button>
-                    </div>
-                  </div>
-                )}
+        {/* Header — date + edit button inline, no accordion */}
+        <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--surface2)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--josh)", flexShrink: 0 }} />
+            <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>{dateLabel}</span>
+            {meetingIsToday && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 20, background: "var(--josh)", color: "#fff", fontFamily: "'DM Mono', monospace" }}>Today</span>}
+          </div>
+          <button onClick={() => setEditingDate(true)}
+            style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.18em", padding: "3px 8px", borderRadius: 6, border: "1px solid var(--border)" }}>
+            edit date
+          </button>
+        </div>
+
+        {/* Agenda items — flat, no accordion */}
+        {loading ? <SkeletonCard rows={3} /> : (
+          <div>
+            {items.map(item => (
+              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--surface2)" }}>
+                <Checkbox checked={false} onChange={() => { haptic(8); tickItem(item); }} color="var(--josh)" size={18} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: 13, color: "var(--text)" }}>{item.text}</span>
+                  {item.notes && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{item.notes}</div>}
+                </div>
+                <button onClick={() => deleteItem(item.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 16, padding: "0 2px", cursor: "pointer" }}>×</button>
               </div>
+            ))}
+            {items.length === 0 && !adding && (
+              <div style={{ padding: "12px 14px", fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>Nothing off—loaded yet.</div>
+            )}
+            {adding && (
+              <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6, borderBottom: "1px solid var(--surface2)" }}>
+                <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addItem(); if (e.key === "Escape") setAdding(false); }}
+                  placeholder="What to discuss…"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%" }}
+                />
+                <input value={newNotes} onChange={e => setNewNotes(e.target.value)}
+                  placeholder="Notes (optional)"
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%" }}
+                />
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={addItem} style={{ flex: 1, padding: "8px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Add</button>
+                  <button onClick={() => { setAdding(false); setNewText(""); setNewNotes(""); }} style={{ padding: "8px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                </div>
+              </div>
+            )}
+            {!adding && (
+              <button onClick={() => setAdding(true)} style={{ width: "100%", padding: "10px 14px", background: "none", border: "none", color: "var(--josh)", fontSize: 11, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", cursor: "pointer", textAlign: "left" }}>+ load it in</button>
             )}
           </div>
         )}
@@ -867,23 +964,16 @@ function JoshMeetingBlock({ isWed }) {
       {editingDate && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(28,26,24,0.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}
           onClick={() => setEditingDate(false)}>
-          <div onClick={e => e.stopPropagation()} style={{
-            width: "100%", maxWidth: 400,
-            background: "var(--bg)", borderRadius: 20,
-            padding: "24px 20px 24px", display: "flex", flexDirection: "column", gap: 10,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <div style={{ fontFamily: "'Lora', serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>Schedule meeting</div>
-              <button onClick={() => setEditingDate(false)} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 20 }}>×</button>
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 400, background: "var(--bg)", borderRadius: 20, padding: "24px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>Schedule meeting</div>
+              <button onClick={() => setEditingDate(false)} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 22, cursor: "pointer" }}>×</button>
             </div>
-            <input
-              type="date"
-              value={meetingDate || ""}
-              onChange={e => setMeetingDate(e.target.value)}
+            <input type="date" value={meetingDate || ""} onChange={e => setMeetingDate(e.target.value)}
               style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%" }}
             />
             <button onClick={() => saveDate(meetingDate)}
-              style={{ padding: "13px", background: "var(--sage)", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 500, marginTop: 4 }}>
+              style={{ padding: "13px", background: "var(--sage)", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
               Save
             </button>
           </div>
@@ -891,6 +981,8 @@ function JoshMeetingBlock({ isWed }) {
       )}
     </div>
   );
+}
+
 }
 
 // ─── WEEK SCREEN ──────────────────────────────────────────────────────────────
@@ -1022,12 +1114,12 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--surface)", borderRadius: 12, border: `1px solid ${color}44`, marginBottom: 3, boxShadow: "0 2px 8px rgba(28,26,24,0.06)" }}>
       <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
         onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", background: "var(--surface)" }}
       />
       <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)}
         placeholder="Notes — optional"
         rows={3}
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 12, outline: "none", resize: "vertical", lineHeight: 1.45 }}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", resize: "vertical", lineHeight: 1.45 }}
       />
       <div style={{ display: "flex", gap: 5 }}>
         {[["phone","📱"],["errand","🚗"],["home","🏠"]].map(([k,l]) => (
@@ -1040,7 +1132,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
       </div>
       <input value={editDate} onChange={e => setEditDate(e.target.value)}
         placeholder="Due date (DD/MM/YYYY) — optional"
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "7px 11px", color: "var(--text)", fontSize: 12, outline: "none" }}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "7px 11px", color: "var(--text)", fontSize: 16, outline: "none" }}
       />
       <div style={{ display: "flex", gap: 6 }}>
         <button onClick={save} style={{ flex: 1, padding: "7px", background: color, border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500 }}>Save</button>
@@ -1049,20 +1141,50 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
     </div>
   );
 
+  const [swipeX, setSwipeX] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const startX = useRef(null);
+  const THRESHOLD = 72;
+  const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; setSwiping(true); };
+  const handleTouchMove = (e) => {
+    if (startX.current === null) return;
+    setSwipeX(Math.max(-80, Math.min(80, e.touches[0].clientX - startX.current)));
+  };
+  const handleTouchEnd = () => {
+    if (swipeX >= THRESHOLD) { haptic([8, 50, 8]); onToggle && onToggle(); }
+    else if (swipeX <= -THRESHOLD) { haptic([8, 50, 8]); onDelete && onDelete(task.id); }
+    setSwipeX(0); setSwiping(false); startX.current = null;
+  };
+  const sp = Math.abs(swipeX) / THRESHOLD;
+
   return (
-    <div style={{ marginBottom: 3, display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: `1px solid ${task.overdue ? "#C44A4A22" : "var(--border)"}`, boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
-      <Checkbox checked={false} onChange={onToggle} color={color} />
-      <div style={{ flex: 1 }} onClick={() => setEditing(true)}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 14, color: "var(--text)" }}>{task.text}</span>
-          {task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace" }}>overdue {task.due_date}</span>}
-          {task.due_date && !task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{task.due_date}</span>}
-          {badge && <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : badge}</span>}
-        </div>
-        {task.notes && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{task.notes}</div>}
+    <div style={{ marginBottom: 3, position: "relative", overflow: "hidden", borderRadius: 12 }}>
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: 12,
+        background: swipeX < -20 ? `rgba(196,74,74,${Math.min(sp * 0.3, 0.25)})` : swipeX > 20 ? `rgba(124,158,138,${Math.min(sp * 0.3, 0.25)})` : "transparent",
+        display: "flex", alignItems: "center",
+        justifyContent: swipeX < -20 ? "flex-end" : "flex-start",
+        padding: "0 18px", pointerEvents: "none",
+      }}>
+        {swipeX > 20 && <span style={{ fontSize: 11, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(sp, 1) }}>✓ done</span>}
+        {swipeX < -20 && <span style={{ fontSize: 11, color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(sp, 1) }}>delete</span>}
       </div>
-      <button onClick={() => setEditing(true)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px" }}>✎</button>
-      <button onClick={() => onDelete(task.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 14, padding: "0 2px" }}>×</button>
+      <div
+        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: `1px solid ${task.overdue ? "#C44A4A22" : "var(--border)"}`, boxShadow: "0 1px 4px rgba(28,26,24,0.04)", transform: `translateX(${swipeX}px)`, transition: swiping ? "none" : "transform 0.28s cubic-bezier(0.32,0,0.24,1)", userSelect: "none" }}>
+        {/* Context icon — always left, before checkbox */}
+        {badge && <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : "🏠"}</span>}
+        <Checkbox checked={false} onChange={onToggle} color={color} />
+        <div style={{ flex: 1 }} onClick={() => setEditing(true)}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 14, color: "var(--text)" }}>{task.text}</span>
+            {task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace" }}>overdue {task.due_date}</span>}
+            {task.due_date && !task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{task.due_date}</span>}
+          </div>
+          {task.notes && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{task.notes}</div>}
+        </div>
+        <button onClick={() => setEditing(true)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }}>✎</button>
+      </div>
     </div>
   );
 }
@@ -1329,12 +1451,12 @@ function TasksScreen({ who }) {
             <input autoFocus value={newText} onChange={e => setNewText(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") addTask(); if (e.key === "Escape") setAdding(false); }}
               placeholder="What needs doing?"
-              style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", color: "var(--text)", fontSize: 14, outline: "none" }}
+              style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", color: "var(--text)", fontSize: 16, outline: "none" }}
             />
             <textarea value={newNotes} onChange={e => setNewNotes(e.target.value)}
               placeholder="Notes — optional"
               rows={3}
-              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: "var(--text)", fontSize: 13, outline: "none", resize: "vertical", lineHeight: 1.45 }}
+              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: "var(--text)", fontSize: 16, outline: "none", resize: "vertical", lineHeight: 1.45 }}
             />
             <div style={{ display: "flex", gap: 6 }}>
               {[["phone","📱 Phone"],["errand","🚗 Errand"],["home","🏠 Home"]].map(([k,l]) => (
@@ -1347,7 +1469,7 @@ function TasksScreen({ who }) {
             </div>
             <input value={newDate} onChange={e => setNewDate(e.target.value)}
               placeholder="Due date (DD/MM/YYYY) — optional"
-              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: "var(--text)", fontSize: 13, outline: "none" }}
+              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: "var(--text)", fontSize: 16, outline: "none" }}
             />
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={addTask} style={{ flex: 1, padding: "9px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 500 }}>Add</button>
@@ -1376,7 +1498,7 @@ function TasksScreen({ who }) {
               <input autoFocus value={newWF} onChange={e => setNewWF(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") addWF(); if (e.key === "Escape") setAddingWF(false); }}
                 placeholder="Waiting for…"
-                style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 12px", color: "var(--text)", fontSize: 14, outline: "none" }}
+                style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 12px", color: "var(--text)", fontSize: 16, outline: "none" }}
               />
               <button onClick={addWF} style={{ padding: "9px 14px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13 }}>Add</button>
             </div>
@@ -1574,7 +1696,7 @@ function PlanScreen() {
   const selectedEvents = selectedMonth ? (eventsByMonth[selectedMonth] || []) : [];
 
   const saveEvent = async (ev) => {
-    if (ev.id && typeof ev.id === "number") {
+    if (ev.id) {
       await sb.from("planning_events").update({ text: ev.text, trigger_month: ev.trigger_month, notes: ev.notes, recurring: ev.recurring }).eq("id", ev.id);
     } else {
       await sb.from("planning_events").insert({ text: ev.text, trigger_month: ev.trigger_month, notes: ev.notes || "", recurring: ev.recurring || false });
@@ -1744,13 +1866,13 @@ function PlanEventModal({ event, onSave, onDelete, onClose }) {
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 22 }}>×</button>
         </div>
         <input value={text} onChange={e => setText(e.target.value)} placeholder="Event name"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", color: "var(--text)", fontSize: 15, outline: "none", width: "100%" }}
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%" }}
         />
         <input type="month" value={toInputMonth(month)} onChange={e => setMonth(fromInputMonth(e.target.value))}
-          style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", color: "var(--text)", fontSize: 15, outline: "none", width: "100%" }}
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%" }}
         />
         <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes (optional)" rows={3}
-          style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", color: "var(--text)", fontSize: 15, outline: "none", width: "100%", resize: "none", fontFamily: "'Outfit', sans-serif" }}
+          style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%", resize: "none", fontFamily: "'Outfit', sans-serif" }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--border)", cursor: "pointer" }}
           onClick={() => setRecurring(r => !r)}>
@@ -1872,7 +1994,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
             <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6, background: "var(--surface2)", borderRadius: 10, padding: 12, border: `1px solid ${color}44` }}>
               <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") submitEdit(); if (e.key === "Escape") setEditingIdx(null); }}
-                style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+                style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", background: "var(--surface)" }}
               />
               {extraFields && extraFields.map(f => (
                 f.type === "checkbox" ? (
@@ -1886,7 +2008,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
                 ) : (
                   <input key={f.key} value={editExtra[f.key] || ""} onChange={e => setEditExtra(x => ({ ...x, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
-                    style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", background: "var(--surface)" }}
                   />
                 )
               ))}
@@ -1913,7 +2035,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
             <input autoFocus value={text} onChange={e => setText(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") submit(); if (e.key === "Escape") setAdding(false); }}
               placeholder={placeholder || "Add item…"}
-              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", background: "var(--surface)" }}
             />
             {extraFields && extraFields.map(f => (
               f.type === "checkbox" ? (
@@ -1927,7 +2049,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
               ) : (
                 <input key={f.key} value={extra[f.key] || ""} onChange={e => setExtra(x => ({ ...x, [f.key]: e.target.value }))}
                   placeholder={f.placeholder}
-                  style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 13, outline: "none", background: "var(--surface)" }}
+                  style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", background: "var(--surface)" }}
                 />
               )
             ))}
@@ -3177,6 +3299,14 @@ function AppInner() {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
+  // Register push notifications for Josh on first load
+  useEffect(() => {
+    if (who === "josh" && !localStorage.getItem("push_registered_josh")) {
+      // Small delay so the UI renders first
+      setTimeout(() => registerPushForJosh(), 1500);
+    }
+  }, [who]);
 
   if (!who) return (<><GlobalStyles /><WelcomeScreen onChoose={chooseWho} /></>);
   if (editing) return (
