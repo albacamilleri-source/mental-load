@@ -983,8 +983,6 @@ function JoshMeetingBlock({ isWed }) {
   );
 }
 
-}
-
 // ─── WEEK SCREEN ──────────────────────────────────────────────────────────────
 function WeekScreen({ who }) {
   const [roomTasks, setRoomTasks] = useState([]);
