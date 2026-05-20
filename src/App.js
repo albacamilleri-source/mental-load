@@ -1200,10 +1200,11 @@ function TasksScreen({ who }) {
   const isDesktop = window.innerWidth >= 768;
 
   const load = useCallback(async () => {
-    const [{ data: t }, { data: w }] = await Promise.all([
-      sb.from("next_actions").select("*").order("sort_order").order("created_at"),
+    const [{ data: t, error: te }, { data: w }] = await Promise.all([
+      sb.from("next_actions").select("*").eq("assigned", "alba").order("created_at"),
       sb.from("waiting_for").select("*").order("created_at"),
     ]);
+    if (te) console.error("next_actions load error:", te.message);
     setTasks(t || []);
     setWaiting(w || []);
     setLoading(false);
