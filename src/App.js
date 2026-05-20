@@ -495,8 +495,13 @@ function TaskRow({ text, done, onToggle, onDelete, color, sub, overdue, dueDate,
         {sub && <span style={{ fontSize: 10, color: "var(--muted2)", transform: open ? "rotate(180deg)" : "none", transition: "0.2s" }}>▾</span>}
       </div>
       {sub && open && (
-        <div style={{ marginLeft: 48, marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
-          {sub.map((s, i) => <div key={i} style={{ fontSize: 12, color: "var(--muted)", padding: "5px 12px", background: "var(--surface2)", borderRadius: 10, border: "1px solid var(--border)" }}>· {s}</div>)}
+        <div style={{ marginLeft: 18, marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
+          {sub.map((s, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 12px", background: "var(--surface2)", borderRadius: 10, border: "1px solid var(--border)" }}>
+              <div style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid var(--border)`, flexShrink: 0, background: "var(--surface)" }} />
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>· {s}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -919,16 +924,15 @@ function JoshMeetingBlock({ isWed }) {
       <SectionLabel text="Alba & Josh Weekly" color="var(--josh)" done={0} total={items.length} />
       <div style={{ borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)", overflow: "hidden" }}>
 
-        {/* Header — date + edit button inline, no accordion */}
-        <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--surface2)" }}>
+        {/* Header — date is prominent, edit is subtle */}
+        <div style={{ padding: "14px 14px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--surface2)", background: "var(--surface2)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--josh)", flexShrink: 0 }} />
-            <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>{dateLabel}</span>
-            {meetingIsToday && <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 20, background: "var(--josh)", color: "#fff", fontFamily: "'DM Mono', monospace" }}>Today</span>}
+            <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 16, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.01em" }}>{dateLabel}</div>
+            {meetingIsToday && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--josh)", color: "#fff", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>Today</span>}
           </div>
           <button onClick={() => setEditingDate(true)}
-            style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.18em", padding: "3px 8px", borderRadius: 6, border: "1px solid var(--border)" }}>
-            edit date
+            style={{ background: "none", border: "none", color: "var(--muted2)", cursor: "pointer", fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.18em", padding: 0 }}>
+            edit
           </button>
         </div>
 
@@ -2064,7 +2068,7 @@ function EditScreen({ onBack }) {
       const [{ data }, { data: planData }, { data: agendaData }] = await Promise.all([
         sb.from("routine_tasks").select("*").order("sort_order"),
         sb.from("planning_events").select("*").order("trigger_month"),
-        sb.from("josh_agenda").select("*").order("sort_order"),
+        sb.from("josh_meeting_items").select("*").order("sort_order"),
       ]);
       if (planData) setPlanEvents(planData);
       if (agendaData) setAgenda(agendaData.map(a => a.text));
@@ -2160,7 +2164,7 @@ function EditScreen({ onBack }) {
         alert("Insert returned no data - check Supabase logs");
       }
     } else if (key === "agenda") {
-      const { data, error } = await sb.from("josh_agenda")
+      const { data, error } = await sb.from("josh_meeting_items")
         .insert({ text, sort_order: agenda.length + 1 })
         .select("id, text, sort_order")
         .single();
@@ -2188,7 +2192,7 @@ function EditScreen({ onBack }) {
       setPlanEvents(es => es.filter((_, i) => i !== idx));
     } else if (key === "agenda") {
       const text = agenda[idx];
-      await sb.from("josh_agenda").delete().eq("text", text);
+      await sb.from("josh_meeting_items").delete().eq("text", text);
       setAgenda(ag => ag.filter((_, i) => i !== idx));
     }
   };
@@ -2220,7 +2224,7 @@ function EditScreen({ onBack }) {
       setPlanEvents(es => es.map((e, i) => i === idx ? { ...e, text, ...extra } : e));
     } else if (key === "agenda") {
       const oldText = agenda[idx];
-      await sb.from("josh_agenda").update({ text }).eq("text", oldText);
+      await sb.from("josh_meeting_items").update({ text }).eq("text", oldText);
       setAgenda(ag => ag.map((a, i) => i === idx ? text : a));
     }
   };
@@ -2511,7 +2515,7 @@ function CalendarScreen() {
           const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
           if (res.ok) {
             const data = await res.json();
-            (data.items || []).forEach(e => allEvents.push({ ...e, calendarColor: cal.backgroundColor || "#9A7A42", calendarName: cal.summary }));
+            (data.items || []).forEach(e => allEvents.push({ ...e, calendarColor: cal.backgroundColor || "var(--morning)", calendarName: cal.summary }));
           }
         } catch {}
       }
@@ -2821,8 +2825,8 @@ function ThingsToDoScreen() {
                 {p.type && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, fontFamily: "'DM Mono', monospace" }}>{p.type}</div>}
               </div>
               <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, flexShrink: 0, marginLeft: 8,
-                background: p.setting === "Both" ? "var(--surface2)" : p.setting === "Indoor" ? "#EEEDFE" : "#E1F5EE",
-                color: p.setting === "Both" ? "var(--muted)" : p.setting === "Indoor" ? "#3C3489" : "#085041",
+                background: p.setting === "Both" ? "var(--surface2)" : p.setting === "Indoor" ? "rgba(122,106,168,0.12)" : "rgba(124,158,138,0.14)",
+                color: p.setting === "Both" ? "var(--muted)" : p.setting === "Indoor" ? "var(--admin)" : "var(--josh)",
                 fontFamily: "'DM Mono', monospace" }}>
                 {p.setting === "Both" ? "In/Out" : p.setting}
               </span>
@@ -3030,7 +3034,7 @@ function ConnectScreen() {
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Connect<span style={{ color: "var(--sage)" }}>.</span></div>
         <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>Your people</div>
       </div>
-      <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 10 }}>
         {CONTACTS.map(c => <ContactCard key={c.id} contact={c} calToken={token} />)}
       </div>
     </div>
