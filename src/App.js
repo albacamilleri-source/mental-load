@@ -871,6 +871,8 @@ function JoshMeetingBlock({ isWed }) {
 
   const todayISO = new Date().toISOString().split("T")[0];
   const meetingIsToday = meetingDate === todayISO;
+
+  const saveDate = (d) => {
     localStorage.setItem("hb_meeting_date", d);
     setMeetingDate(d);
     setEditingDate(false);
