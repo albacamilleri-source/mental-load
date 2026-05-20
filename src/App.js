@@ -1130,7 +1130,7 @@ function TasksScreen({ who }) {
 
   const load = useCallback(async () => {
     const [{ data: t, error: te }, { data: w }] = await Promise.all([
-      sb.from("next_actions").select("*").order("created_at"),
+      sb.from("next_actions").select("*").eq("done", false).order("created_at"),
       sb.from("waiting_for").select("*").order("created_at"),
     ]);
     if (te) console.error("next_actions load error:", te.message);
@@ -1149,13 +1149,10 @@ function TasksScreen({ who }) {
   }, [load]);
 
   const toggle = async (task) => {
-    const newDone = !task.done;
-    await sb.from("next_actions").update({ done: newDone }).eq("id", task.id);
-    if (newDone) {
-      const historyNotes = [task.notes, task.due_date ? `Due: ${task.due_date}` : ""].filter(Boolean).join("\n\n");
-      await sb.from("history_items").insert({ text: task.text, notes: historyNotes, source: "next_action" });
-    }
-    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, done: newDone } : t));
+    await sb.from("next_actions").update({ done: true }).eq("id", task.id);
+    const historyNotes = [task.notes, task.due_date ? `Due: ${task.due_date}` : ""].filter(Boolean).join("\n\n");
+    await sb.from("history_items").insert({ text: task.text, notes: historyNotes, source: "next_action" });
+    setTasks(ts => ts.filter(t => t.id !== task.id));
   };
 
   const saveTask = async (task, newText, newContext, newDate, newNotes) => {
@@ -1211,8 +1208,8 @@ function TasksScreen({ who }) {
   };
 
   const filtered = context === "all" ? tasks : tasks.filter(t => t.context === context);
-  const active = filtered.filter(t => !t.done);
-  const done = filtered.filter(t => t.done);
+  const active = filtered;
+  const done = [];
 
   const [viewMode, setViewMode] = useState("list"); // "list" | "schedule"
   const [draggedTask, setDraggedTask] = useState(null);
