@@ -846,7 +846,6 @@ function TodayScreen({ who }) {
 // ─── JOSH MEETING BLOCK ───────────────────────────────────────────────────────
 function JoshMeetingBlock({ isWed }) {
   const [items, setItems] = useState([]);
-  const [open, setOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState("");
   const [newNotes, setNewNotes] = useState("");
@@ -870,7 +869,8 @@ function JoshMeetingBlock({ isWed }) {
     return () => sb.removeChannel(sub);
   }, [load]);
 
-  const saveDate = (d) => {
+  const todayISO = new Date().toISOString().split("T")[0];
+  const meetingIsToday = meetingDate === todayISO;
     localStorage.setItem("hb_meeting_date", d);
     setMeetingDate(d);
     setEditingDate(false);
