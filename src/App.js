@@ -382,16 +382,16 @@ function Checkbox({ checked, onChange, color = "var(--chores)", size = 22 }) {
   const [anim, setAnim] = useState(false);
   return (
     <button onClick={() => { setAnim(true); setTimeout(() => setAnim(false), 300); onChange(); haptic(8); }}
-      className={anim ? "pop" : ""}
       style={{
-        width: size, height: size, borderRadius: size * 0.3,
+        width: size, height: size, borderRadius: "50%", flexShrink: 0,
         border: `1.5px solid ${checked ? color : "var(--border)"}`,
         background: checked ? color : "transparent",
-        flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "all 0.18s", outline: "none",
-        boxShadow: checked ? `0 2px 8px ${color}44` : "none",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", outline: "none",
+        transform: anim ? "scale(1.25)" : "scale(1)",
+        transition: "all 0.18s cubic-bezier(0.34,1.56,0.64,1)",
       }}>
-      {checked && <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+      {checked && <div style={{ width: size * 0.35, height: size * 0.35, borderRadius: "50%", background: "#fff" }} />}
     </button>
   );
 }
@@ -422,6 +422,7 @@ function TaskRow({ text, done, onToggle, onDelete, color, sub, overdue, dueDate,
   const [swipeX, setSwipeX] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const startX = useRef(null);
+  const toggling = useRef(false);
   const THRESHOLD = 72;
 
   const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; setSwiping(true); };
@@ -460,6 +461,14 @@ function TaskRow({ text, done, onToggle, onDelete, color, sub, overdue, dueDate,
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onClick={() => {
+          if (Math.abs(swipeX) < 5 && !toggling.current) {
+            toggling.current = true;
+            haptic(8);
+            onToggle && onToggle();
+            setTimeout(() => { toggling.current = false; }, 500);
+          }
+        }}
         style={{
           display: "flex", alignItems: "center", gap: 10,
           padding: "11px 14px", borderRadius: 12,
@@ -468,14 +477,15 @@ function TaskRow({ text, done, onToggle, onDelete, color, sub, overdue, dueDate,
           boxShadow: done ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
           transform: `translateX(${swipeX}px)`,
           transition: swiping ? "none" : "all 0.28s cubic-bezier(0.32,0,0.24,1)",
-          userSelect: "none",
+          userSelect: "none", cursor: "pointer",
         }}>
         {/* Context icon — left, consistent position */}
         {ctxLabel && (
           <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0, opacity: done ? 0.4 : 1 }}>{ctxLabel}</span>
         )}
-        <Checkbox checked={done} onChange={onToggle} color={color} />
-        <div style={{ flex: 1 }} onClick={() => sub && setOpen(!open)}>
+        {/* Dot indicator instead of checkbox */}
+        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: done ? "var(--border)" : color, transition: "all 0.18s" }} />
+        <div style={{ flex: 1 }} onClick={e => { e.stopPropagation(); sub && setOpen(!open); }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, fontWeight: 400, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s" }}>{text}</span>
             {overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>overdue {dueDate}</span>}
@@ -637,7 +647,7 @@ function TodayMeetingAgenda() {
         ? <div style={{ padding: "10px 14px", fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>Nothing off—loaded yet.</div>
         : items.map(item => (
           <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: "1px solid var(--surface2)" }}>
-            <Checkbox checked={false} onChange={() => tick(item)} color="var(--josh)" size={18} />
+            <div onClick={() => tick(item)} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: "var(--josh)", opacity: 0.7, cursor: "pointer" }} />
             <span style={{ fontSize: 13, color: "var(--text)", flex: 1 }}>{item.text}</span>
           </div>
         ))
@@ -927,7 +937,7 @@ function JoshMeetingBlock({ isWed }) {
           <div>
             {items.map(item => (
               <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--surface2)" }}>
-                <Checkbox checked={false} onChange={() => { haptic(8); tickItem(item); }} color="var(--josh)" size={18} />
+                <div onClick={() => { haptic(8); tickItem(item); }} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: "var(--josh)", opacity: 0.7, cursor: "pointer" }} />
                 <div style={{ flex: 1 }}>
                   <span style={{ fontSize: 13, color: "var(--text)" }}>{item.text}</span>
                   {item.notes && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{item.notes}</div>}
@@ -972,7 +982,7 @@ function JoshMeetingBlock({ isWed }) {
               <button onClick={() => setEditingDate(false)} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 22, cursor: "pointer" }}>×</button>
             </div>
             <input type="date" value={meetingDate || ""} onChange={e => setMeetingDate(e.target.value)}
-              style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%" }}
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%", display: "block", minHeight: 52 }}
             />
             <button onClick={() => saveDate(meetingDate)}
               style={{ padding: "13px", background: "var(--sage)", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
@@ -1068,7 +1078,7 @@ function WeekScreen({ who }) {
                     <div style={{ borderTop: "1px solid var(--border)", padding: "8px 14px 12px" }}>
                       {rts.map(t => (
                         <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
-                          <Checkbox checked={completions.has(t.id)} onChange={() => toggle(t.id)} color="var(--chores)" size={18} />
+                          <div onClick={() => toggle(t.id)} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: completions.has(t.id) ? "var(--border)" : "var(--chores)", opacity: 0.7, cursor: "pointer", transition: "all 0.18s" }} />
                           <span style={{ fontSize: 13, color: completions.has(t.id) ? "var(--muted)" : "var(--text)", textDecoration: completions.has(t.id) ? "line-through" : "none" }}>{t.text}</span>
                         </div>
                       ))}
@@ -1172,9 +1182,10 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
       <div
         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: `1px solid ${task.overdue ? "#C44A4A22" : "var(--border)"}`, boxShadow: "0 1px 4px rgba(28,26,24,0.04)", transform: `translateX(${swipeX}px)`, transition: swiping ? "none" : "transform 0.28s cubic-bezier(0.32,0,0.24,1)", userSelect: "none" }}>
-        {/* Context icon — always left, before checkbox */}
+        {/* Context icon — always left, before dot */}
         {badge && <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : "🏠"}</span>}
-        <Checkbox checked={false} onChange={onToggle} color={color} />
+        {/* Dot indicator */}
+        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: color, opacity: 0.7 }} />
         <div style={{ flex: 1 }} onClick={() => setEditing(true)}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, color: "var(--text)" }}>{task.text}</span>
@@ -1486,7 +1497,7 @@ function TasksScreen({ who }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {waiting.map(w => (
             <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
-              <Checkbox checked={false} onChange={() => tickWF(w)} color="var(--sage)" size={18} />
+              <div onClick={() => tickWF(w)} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: "var(--sage)", opacity: 0.7, cursor: "pointer" }} />
               <span style={{ flex: 1, fontSize: 14, color: "var(--text)" }}>{w.text}</span>
               <button onClick={() => removeWF(w.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 14 }} title="Delete permanently">×</button>
             </div>
