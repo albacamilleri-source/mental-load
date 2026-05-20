@@ -1148,10 +1148,10 @@ if (editing) {
           }}
         >
           Cancel
-        </button>
-      </div>
+           </button>
     </div>
-  );
+  </div>
+);
 }
 
 // NORMAL MODE
@@ -1311,6 +1311,7 @@ return (
     </div>
   </div>
 );
+}
 // ─── TASKS SCREEN ─────────────────────────────────────────────────────────────
 const CONTEXTS = [
   { key: "all", label: "All" },
