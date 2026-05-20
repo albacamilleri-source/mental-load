@@ -38,53 +38,7 @@ const GCAL_REDIRECT_URI = "https://albacamilleri-source.github.io/mental-load";
 const GCAL_EDGE_FN      = "https://qvibdnrfywisvfsqgqux.supabase.co/functions/v1/gcal-auth";
 const GCAL_APP_SECRET   = "ml-alba-2026";
 
-// ─── PUSH NOTIFICATIONS ───────────────────────────────────────────────────────
-const PUSH_EDGE_FN     = "https://qvibdnrfywisvfsqgqux.supabase.co/functions/v1/push-notify";
-const VAPID_PUBLIC_KEY = "YOUR_VAPID_PUBLIC_KEY_HERE"; // replace after generating at vapidkeys.com
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = "=".repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
-}
-
-async function registerPushForJosh() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
-  try {
-    const reg = await navigator.serviceWorker.register("/mental-load/sw.js");
-    await navigator.serviceWorker.ready;
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") return false;
-    const subscription = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    });
-    await fetch(PUSH_EDGE_FN, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_ANON}` },
-      body: JSON.stringify({ action: "save", subscription, secret: GCAL_APP_SECRET }),
-    });
-    localStorage.setItem("push_registered_josh", "1");
-    return true;
-  } catch (e) {
-    console.error("Push registration failed:", e);
-    return false;
-  }
-}
-
-async function notifyJosh(taskText) {
-  try {
-    await fetch(PUSH_EDGE_FN, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_ANON}` },
-      body: JSON.stringify({ action: "notify", taskText, secret: GCAL_APP_SECRET }),
-    });
-  } catch (e) {
-    console.error("Push notify failed:", e);
-  }
-}
-
+let _gcalToken = null;
 let _gcalToken = null;
 const getGCalToken = () => _gcalToken;
 const setGCalToken = (t) => { _gcalToken = t; };
@@ -737,12 +691,7 @@ function TodayScreen({ who }) {
     }
   };
 
-  const visible = tasks.filter(t => {
-    if (t.type !== tab) return false;
-    // Josh only sees tasks assigned to him or not assigned to anyone
-    if (who === "josh") return !t.assigned_to || t.assigned_to === "josh";
-    return true;
-  });
+  const visible = tasks.filter(t => t.type === tab);
   const doneCount = visible.filter(t => completions.has(t.id)).length;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Morning" : hour < 18 ? "Afternoon" : "Evening";
@@ -792,26 +741,7 @@ function TodayScreen({ who }) {
         {loading ? <SkeletonCard rows={3} /> : (
           <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
             {visible.map(t => (
-              <div key={t.id} style={{ position: "relative" }}>
-                <TaskRow text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} />
-                {who === "alba" && !completions.has(t.id) && (
-                  <button
-                    onClick={async () => {
-                      await sb.from("routine_tasks").update({ assigned_to: t.assigned_to === "josh" ? null : "josh" }).eq("id", t.id);
-                      if (t.assigned_to !== "josh") notifyJosh(t.text);
-                    }}
-                    style={{
-                      position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                      background: t.assigned_to === "josh" ? "var(--josh)" : "var(--surface2)",
-                      border: "none", borderRadius: 999, padding: "3px 9px",
-                      fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em",
-                      color: t.assigned_to === "josh" ? "#fff" : "var(--muted)",
-                      cursor: "pointer", transition: "all 0.18s",
-                    }}>
-                    {t.assigned_to === "josh" ? "J" : "→J"}
-                  </button>
-                )}
-              </div>
+              <TaskRow key={t.id} text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} />
             ))}
           </div>
         )}
@@ -1201,7 +1131,7 @@ function TasksScreen({ who }) {
 
   const load = useCallback(async () => {
     const [{ data: t, error: te }, { data: w }] = await Promise.all([
-      sb.from("next_actions").select("*").eq("assigned", "alba").order("created_at"),
+      sb.from("next_actions").select("*").order("created_at"),
       sb.from("waiting_for").select("*").order("created_at"),
     ]);
     if (te) console.error("next_actions load error:", te.message);
@@ -3289,13 +3219,7 @@ function AppInner() {
     return () => window.removeEventListener("resize", handler);
   }, []);
 
-  // Register push notifications for Josh on first load
-  useEffect(() => {
-    if (who === "josh" && !localStorage.getItem("push_registered_josh")) {
-      // Small delay so the UI renders first
-      setTimeout(() => registerPushForJosh(), 1500);
-    }
-  }, [who]);
+
 
   if (!who) return (<><GlobalStyles /><WelcomeScreen onChoose={chooseWho} /></>);
   if (editing) return (
