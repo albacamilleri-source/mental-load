@@ -1073,245 +1073,67 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   };
   const sp = Math.abs(swipeX) / THRESHOLD;
 
-// EDIT MODE
-if (editing) {
-  return (
-    <div style={{
-      marginBottom: 3,
-      padding: "12px 14px",
-      borderRadius: 12,
-      background: "var(--surface)",
-      border: "1px solid var(--border)",
-      display: "flex",
-      flexDirection: "column",
-      gap: 10,
-    }}>
-      <input
-        value={editText}
-        onChange={(e) => setEditText(e.target.value)}
-        placeholder="Task..."
-        style={{
-          border: "none",
-          background: "var(--surface2)",
-          borderRadius: 8,
-          padding: "10px 12px",
-          fontSize: 14,
-          color: "var(--text)",
-        }}
+  if (editing) return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--surface)", borderRadius: 12, border: `1px solid ${color}44`, marginBottom: 3, boxShadow: "0 2px 8px rgba(28,26,24,0.06)" }}>
+      <input autoFocus value={editText} onChange={e => setEditText(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none" }}
       />
-
-      <textarea
-        value={editNotes}
-        onChange={(e) => setEditNotes(e.target.value)}
-        placeholder="Notes..."
-        rows={3}
-        style={{
-          border: "none",
-          background: "var(--surface2)",
-          borderRadius: 8,
-          padding: "10px 12px",
-          fontSize: 13,
-          color: "var(--text)",
-          resize: "vertical",
-        }}
+      <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)}
+        placeholder="Notes — optional" rows={3}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", resize: "vertical", lineHeight: 1.45 }}
       />
-
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          onClick={async () => {
-            await onSave(task, editText, editContext, editDate, editNotes);
-            setEditing(false);
-          }}
-          style={{
-            flex: 1,
-            border: "none",
-            borderRadius: 10,
-            padding: "10px 12px",
-            background: "var(--sage)",
-            color: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Save
-        </button>
-
-        <button
-          onClick={() => setEditing(false)}
-          style={{
-            flex: 1,
-            border: "1px solid var(--border)",
-            borderRadius: 10,
-            padding: "10px 12px",
-            background: "var(--surface)",
-            color: "var(--text)",
-            cursor: "pointer",
-          }}
-        >
-          Cancel
-           </button>
-    </div>
-  </div>
-);
-}
-
-// NORMAL MODE
-return (
-  <div style={{ marginBottom: 3, position: "relative", overflow: "hidden", borderRadius: 12 }}>
-    <div style={{
-      position: "absolute",
-      inset: 0,
-      borderRadius: 12,
-      background:
-        swipeX < -20
-          ? `rgba(196,74,74,${Math.min(sp * 0.3, 0.25)})`
-          : swipeX > 20
-          ? `rgba(124,158,138,${Math.min(sp * 0.3, 0.25)})`
-          : "transparent",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: swipeX < -20 ? "flex-end" : "flex-start",
-      padding: "0 18px",
-      pointerEvents: "none",
-    }}>
-      {swipeX > 20 && (
-        <span style={{
-          fontSize: 11,
-          color: "var(--sage)",
-          fontFamily: "'DM Mono', monospace",
-          letterSpacing: "0.18em",
-          opacity: Math.min(sp, 1),
-        }}>
-          ✓ done
-        </span>
-      )}
-
-      {swipeX < -20 && (
-        <span style={{
-          fontSize: 11,
-          color: "var(--danger)",
-          fontFamily: "'DM Mono', monospace",
-          letterSpacing: "0.18em",
-          opacity: Math.min(sp, 1),
-        }}>
-          delete
-        </span>
-      )}
-    </div>
-
-    <div
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "11px 14px",
-        borderRadius: 12,
-        background: "var(--surface)",
-        border: `1px solid ${task.overdue ? "#C44A4A22" : "var(--border)"}`,
-        boxShadow: "0 1px 4px rgba(28,26,24,0.04)",
-        transform: `translateX(${swipeX}px)`,
-        transition: swiping
-          ? "none"
-          : "transform 0.28s cubic-bezier(0.32,0,0.24,1)",
-        userSelect: "none",
-      }}
-    >
-      {badge && (
-        <span style={{
-          fontSize: 11,
-          width: 18,
-          textAlign: "center",
-          flexShrink: 0,
-        }}>
-          {badge === "phone"
-            ? "📱"
-            : badge === "errand"
-            ? "🚗"
-            : "🏠"}
-        </span>
-      )}
-
-      <div
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          flexShrink: 0,
-          background: color,
-          opacity: 0.7,
-        }}
-      />
-
-      <div style={{ flex: 1 }} onClick={() => setEditing(true)}>
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          flexWrap: "wrap",
-        }}>
-          <span style={{ fontSize: 14, color: "var(--text)" }}>
-            {task.text}
-          </span>
-
-          {task.overdue && (
-            <span style={{
-              fontSize: 9,
-              padding: "2px 7px",
-              borderRadius: 20,
-              background: "#C44A4A15",
-              color: "var(--danger)",
-              fontFamily: "'DM Mono', monospace",
-            }}>
-              overdue {task.due_date}
-            </span>
-          )}
-
-          {task.due_date && !task.overdue && (
-            <span style={{
-              fontSize: 9,
-              padding: "2px 7px",
-              borderRadius: 20,
-              background: "var(--surface2)",
-              color: "var(--muted2)",
-              fontFamily: "'DM Mono', monospace",
-            }}>
-              {task.due_date}
-            </span>
-          )}
-        </div>
-
-        {task.notes && (
-          <div style={{
-            fontSize: 11,
-            color: "var(--muted)",
-            lineHeight: 1.5,
-            marginTop: 4,
-            whiteSpace: "pre-wrap",
-          }}>
-            {task.notes}
-          </div>
-        )}
+      <div style={{ display: "flex", gap: 5 }}>
+        {[["phone","📱"],["errand","🚗"],["home","🏠"]].map(([k,l]) => (
+          <button key={k} onClick={() => setEditContext(k)} style={{
+            flex: 1, padding: "6px", borderRadius: 10, border: "none", fontSize: 13,
+            background: editContext === k ? color : "var(--surface2)",
+            color: editContext === k ? "#fff" : "var(--muted)", cursor: "pointer",
+          }}>{l}</button>
+        ))}
       </div>
-
-      <button
-        onClick={() => setEditing(true)}
-        style={{
-          background: "none",
-          border: "none",
-          color: "var(--muted2)",
-          fontSize: 12,
-          padding: "0 2px",
-          cursor: "pointer",
-        }}
-      >
-        ✎
-      </button>
+      <input value={editDate} onChange={e => setEditDate(e.target.value)}
+        placeholder="Due date (YYYY-MM-DD) — optional"
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "7px 11px", color: "var(--text)", fontSize: 16, outline: "none" }}
+      />
+      <div style={{ display: "flex", gap: 6 }}>
+        <button onClick={save} style={{ flex: 1, padding: "7px", background: color, border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Save</button>
+        <button onClick={() => setEditing(false)} style={{ padding: "7px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+      </div>
     </div>
-  </div>
-);
+  );
+
+  return (
+    <div style={{ marginBottom: 3, position: "relative", overflow: "hidden", borderRadius: 12 }}>
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: 12,
+        background: swipeX < -20 ? `rgba(196,74,74,${Math.min(sp * 0.3, 0.25)})` : swipeX > 20 ? `rgba(124,158,138,${Math.min(sp * 0.3, 0.25)})` : "transparent",
+        display: "flex", alignItems: "center",
+        justifyContent: swipeX < -20 ? "flex-end" : "flex-start",
+        padding: "0 18px", pointerEvents: "none",
+      }}>
+        {swipeX > 20 && <span style={{ fontSize: 11, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(sp, 1) }}>✓ done</span>}
+        {swipeX < -20 && <span style={{ fontSize: 11, color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(sp, 1) }}>delete</span>}
+      </div>
+      <div
+        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: `1px solid ${task.overdue ? "#C44A4A22" : "var(--border)"}`, boxShadow: "0 1px 4px rgba(28,26,24,0.04)", transform: `translateX(${swipeX}px)`, transition: swiping ? "none" : "transform 0.28s cubic-bezier(0.32,0,0.24,1)", userSelect: "none" }}>
+        {badge && <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : "🏠"}</span>}
+        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: color, opacity: 0.7 }} />
+        <div style={{ flex: 1 }} onClick={() => setEditing(true)}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 14, color: "var(--text)" }}>{task.text}</span>
+            {task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace" }}>overdue {task.due_date}</span>}
+            {task.due_date && !task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{task.due_date}</span>}
+          </div>
+          {task.notes && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{task.notes}</div>}
+        </div>
+        <button onClick={() => setEditing(true)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }}>✎</button>
+      </div>
+    </div>
+  );
 }
+
 // ─── TASKS SCREEN ─────────────────────────────────────────────────────────────
 const CONTEXTS = [
   { key: "all", label: "All" },
@@ -1536,8 +1358,8 @@ function TasksScreen({ who }) {
         </div>
       )}
 
-      {/* List view — always on mobile, conditionally on desktop */}
-      {(!isDesktop || viewMode === "list") && <>
+      {/* List view */}
+      {viewMode === "list" && <>
       <div style={{ padding: "0 20px 16px", display: "flex", gap: 6 }}>
         {CONTEXTS.map(c => (
           <button key={c.key} onClick={() => setContext(c.key)} style={{
@@ -1552,12 +1374,6 @@ function TasksScreen({ who }) {
       </div>
 
 
-
-      {/* DEBUG — remove after confirmed working */}
-      <div style={{ margin: "0 20px 10px", padding: "8px 12px", background: "#C44A4A15", border: "1px solid #C44A4A44", borderRadius: 10, fontSize: 11, fontFamily: "'DM Mono', monospace", color: "var(--danger)" }}>
-        loading={String(loading)} | tasks={tasks.length} | active={active.length} | context={context}
-        {tasks.length > 0 && ` | first="${tasks[0].text}" done=${String(tasks[0].done)}`}
-      </div>
 
       {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
