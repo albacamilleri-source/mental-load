@@ -610,8 +610,10 @@ function TodayMeetingAgenda() {
       {items.length === 0
         ? <div style={{ padding: "10px 14px", fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>Nothing off—loaded yet.</div>
         : items.map(item => (
-          <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: "1px solid var(--surface2)" }}>
-            <div onClick={() => tick(item)} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: "var(--josh)", opacity: 0.7, cursor: "pointer" }} />
+          <div key={item.id}
+            onClick={() => tick(item)}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: "1px solid var(--surface2)", cursor: "pointer", userSelect: "none" }}>
+            <div style={{ width: 16, height: 16, borderRadius: 5, flexShrink: 0, border: "1.5px solid var(--border)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center" }} />
             <span style={{ fontSize: 13, color: "var(--text)", flex: 1 }}>{item.text}</span>
           </div>
         ))
@@ -895,13 +897,20 @@ function JoshMeetingBlock({ isWed }) {
         {loading ? <SkeletonCard rows={3} /> : (
           <div>
             {items.map(item => (
-              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--surface2)" }}>
-                <div onClick={() => { haptic(8); tickItem(item); }} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: "var(--josh)", opacity: 0.7, cursor: "pointer" }} />
+              <div key={item.id}
+                onClick={() => { haptic(8); tickItem(item); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--surface2)", cursor: "pointer", userSelect: "none" }}>
+                <div style={{
+                  width: 16, height: 16, borderRadius: 5, flexShrink: 0,
+                  border: "1.5px solid var(--border)",
+                  background: "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                </div>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontSize: 13, color: "var(--text)" }}>{item.text}</span>
                   {item.notes && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{item.notes}</div>}
                 </div>
-                <button onClick={() => deleteItem(item.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 16, padding: "0 2px", cursor: "pointer" }}>×</button>
               </div>
             ))}
             {items.length === 0 && !adding && (
