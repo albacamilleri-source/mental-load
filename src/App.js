@@ -1027,10 +1027,11 @@ function WeekScreen({ who }) {
               const isOpen = openRoom === room.id;
               return (
                 <div key={room.id} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid var(--border)`, background: "var(--surface)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
-                  <button onClick={() => setOpenRoom(isOpen ? null : room.id)} style={{ width: "100%", padding: "13px 15px", background: "none", border: "none", display: "flex", alignItems: "center", justifyContent: "space-between", color: allDone ? "var(--muted2)" : "var(--text)" }}>
+                  {/* Header — tap to expand/collapse only, not to complete */}
+                  <button onClick={() => setOpenRoom(isOpen ? null : room.id)} style={{ width: "100%", padding: "13px 15px", background: "none", border: "none", display: "flex", alignItems: "center", justifyContent: "space-between", color: allDone ? "var(--muted2)" : "var(--text)", cursor: "pointer" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: allDone ? "var(--muted)" : "var(--chores)", flexShrink: 0 }} />
-                      <span style={{ fontSize: 14, textAlign: "left", textDecoration: allDone ? "line-through" : "none" }}>{room.label}</span>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: allDone ? "var(--border)" : "var(--chores)", flexShrink: 0, transition: "all 0.18s" }} />
+                      <span style={{ fontSize: 14, textAlign: "left", textDecoration: allDone ? "line-through" : "none", color: allDone ? "var(--muted2)" : "var(--text)", transition: "all 0.18s" }}>{room.label}</span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>{done}/{rts.length}</span>
@@ -1038,13 +1039,32 @@ function WeekScreen({ who }) {
                     </div>
                   </button>
                   {isOpen && (
-                    <div style={{ borderTop: "1px solid var(--border)", padding: "8px 14px 12px" }}>
-                      {rts.map(t => (
-                        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
-                          <div onClick={() => toggle(t.id)} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: completions.has(t.id) ? "var(--border)" : "var(--chores)", opacity: 0.7, cursor: "pointer", transition: "all 0.18s" }} />
-                          <span style={{ fontSize: 13, color: completions.has(t.id) ? "var(--muted)" : "var(--text)", textDecoration: completions.has(t.id) ? "line-through" : "none" }}>{t.text}</span>
-                        </div>
-                      ))}
+                    <div style={{ borderTop: "1px solid var(--border)", padding: "8px 14px 12px", display: "flex", flexDirection: "column", gap: 2 }}>
+                      {rts.map(t => {
+                        const subDone = completions.has(t.id);
+                        return (
+                          <div key={t.id}
+                            onClick={() => {
+                              haptic(8);
+                              toggle(t.id).then(() => {
+                                // Auto-complete parent if all sub-tasks done
+                                // (handled in toggle via checking siblings)
+                              });
+                            }}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10, background: subDone ? "var(--surface2)" : "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", userSelect: "none", transition: "all 0.15s" }}>
+                            <div style={{
+                              width: 16, height: 16, borderRadius: 5, flexShrink: 0,
+                              border: `1.5px solid ${subDone ? "var(--chores)" : "var(--border)"}`,
+                              background: subDone ? "var(--chores)" : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              transition: "all 0.15s",
+                            }}>
+                              {subDone && <svg width="9" height="9" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                            </div>
+                            <span style={{ fontSize: 13, color: subDone ? "var(--muted2)" : "var(--text)", textDecoration: subDone ? "line-through" : "none", flex: 1, transition: "all 0.15s" }}>{t.text}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
