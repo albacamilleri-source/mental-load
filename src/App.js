@@ -370,91 +370,97 @@ function SectionLabel({ text, color, done, total }) {
   );
 }
 
-function TaskRow({ text, done, onToggle, onDelete, color, sub, overdue, dueDate, badge }) {
-  const [open, setOpen] = useState(false);
+function TaskRow({ text, done, onToggle, onDelete, color, sub, overdue, dueDate, badge, taskId, subCompletions, onSubToggle }) {
+  const [open, setOpen] = useState(true);
   const [swipeX, setSwipeX] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const startX = useRef(null);
   const toggling = useRef(false);
   const THRESHOLD = 72;
+  const hasSub = sub && sub.length > 0;
 
-  const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; setSwiping(true); };
+  const handleTouchStart = (e) => {
+    if (hasSub) return;
+    startX.current = e.touches[0].clientX; setSwiping(true);
+  };
   const handleTouchMove = (e) => {
-    if (startX.current === null) return;
-    const dx = e.touches[0].clientX - startX.current;
-    setSwipeX(Math.max(-80, Math.min(80, dx)));
+    if (hasSub || startX.current === null) return;
+    setSwipeX(Math.max(-80, Math.min(80, e.touches[0].clientX - startX.current)));
   };
   const handleTouchEnd = () => {
-    if (swipeX >= THRESHOLD) { haptic([8, 50, 8]); onToggle && onToggle(); }
-    else if (swipeX <= -THRESHOLD) { haptic([8, 50, 8]); onDelete && onDelete(); }
+    if (!hasSub) {
+      if (swipeX >= THRESHOLD) { haptic([8, 50, 8]); onToggle && onToggle(); }
+      else if (swipeX <= -THRESHOLD) { haptic([8, 50, 8]); onDelete && onDelete(); }
+    }
     setSwipeX(0); setSwiping(false); startX.current = null;
   };
 
   const swipeProgress = Math.abs(swipeX) / THRESHOLD;
   const showComplete = swipeX > 20;
-  const showDelete   = swipeX < -20;
-
+  const showDelete = swipeX < -20;
   const ctxLabel = badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : null;
 
   return (
-    <div style={{ marginBottom: 3, position: "relative", overflow: "hidden", borderRadius: 12 }}>
-      <div style={{
-        position: "absolute", inset: 0, borderRadius: 12,
-        background: showDelete ? `rgba(196,74,74,${Math.min(swipeProgress * 0.3, 0.25)})` : showComplete ? `rgba(124,158,138,${Math.min(swipeProgress * 0.3, 0.25)})` : "transparent",
-        display: "flex", alignItems: "center",
-        justifyContent: showDelete ? "flex-end" : "flex-start",
-        padding: "0 18px", pointerEvents: "none",
-        transition: swiping ? "none" : "background 0.2s",
-      }}>
-        {showComplete && <span style={{ fontSize: 11, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress, 1) }}>✓ done</span>}
-        {showDelete && <span style={{ fontSize: 11, color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress, 1) }}>delete</span>}
+    <div style={{ marginBottom: 3 }}>
+      <div style={{ position: "relative", overflow: hasSub ? "visible" : "hidden", borderRadius: 12 }}>
+        {!hasSub && (
+          <div style={{
+            position: "absolute", inset: 0, borderRadius: 12,
+            background: showDelete ? `rgba(196,74,74,${Math.min(swipeProgress*0.3,0.25)})` : showComplete ? `rgba(124,158,138,${Math.min(swipeProgress*0.3,0.25)})` : "transparent",
+            display: "flex", alignItems: "center",
+            justifyContent: showDelete ? "flex-end" : "flex-start",
+            padding: "0 18px", pointerEvents: "none",
+          }}>
+            {showComplete && <span style={{ fontSize: 11, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress,1) }}>✓ done</span>}
+            {showDelete && <span style={{ fontSize: 11, color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(swipeProgress,1) }}>delete</span>}
+          </div>
+        )}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onClick={() => {
+            if (!hasSub && Math.abs(swipeX) < 5 && !toggling.current) {
+              toggling.current = true; haptic(8); onToggle && onToggle();
+              setTimeout(() => { toggling.current = false; }, 500);
+            }
+          }}
+          style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "11px 14px", borderRadius: 12,
+            background: done ? "transparent" : "var(--surface)",
+            border: `1px solid ${done ? "transparent" : overdue ? "#C44A4A22" : "var(--border)"}`,
+            boxShadow: done ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
+            transform: `translateX(${swipeX}px)`,
+            transition: swiping ? "none" : "all 0.28s cubic-bezier(0.32,0,0.24,1)",
+            userSelect: "none", cursor: hasSub ? "default" : "pointer",
+          }}>
+          {ctxLabel && <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0, opacity: done ? 0.4 : 1 }}>{ctxLabel}</span>}
+          <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: done ? "var(--border)" : color, transition: "all 0.18s" }} />
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 14, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s" }}>{text}</span>
+            {overdue && !done && <span style={{ fontSize: 9, marginLeft: 6, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace" }}>overdue {dueDate}</span>}
+            {dueDate && !overdue && !done && <span style={{ fontSize: 9, marginLeft: 6, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{dueDate}</span>}
+          </div>
+          {hasSub && <span onClick={e => { e.stopPropagation(); setOpen(o => !o); }} style={{ fontSize: 10, color: "var(--muted2)", transform: open ? "rotate(180deg)" : "none", transition: "0.2s", cursor: "pointer", padding: "0 2px" }}>▾</span>}
+        </div>
       </div>
 
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={() => {
-          if (Math.abs(swipeX) < 5 && !toggling.current) {
-            toggling.current = true;
-            haptic(8);
-            onToggle && onToggle();
-            setTimeout(() => { toggling.current = false; }, 500);
-          }
-        }}
-        style={{
-          display: "flex", alignItems: "center", gap: 10,
-          padding: "11px 14px", borderRadius: 12,
-          background: done ? "transparent" : "var(--surface)",
-          border: `1px solid ${done ? "transparent" : overdue ? "#C44A4A22" : "var(--border)"}`,
-          boxShadow: done ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
-          transform: `translateX(${swipeX}px)`,
-          transition: swiping ? "none" : "all 0.28s cubic-bezier(0.32,0,0.24,1)",
-          userSelect: "none", cursor: "pointer",
-        }}>
-        {/* Context icon — left, consistent position */}
-        {ctxLabel && (
-          <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0, opacity: done ? 0.4 : 1 }}>{ctxLabel}</span>
-        )}
-        {/* Dot indicator instead of checkbox */}
-        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: done ? "var(--border)" : color, transition: "all 0.18s" }} />
-        <div style={{ flex: 1 }} onClick={e => { e.stopPropagation(); sub && setOpen(!open); }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 14, fontWeight: 400, color: done ? "var(--muted2)" : "var(--text)", textDecoration: done ? "line-through" : "none", transition: "all 0.18s" }}>{text}</span>
-            {overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>overdue {dueDate}</span>}
-            {dueDate && !overdue && !done && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{dueDate}</span>}
-          </div>
-        </div>
-        {sub && <span style={{ fontSize: 10, color: "var(--muted2)", transform: open ? "rotate(180deg)" : "none", transition: "0.2s" }}>▾</span>}
-      </div>
-      {sub && open && (
-        <div style={{ marginLeft: 18, marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
-          {sub.map((s, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 12px", background: "var(--surface2)", borderRadius: 10, border: "1px solid var(--border)" }}>
-              <div style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid var(--border)`, flexShrink: 0, background: "var(--surface)" }} />
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>· {s}</span>
-            </div>
-          ))}
+      {hasSub && open && (
+        <div style={{ marginLeft: 14, marginTop: 3, display: "flex", flexDirection: "column", gap: 2 }}>
+          {sub.map((s, i) => {
+            const subKey = `${taskId}:${i}`;
+            const subDone = subCompletions && subCompletions.has(subKey);
+            return (
+              <div key={i} onClick={() => onSubToggle && onSubToggle(taskId, i, subKey, sub.length)}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", cursor: "pointer", userSelect: "none" }}>
+                <div style={{ width: 16, height: 16, borderRadius: 5, flexShrink: 0, border: `1.5px solid ${subDone ? color : "var(--border)"}`, background: subDone ? color : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                  {subDone && <svg width="9" height="9" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                </div>
+                <span style={{ fontSize: 13, color: subDone ? "var(--muted2)" : "var(--text)", textDecoration: subDone ? "line-through" : "none", transition: "all 0.15s", flex: 1 }}>{s}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -690,6 +696,26 @@ function TodayScreen({ who }) {
     }
   };
 
+  const toggleSub = async (taskId, subIndex, subKey, totalSubs) => {
+    haptic(8);
+    const done = completions.has(subKey);
+    if (done) {
+      await sb.from("routine_completions").delete().eq("task_id", subKey).eq("period_key", pKey);
+      await sb.from("routine_completions").delete().eq("task_id", taskId).eq("period_key", pKey);
+      setCompletions(s => { const n = new Set(s); n.delete(subKey); n.delete(taskId); return n; });
+    } else {
+      await sb.from("routine_completions").upsert({ task_id: subKey, period_key: pKey, completed_by: who });
+      const newSet = new Set([...completions, subKey]);
+      const allDone = Array.from({ length: totalSubs }, (_, i) => `${taskId}:${i}`).every(k => newSet.has(k));
+      if (allDone) {
+        await sb.from("routine_completions").upsert({ task_id: taskId, period_key: pKey, completed_by: who });
+        newSet.add(taskId);
+      }
+      setCompletions(newSet);
+    }
+  };
+
+
   const visible = tasks.filter(t => t.type === tab);
   const doneCount = visible.filter(t => completions.has(t.id)).length;
   const hour = new Date().getHours();
@@ -740,7 +766,7 @@ function TodayScreen({ who }) {
         {loading ? <SkeletonCard rows={3} /> : (
           <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
             {visible.map(t => (
-              <TaskRow key={t.id} text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} />
+              <TaskRow key={t.id} text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} taskId={t.id} subCompletions={completions} onSubToggle={toggleSub} />
             ))}
           </div>
         )}
