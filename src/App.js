@@ -587,6 +587,72 @@ function WeatherStrip({ weather }) {
 }
 
 // ─── TODAY SCREEN ─────────────────────────────────────────────────────────────
+function SuggestedTasks() {
+  const [tasks, setTasks] = useState([]);
+  const [done, setDone] = useState(new Set());
+  const [loading, setLoading] = useState(true);
+
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun ... 6=Sat
+
+  // ISO week key — resets completions every week automatically
+  const weekKey = (() => {
+    const d = new Date(today);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    return `${d.getFullYear()}-W${String(week).padStart(2, "0")}`;
+  })();
+
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: t }, { data: c }] = await Promise.all([
+        sb.from("suggested_tasks").select("*").eq("day_of_week", dow).order("sort_order"),
+        sb.from("suggested_completions").select("task_id").eq("week_key", weekKey),
+      ]);
+      setTasks(t || []);
+      setDone(new Set((c || []).map(r => r.task_id)));
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const toggle = async (taskId) => {
+    haptic(8);
+    if (done.has(taskId)) {
+      await sb.from("suggested_completions").delete().eq("task_id", taskId).eq("week_key", weekKey);
+      setDone(s => { const n = new Set(s); n.delete(taskId); return n; });
+    } else {
+      await sb.from("suggested_completions").upsert({ task_id: taskId, week_key: weekKey });
+      setDone(s => new Set([...s, taskId]));
+    }
+  };
+
+  if (loading || tasks.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--sage)", textTransform: "uppercase", letterSpacing: "0.22em" }}>Suggested</span>
+        <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{tasks.filter(t => done.has(t.id)).length}/{tasks.length}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {tasks.map(t => {
+          const isDone = done.has(t.id);
+          return (
+            <div key={t.id} onClick={() => toggle(t.id)}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12, background: isDone ? "transparent" : "var(--surface)", border: `1px solid ${isDone ? "transparent" : "var(--border)"}`, boxShadow: isDone ? "none" : "0 1px 4px rgba(28,26,24,0.04)", cursor: "pointer", userSelect: "none", transition: "all 0.18s" }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: isDone ? "var(--border)" : "var(--sage)", transition: "all 0.18s" }} />
+              <span style={{ fontSize: 14, color: isDone ? "var(--muted2)" : "var(--text)", textDecoration: isDone ? "line-through" : "none", flex: 1, transition: "all 0.18s" }}>{t.text}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TodayMeetingAgenda() {
   const [items, setItems] = useState([]);
   useEffect(() => {
@@ -801,6 +867,9 @@ function TodayScreen({ who }) {
             </div>
           </div>
         )}
+
+        {/* Suggested — recurring weekly tasks for today */}
+        <SuggestedTasks />
 
         {/* Calendar events */}
         <div style={{ marginBottom: 20 }}>
@@ -2958,11 +3027,9 @@ const AVATAR_COLORS = {
 };
 
 function ContactCard({ contact, calToken }) {
-  const [expanded, setExpanded] = useState(false);
+  const [showMeetup, setShowMeetup] = useState(false);
   const [nextEvent, setNextEvent] = useState(null);
   const [eventLoading, setEventLoading] = useState(false);
-  const av = AVATAR_COLORS[contact.id] || { bg: "var(--surface2)", color: "var(--muted)" };
-  const initials = contact.name.slice(0, 2);
 
   const loadNextEvent = async () => {
     if (!calToken || nextEvent !== null) return;
@@ -2977,8 +3044,8 @@ function ContactCard({ contact, calToken }) {
         const evt = data.items?.[0];
         if (evt) {
           const dateStr = evt.start?.dateTime
-            ? new Date(evt.start.dateTime).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Malta" })
-            : new Date(evt.start.date).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+            ? new Date(evt.start.dateTime).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/Malta" })
+            : new Date(evt.start.date).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
           setNextEvent({ title: evt.summary, date: dateStr });
         } else {
           setNextEvent({ title: null, date: null });
@@ -2988,47 +3055,61 @@ function ContactCard({ contact, calToken }) {
     setEventLoading(false);
   };
 
-  const toggle = () => {
-    setExpanded(e => !e);
-    if (!expanded) loadNextEvent();
+  const handleMeetupToggle = () => {
+    const next = !showMeetup;
+    setShowMeetup(next);
+    if (next) loadNextEvent();
   };
 
   return (
-    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-      {/* Card top — always visible, tappable */}
-      <div onClick={toggle} style={{ cursor: "pointer", padding: "16px 14px 12px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 6 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{contact.name}</div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em" }}>{contact.role}</div>
-        <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.6, marginTop: 4 }}>{contact.notes}</div>
-        <div style={{ fontSize: 10, color: "var(--muted2)", transition: "0.2s", transform: expanded ? "rotate(180deg)" : "none" }}>▾</div>
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
+
+      {/* Card top — name, role, notes */}
+      <div style={{ padding: "16px 14px 12px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 4 }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 15, fontWeight: 500, color: "var(--text)" }}>{contact.name}</div>
+        <div style={{ fontSize: 10, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>{contact.role}</div>
+        <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.6, marginTop: 4 }}>{contact.notes}</div>
       </div>
 
-      {/* Expanded: next meetup + WhatsApp */}
-      {expanded && (
-        <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface2)" }}>
-          <div style={{ padding: "12px 14px" }}>
-            {eventLoading ? (
-              <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>searching calendar…</div>
-            ) : nextEvent?.date ? (
-              <div style={{ fontSize: 12, color: "var(--text)", textAlign: "center", lineHeight: 1.5 }}>
-                <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", display: "block", marginBottom: 4 }}>Next meetup</span>
-                <span style={{ fontWeight: 500 }}>{nextEvent.date}</span>
-                {nextEvent.title && <span style={{ display: "block", fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{nextEvent.title}</span>}
-              </div>
-            ) : !calToken ? (
-              <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>Connect calendar to see meetups</div>
-            ) : (
-              <div style={{ fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", textAlign: "center" }}>Nothing scheduled — book something in!</div>
-            )}
-          </div>
-          <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px", display: "flex", justifyContent: "center" }}>
-            <a href={`https://wa.me/${contact.phone}`} style={{ width: 44, height: 44, borderRadius: "50%", background: "#25D366", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
-              target="_blank" rel="noopener noreferrer">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-              </svg>
-            </a>
-          </div>
+      {/* Actions — WA always visible, meetup button toggles */}
+      <div style={{ padding: "4px 14px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        <a href={`https://wa.me/${contact.phone}`} target="_blank" rel="noopener noreferrer"
+          style={{ width: 44, height: 44, borderRadius: "50%", background: "#25D366", display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none", flexShrink: 0 }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+          </svg>
+        </a>
+
+        <button
+          onClick={handleMeetupToggle}
+          style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase",
+            padding: "6px 16px", background: "transparent",
+            border: `1px solid ${showMeetup ? "var(--sage)" : "var(--border)"}`,
+            borderRadius: 999,
+            color: showMeetup ? "var(--sage)" : "var(--muted)",
+            cursor: "pointer", transition: "all 0.18s",
+          }}>
+          next meet up
+        </button>
+      </div>
+
+      {/* Meetup panel */}
+      {showMeetup && (
+        <div style={{ margin: "0 14px 14px", padding: "12px 14px", background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 12, textAlign: "center" }}>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--muted2)", marginBottom: 6 }}>Next meetup</div>
+          {eventLoading ? (
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "var(--muted2)", letterSpacing: "0.14em" }}>searching calendar…</div>
+          ) : !calToken ? (
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "var(--muted2)", letterSpacing: "0.14em" }}>Connect calendar to see meetups</div>
+          ) : nextEvent?.date ? (
+            <>
+              <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 16, fontWeight: 400, color: "var(--text)" }}>{nextEvent.date}</div>
+              {nextEvent.title && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>{nextEvent.title}</div>}
+            </>
+          ) : (
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "var(--muted2)", letterSpacing: "0.14em" }}>Nothing scheduled — book something in!</div>
+          )}
         </div>
       )}
     </div>
