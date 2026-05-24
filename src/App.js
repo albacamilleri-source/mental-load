@@ -587,6 +587,61 @@ function WeatherStrip({ weather }) {
 }
 
 // ─── TODAY SCREEN ─────────────────────────────────────────────────────────────
+function SuggestedTaskRow({ task, isDone, onToggle, color = "var(--sage)" }) {
+  const [swipeX, setSwipeX] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const startX = useRef(null);
+  const toggling = useRef(false);
+  const THRESHOLD = 72;
+
+  const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; setSwiping(true); };
+  const handleTouchMove = (e) => {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    setSwipeX(Math.max(-10, Math.min(80, dx))); // right only
+  };
+  const handleTouchEnd = () => {
+    if (swipeX >= THRESHOLD) { onToggle(); }
+    setSwipeX(0); setSwiping(false); startX.current = null;
+  };
+
+  const progress = Math.min(swipeX / THRESHOLD, 1);
+
+  return (
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 12, marginBottom: 3 }}>
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: 12,
+        background: `rgba(124,158,138,${progress * 0.25})`,
+        display: "flex", alignItems: "center", padding: "0 18px", pointerEvents: "none",
+      }}>
+        {swipeX > 20 && <span style={{ fontSize: 11, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: progress }}>✓ done</span>}
+      </div>
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={() => {
+          if (Math.abs(swipeX) < 5 && !toggling.current) {
+            toggling.current = true; onToggle();
+            setTimeout(() => { toggling.current = false; }, 500);
+          }
+        }}
+        style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12,
+          background: isDone ? "transparent" : "var(--surface)",
+          border: `1px solid ${isDone ? "transparent" : "var(--border)"}`,
+          boxShadow: isDone ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
+          transform: `translateX(${swipeX}px)`,
+          transition: swiping ? "none" : "all 0.28s cubic-bezier(0.32,0,0.24,1)",
+          userSelect: "none", cursor: "pointer",
+        }}>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: isDone ? "var(--border)" : color, transition: "all 0.18s" }} />
+        <span style={{ fontSize: 14, color: isDone ? "var(--muted2)" : "var(--text)", textDecoration: isDone ? "line-through" : "none", flex: 1, transition: "all 0.18s" }}>{task.text}</span>
+      </div>
+    </div>
+  );
+}
+
 function SuggestedTasks() {
   const [tasks, setTasks] = useState([]);
   const [done, setDone] = useState(new Set());
@@ -637,17 +692,10 @@ function SuggestedTasks() {
         <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--sage)", textTransform: "uppercase", letterSpacing: "0.22em" }}>Suggested</span>
         <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{tasks.filter(t => done.has(t.id)).length}/{tasks.length}</span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        {tasks.map(t => {
-          const isDone = done.has(t.id);
-          return (
-            <div key={t.id} onClick={() => toggle(t.id)}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12, background: isDone ? "transparent" : "var(--surface)", border: `1px solid ${isDone ? "transparent" : "var(--border)"}`, boxShadow: isDone ? "none" : "0 1px 4px rgba(28,26,24,0.04)", cursor: "pointer", userSelect: "none", transition: "all 0.18s" }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: isDone ? "var(--border)" : "var(--sage)", transition: "all 0.18s" }} />
-              <span style={{ fontSize: 14, color: isDone ? "var(--muted2)" : "var(--text)", textDecoration: isDone ? "line-through" : "none", flex: 1, transition: "all 0.18s" }}>{t.text}</span>
-            </div>
-          );
-        })}
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {tasks.map(t => (
+          <SuggestedTaskRow key={t.id} task={t} isDone={done.has(t.id)} onToggle={() => toggle(t.id)} />
+        ))}
       </div>
     </div>
   );
