@@ -1825,8 +1825,8 @@ function PlanScreen() {
       setEditingEvent(null);
       setShowAddModal(false);
     } catch (e) {
-      console.error("saveEvent error:", e.message);
-      alert("Could not save. Check the month format is MM/YYYY.");
+      console.error("saveEvent error:", e.message, e);
+      alert(`Could not save: ${e.message}`);
     }
   };
 
