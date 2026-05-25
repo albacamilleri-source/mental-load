@@ -1965,18 +1965,15 @@ function PlanEventModal({ event, onSave, onDelete, onClose }) {
 
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(28,26,24,0.5)", zIndex: 500 }}
+    <div style={{ position: "fixed", inset: 0, background: "rgba(28,26,24,0.5)", zIndex: 500, overflowY: "auto" }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{
-        position: "absolute",
-        top: "10%",
-        left: "50%",
-        transform: "translateX(-50%)",
+        position: "relative",
+        margin: "60px auto 40px",
         width: "calc(100% - 40px)",
         maxWidth: 480,
         background: "var(--bg)", borderRadius: 20,
         padding: "24px 20px 28px", display: "flex", flexDirection: "column", gap: 12,
-        maxHeight: "80vh", overflowY: "auto",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>
