@@ -1223,18 +1223,25 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   const [editNotes, setEditNotes] = useState(task.notes || "");
   const [editContext, setEditContext] = useState(task.context || "phone");
   const [editDate, setEditDate] = useState(task.due_date || "");
-
-  // Sync editContext when task prop updates (e.g. after save from parent)
-  useEffect(() => { setEditContext(task.context || "phone"); }, [task.context]);
-  useEffect(() => { setEditText(task.text); }, [task.text]);
+  const [completing, setCompleting] = useState(false);
   const [swipeX, setSwipeX] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const startX = useRef(null);
   const THRESHOLD = 72;
 
+  useEffect(() => { setEditContext(task.context || "phone"); }, [task.context]);
+  useEffect(() => { setEditText(task.text); }, [task.text]);
+
   const save = () => {
     if (editText.trim()) onSave(task, editText.trim(), editContext, editDate, editNotes.trim());
     setEditing(false);
+  };
+
+  const complete = () => {
+    if (completing) return;
+    haptic(8);
+    setCompleting(true);
+    setTimeout(() => onToggle && onToggle(), 600);
   };
 
   const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; setSwiping(true); };
@@ -1243,11 +1250,12 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
     setSwipeX(Math.max(-80, Math.min(80, e.touches[0].clientX - startX.current)));
   };
   const handleTouchEnd = () => {
-    if (swipeX >= THRESHOLD) { haptic([8, 50, 8]); onToggle && onToggle(); }
+    if (swipeX >= THRESHOLD) complete();
     else if (swipeX <= -THRESHOLD) { haptic([8, 50, 8]); onDelete && onDelete(task.id); }
     setSwipeX(0); setSwiping(false); startX.current = null;
   };
   const sp = Math.abs(swipeX) / THRESHOLD;
+  const ctxEmoji = badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : null;
 
   if (editing) return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--surface)", borderRadius: 12, border: `1px solid ${color}44`, marginBottom: 3, boxShadow: "0 2px 8px rgba(28,26,24,0.06)" }}>
@@ -1281,31 +1289,38 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   );
 
   return (
-    <div style={{ marginBottom: 3, position: "relative", overflow: "hidden", borderRadius: 12 }}>
+    <div style={{ marginBottom: 3, position: "relative", overflow: "hidden", borderRadius: 12, opacity: completing ? 0 : 1, transition: completing ? "opacity 0.4s 0.2s ease" : "none" }}>
       <div style={{
         position: "absolute", inset: 0, borderRadius: 12,
-        background: swipeX < -20 ? `rgba(196,74,74,${Math.min(sp * 0.3, 0.25)})` : swipeX > 20 ? `rgba(124,158,138,${Math.min(sp * 0.3, 0.25)})` : "transparent",
+        background: swipeX < -20 ? `rgba(196,74,74,${Math.min(sp*0.3,0.25)})` : swipeX > 20 ? `rgba(124,158,138,${Math.min(sp*0.3,0.25)})` : "transparent",
         display: "flex", alignItems: "center",
         justifyContent: swipeX < -20 ? "flex-end" : "flex-start",
         padding: "0 18px", pointerEvents: "none",
       }}>
-        {swipeX > 20 && <span style={{ fontSize: 11, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(sp, 1) }}>✓ done</span>}
-        {swipeX < -20 && <span style={{ fontSize: 11, color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(sp, 1) }}>delete</span>}
+        {swipeX > 20 && <span style={{ fontSize: 11, color: "var(--sage)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(sp,1) }}>✓ done</span>}
+        {swipeX < -20 && <span style={{ fontSize: 11, color: "var(--danger)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em", opacity: Math.min(sp,1) }}>delete</span>}
       </div>
       <div
         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
-        style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: `1px solid ${task.overdue ? "#C44A4A22" : "var(--border)"}`, boxShadow: "0 1px 4px rgba(28,26,24,0.04)", transform: `translateX(${swipeX}px)`, transition: swiping ? "none" : "transform 0.28s cubic-bezier(0.32,0,0.24,1)", userSelect: "none" }}>
-        {badge && <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : null}</span>}
-        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: color, opacity: 0.7 }} />
-        <div style={{ flex: 1 }} onClick={() => setEditing(true)}>
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12,
+          background: completing ? "transparent" : "var(--surface)",
+          border: `1px solid ${completing ? "transparent" : task.overdue ? "#C44A4A22" : "var(--border)"}`,
+          boxShadow: completing ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
+          transform: `translateX(${swipeX}px)`,
+          transition: swiping ? "none" : "all 0.28s cubic-bezier(0.32,0,0.24,1)",
+          userSelect: "none",
+        }}>
+        {ctxEmoji && <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0 }}>{ctxEmoji}</span>}
+        <div onClick={complete} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: completing ? "var(--border)" : color, opacity: 0.7, cursor: "pointer", transition: "all 0.18s" }} />
+        <div style={{ flex: 1 }} onClick={() => !completing && setEditing(true)}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 14, color: "var(--text)" }}>{task.text}</span>
-            {task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace" }}>overdue {task.due_date}</span>}
-            {task.due_date && !task.overdue && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{task.due_date}</span>}
+            <span style={{ fontSize: 14, color: completing ? "var(--muted2)" : "var(--text)", textDecoration: completing ? "line-through" : "none", transition: "all 0.2s" }}>{task.text}</span>
+            {task.overdue && !completing && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace" }}>overdue {task.due_date}</span>}
+            {task.due_date && !task.overdue && !completing && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{task.due_date}</span>}
           </div>
-          {task.notes && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{task.notes}</div>}
+          {task.notes && !completing && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{task.notes}</div>}
         </div>
-        <button onClick={() => setEditing(true)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }}>✎</button>
+        {!completing && <button onClick={() => setEditing(true)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }}>✎</button>}
       </div>
     </div>
   );
