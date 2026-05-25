@@ -1811,14 +1811,23 @@ function PlanScreen() {
   const selectedEvents = selectedMonth ? (eventsByMonth[selectedMonth] || []) : [];
 
   const saveEvent = async (ev) => {
-    if (ev.id) {
-      await sb.from("planning_events").update({ text: ev.text, trigger_month: ev.trigger_month, notes: ev.notes, recurring: ev.recurring }).eq("id", ev.id);
-    } else {
-      await sb.from("planning_events").insert({ text: ev.text, trigger_month: ev.trigger_month, notes: ev.notes || "", recurring: ev.recurring || false });
+    if (!ev.text?.trim()) { alert("Please enter an event name."); return; }
+    if (!ev.trigger_month?.trim()) { alert("Please enter a month (MM/YYYY)."); return; }
+    try {
+      if (ev.id) {
+        const { error } = await sb.from("planning_events").update({ text: ev.text.trim(), trigger_month: ev.trigger_month.trim(), notes: ev.notes || "", recurring: ev.recurring || false }).eq("id", ev.id);
+        if (error) throw error;
+      } else {
+        const { error } = await sb.from("planning_events").insert({ text: ev.text.trim(), trigger_month: ev.trigger_month.trim(), notes: ev.notes || "", recurring: ev.recurring || false });
+        if (error) throw error;
+      }
+      await load();
+      setEditingEvent(null);
+      setShowAddModal(false);
+    } catch (e) {
+      console.error("saveEvent error:", e.message);
+      alert("Could not save. Check the month format is MM/YYYY.");
     }
-    await load();
-    setEditingEvent(null);
-    setShowAddModal(false);
   };
 
   const deleteEvent = async (id) => {
@@ -1956,13 +1965,18 @@ function PlanEventModal({ event, onSave, onDelete, onClose }) {
 
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(28,26,24,0.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 20px" }}
+    <div style={{ position: "fixed", inset: 0, background: "rgba(28,26,24,0.5)", zIndex: 500 }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: "100%", maxWidth: 480,
+        position: "absolute",
+        top: "10%",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "calc(100% - 40px)",
+        maxWidth: 480,
         background: "var(--bg)", borderRadius: 20,
         padding: "24px 20px 28px", display: "flex", flexDirection: "column", gap: 12,
-        maxHeight: "90vh", overflowY: "auto",
+        maxHeight: "80vh", overflowY: "auto",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>
