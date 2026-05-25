@@ -1954,36 +1954,30 @@ function PlanEventModal({ event, onSave, onDelete, onClose }) {
   const [notes, setNotes] = useState(event.notes || "");
   const [recurring, setRecurring] = useState(event.recurring || false);
 
-  // Parse MM/YYYY for display — convert to YYYY-MM for input[type=month]
-  const toInputMonth = (s) => {
-    if (!s) return "";
-    const [m, y] = s.split("/");
-    return `${y}-${m}`;
-  };
-  const fromInputMonth = (s) => {
-    if (!s) return "";
-    const [y, m] = s.split("-");
-    return `${m}/${y}`;
-  };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(28,26,24,0.5)", zIndex: 500, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+    <div style={{ position: "fixed", inset: 0, background: "rgba(28,26,24,0.5)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 20px" }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{
         width: "100%", maxWidth: 480,
-        background: "var(--bg)", borderRadius: "20px 20px 0 0",
-        padding: "24px 20px 40px", display: "flex", flexDirection: "column", gap: 12,
+        background: "var(--bg)", borderRadius: 20,
+        padding: "24px 20px 28px", display: "flex", flexDirection: "column", gap: 12,
+        maxHeight: "90vh", overflowY: "auto",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <div style={{ fontFamily: "'Outfit', system-ui, sans-serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>
-            {event.id ? "Edit Event" : "Add Event"}
+          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 20, fontWeight: 400, color: "var(--text)" }}>
+            {event.id ? "Edit event" : "Add event"}
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 22 }}>×</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 22, cursor: "pointer" }}>×</button>
         </div>
         <input value={text} onChange={e => setText(e.target.value)} placeholder="Event name"
           style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%" }}
         />
-        <input type="month" value={toInputMonth(month)} onChange={e => setMonth(fromInputMonth(e.target.value))}
+        <input
+          type="text"
+          value={month}
+          onChange={e => setMonth(e.target.value)}
+          placeholder="Month (MM/YYYY e.g. 09/2026)"
           style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "13px 14px", color: "var(--text)", fontSize: 16, outline: "none", width: "100%" }}
         />
         <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes (optional)" rows={3}
