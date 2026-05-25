@@ -1223,6 +1223,10 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   const [editNotes, setEditNotes] = useState(task.notes || "");
   const [editContext, setEditContext] = useState(task.context || "phone");
   const [editDate, setEditDate] = useState(task.due_date || "");
+
+  // Sync editContext when task prop updates (e.g. after save from parent)
+  useEffect(() => { setEditContext(task.context || "phone"); }, [task.context]);
+  useEffect(() => { setEditText(task.text); }, [task.text]);
   const [swipeX, setSwipeX] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const startX = useRef(null);
@@ -1291,7 +1295,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
       <div
         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: `1px solid ${task.overdue ? "#C44A4A22" : "var(--border)"}`, boxShadow: "0 1px 4px rgba(28,26,24,0.04)", transform: `translateX(${swipeX}px)`, transition: swiping ? "none" : "transform 0.28s cubic-bezier(0.32,0,0.24,1)", userSelect: "none" }}>
-        {badge && <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : "🏠"}</span>}
+        {badge && <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0 }}>{badge === "phone" ? "📱" : badge === "errand" ? "🚗" : badge === "home" ? "🏠" : null}</span>}
         <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: color, opacity: 0.7 }} />
         <div style={{ flex: 1 }} onClick={() => setEditing(true)}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -1357,7 +1361,9 @@ function TasksScreen({ who }) {
   };
 
   const saveTask = async (task, newText, newContext, newDate, newNotes) => {
-    await sb.from("next_actions").update({ text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null }).eq("id", task.id);
+    const { error } = await sb.from("next_actions").update({ text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null }).eq("id", task.id);
+    if (error) { console.error("saveTask error:", error.message); return; }
+    // Update local state immediately for instant feedback
     setTasks(ts => ts.map(t => t.id === task.id ? { ...t, text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null } : t));
   };
 
@@ -1480,7 +1486,7 @@ function TasksScreen({ who }) {
                       boxShadow: "0 1px 4px rgba(28,26,24,0.04)",
                     }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 10 }}>{t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : "🏠"}</span>
+                      <span style={{ fontSize: 10 }}>{t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : t.context === "home" ? "🏠" : null}</span>
                       <span style={{ lineHeight: 1.3 }}>{t.text}</span>
                     </div>
                     {t.notes && <div style={{ fontSize: 10, color: "var(--muted)", lineHeight: 1.4, marginTop: 4, whiteSpace: "pre-wrap" }}>{t.notes}</div>}
@@ -1517,7 +1523,7 @@ function TasksScreen({ who }) {
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       {dayTasks.map(t => (
                         <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 10, background: "var(--surface2)", fontSize: 11, color: "var(--text)" }}>
-                          <span>{t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : "🏠"}</span>
+                          <span>{t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : t.context === "home" ? "🏠" : null}</span>
                           <span style={{ flex: 1, lineHeight: 1.3 }}>{t.text}</span>
                           <button onClick={() => unscheduleTask(t)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, cursor: "pointer", padding: 0, flexShrink: 0 }}>×</button>
                         </div>
@@ -1553,7 +1559,7 @@ function TasksScreen({ who }) {
           {active.map(t => (
             <EditableTaskRow key={t.id} task={t} onToggle={() => toggle(t)} onSave={saveTask} onDelete={deleteTask}
               color="var(--sage)"
-              badge={context === "all" && t.context ? (t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : "🏠") : null}
+              badge={context === "all" && t.context ? t.context : null}
             />
           ))}
         </div>
