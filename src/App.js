@@ -1271,6 +1271,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
       <div style={{ display: "flex", gap: 6 }}>
         <button onClick={save} style={{ flex: 1, padding: "7px", background: color, border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Save</button>
         <button onClick={() => setEditing(false)} style={{ padding: "7px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+        <button onClick={() => onDelete && onDelete(task.id)} style={{ padding: "7px 12px", background: "none", border: "none", color: "var(--danger)", fontSize: 12, cursor: "pointer" }}>Delete</button>
       </div>
     </div>
   );
