@@ -915,115 +915,138 @@ function TodayScreen({ who }) {
         <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", letterSpacing: "-0.02em", lineHeight: 1.1 }}>Good {greeting.toLowerCase()}, {who === "alba" ? "Alba" : "Josh"}<span style={{ color: "var(--sage)" }}>.</span></div>
       </div>
 
-      {/* 3 tab switcher */}
       <WeatherStrip weather={weather} />
 
-      {/* Horizontal underline tabs */}
-      <div style={{ padding: "0 20px 0", borderBottom: "1px solid var(--border)", display: "flex", gap: 0, marginBottom: 0 }}>
-        {TABS.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{
-            flex: 1, padding: "11px 4px 10px", background: "none", border: "none", outline: "none",
-            color: tab === t.key ? "var(--text)" : "var(--muted2)",
-            fontSize: 13, fontWeight: tab === t.key ? 500 : 400,
-            position: "relative", transition: "color 0.18s",
-            borderBottom: `2px solid ${tab === t.key ? t.color : "transparent"}`,
-            marginBottom: "-1px",
-          }}>{t.label}</button>
-        ))}
-      </div>
-      <div style={{ height: 16 }} />
-
-      {/* Morning / Evening routine */}
-      {(tab === "morning" || tab === "evening") && (<>
-        <div style={{ padding: "0 20px 14px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.22em" }}>{tab === "morning" ? "Morning Routine" : "Evening Shutdown"}</span>
-            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>{doneCount}/{visible.length}</span>
-          </div>
-          <Bar done={doneCount} total={visible.length} color={color} />
-          {doneCount === visible.length && visible.length > 0 && (
-            <div style={{ marginTop: 10, padding: "10px 16px", background: `${color}12`, borderRadius: 10, color, border: `1px solid ${color}22`, fontStyle: "italic", fontFamily: "'Lora', serif", fontSize: 16 }}>off—loaded.</div>
-          )}
-        </div>
-        {loading ? <SkeletonCard rows={3} /> : (
-          <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
-            {visible.map(t => (
-              <div key={t.id} style={{ position: "relative" }}>
-                <TaskRow text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} taskId={t.id} subCompletions={completions} onSubToggle={toggleSub} />
-                {who === "alba" && !completions.has(t.id) && (
-                  <button onClick={async () => {
-                    const isAssigned = t.assigned_to === "josh";
-                    await sb.from("routine_tasks").update({ assigned_to: isAssigned ? null : "josh" }).eq("id", t.id);
-                    setTasks(ts => ts.map(r => r.id === t.id ? { ...r, assigned_to: isAssigned ? null : "josh" } : r));
-                    if (!isAssigned) notifyJosh(t.text);
-                  }} style={{
-                    position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                    background: t.assigned_to === "josh" ? "var(--josh)" : "var(--surface2)",
-                    border: "none", borderRadius: 999, padding: "3px 9px",
-                    fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em",
-                    color: t.assigned_to === "josh" ? "#fff" : "var(--muted)",
-                    cursor: "pointer", transition: "all 0.18s", zIndex: 2,
-                  }}>
-                    {t.assigned_to === "josh" ? "J ✓" : "→J"}
-                  </button>
+      {who === "josh" ? (
+        // ── Josh view: morning + evening stacked, no tabs, no suggested, no calendar ──
+        <div style={{ padding: "16px 0 0" }}>
+          {["morning", "evening"].map(routineType => {
+            const routineColor = routineType === "morning" ? "var(--morning)" : "var(--evening)";
+            const routineTasks = tasks.filter(t => t.type === routineType && t.assigned_to === "josh");
+            const routineDone = routineTasks.filter(t => completions.has(t.id)).length;
+            return (
+              <div key={routineType} style={{ marginBottom: 28 }}>
+                <div style={{ padding: "0 20px 10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+                    <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: routineColor, textTransform: "uppercase", letterSpacing: "0.22em" }}>{routineType === "morning" ? "☀ Morning" : "☾ Evening"}</span>
+                    <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>{routineDone}/{routineTasks.length}</span>
+                  </div>
+                  <Bar done={routineDone} total={routineTasks.length} color={routineColor} />
+                  {routineDone === routineTasks.length && routineTasks.length > 0 && (
+                    <div style={{ marginTop: 10, padding: "10px 16px", background: `${routineColor}12`, borderRadius: 10, color: routineColor, border: `1px solid ${routineColor}22`, fontStyle: "italic", fontFamily: "'Lora', serif", fontSize: 16 }}>off—loaded.</div>
+                  )}
+                </div>
+                {loading ? <SkeletonCard rows={3} /> : (
+                  <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
+                    {routineTasks.length === 0 ? (
+                      <div style={{ fontSize: 12, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", padding: "8px 0" }}>Nothing assigned yet</div>
+                    ) : routineTasks.map(t => (
+                      <TaskRow key={t.id} text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={routineColor} sub={t.sub_items} taskId={t.id} subCompletions={completions} onSubToggle={toggleSub} />
+                    ))}
+                  </div>
                 )}
               </div>
+            );
+          })}
+          {meetingIsToday && <div style={{ padding: "0 20px" }}><TodayMeetingAgenda /></div>}
+        </div>
+      ) : (
+        // ── Alba view: tabs + full today ──
+        <>
+          <div style={{ padding: "0 20px 0", borderBottom: "1px solid var(--border)", display: "flex", gap: 0, marginBottom: 0 }}>
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)} style={{
+                flex: 1, padding: "11px 4px 10px", background: "none", border: "none", outline: "none",
+                color: tab === t.key ? "var(--text)" : "var(--muted2)",
+                fontSize: 13, fontWeight: tab === t.key ? 500 : 400,
+                position: "relative", transition: "color 0.18s",
+                borderBottom: `2px solid ${tab === t.key ? t.color : "transparent"}`,
+                marginBottom: "-1px",
+              }}>{t.label}</button>
             ))}
           </div>
-        )}
-      </>)}
+          <div style={{ height: 16 }} />
 
-      {/* ── Static Plans section — always visible below routine ── */}
-      <div style={{ padding: "28px 20px 0" }}>
-
-        {/* Meeting block if today — show full agenda */}
-        {meetingIsToday && (
-          <TodayMeetingAgenda />
-        )}
-
-        {/* Due today — next actions */}
-        {who === "alba" && !plansLoading && todayPlans.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 400 }}>Due Today</span>
-              <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{todayPlans.length}</span>
+          {(tab === "morning" || tab === "evening") && (<>
+            <div style={{ padding: "0 20px 14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+                <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.22em" }}>{tab === "morning" ? "Morning Routine" : "Evening Shutdown"}</span>
+                <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>{doneCount}/{visible.length}</span>
+              </div>
+              <Bar done={doneCount} total={visible.length} color={color} />
+              {doneCount === visible.length && visible.length > 0 && (
+                <div style={{ marginTop: 10, padding: "10px 16px", background: `${color}12`, borderRadius: 10, color, border: `1px solid ${color}22`, fontStyle: "italic", fontFamily: "'Lora', serif", fontSize: 16 }}>off—loaded.</div>
+              )}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-              {todayPlans.map(t => (
-                <EditableTaskRow key={t.id} task={t}
-                  onToggle={async () => {
-                    await sb.from("next_actions").update({ done: true }).eq("id", t.id);
-                    await sb.from("history_items").insert({ text: t.text, notes: t.notes || "", source: "next_action" });
-                    setTodayPlans(ps => ps.filter(p => p.id !== t.id));
-                  }}
-                  onSave={async (task, newText, newContext, newDate, newNotes) => {
-                    const { error } = await sb.from("next_actions").update({ text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null }).eq("id", task.id);
-                    if (!error) setTodayPlans(ps => ps.map(p => p.id === task.id ? { ...p, text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null } : p));
-                  }}
-                  onDelete={async (id) => {
-                    await sb.from("next_actions").delete().eq("id", id);
-                    setTodayPlans(ps => ps.filter(p => p.id !== id));
-                  }}
-                  color="var(--planning)"
-                  badge={t.context || null}
-                />
-              ))}
+            {loading ? <SkeletonCard rows={3} /> : (
+              <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
+                {visible.map(t => (
+                  <div key={t.id} style={{ position: "relative" }}>
+                    <TaskRow text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} taskId={t.id} subCompletions={completions} onSubToggle={toggleSub} />
+                    {!completions.has(t.id) && (
+                      <button onClick={async () => {
+                        const isAssigned = t.assigned_to === "josh";
+                        await sb.from("routine_tasks").update({ assigned_to: isAssigned ? null : "josh" }).eq("id", t.id);
+                        setTasks(ts => ts.map(r => r.id === t.id ? { ...r, assigned_to: isAssigned ? null : "josh" } : r));
+                        if (!isAssigned) notifyJosh(t.text);
+                      }} style={{
+                        position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                        background: t.assigned_to === "josh" ? "var(--josh)" : "var(--surface2)",
+                        border: "none", borderRadius: 999, padding: "3px 9px",
+                        fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em",
+                        color: t.assigned_to === "josh" ? "#fff" : "var(--muted)",
+                        cursor: "pointer", transition: "all 0.18s", zIndex: 2,
+                      }}>
+                        {t.assigned_to === "josh" ? "J ✓" : "→J"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>)}
+
+          <div style={{ padding: "28px 20px 0" }}>
+            {meetingIsToday && <TodayMeetingAgenda />}
+            {who === "alba" && !plansLoading && todayPlans.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 400 }}>Due Today</span>
+                  <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{todayPlans.length}</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  {todayPlans.map(t => (
+                    <EditableTaskRow key={t.id} task={t}
+                      onToggle={async () => {
+                        await sb.from("next_actions").update({ done: true }).eq("id", t.id);
+                        await sb.from("history_items").insert({ text: t.text, notes: t.notes || "", source: "next_action" });
+                        setTodayPlans(ps => ps.filter(p => p.id !== t.id));
+                      }}
+                      onSave={async (task, newText, newContext, newDate, newNotes) => {
+                        const { error } = await sb.from("next_actions").update({ text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null }).eq("id", task.id);
+                        if (!error) setTodayPlans(ps => ps.map(p => p.id === task.id ? { ...p, text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null } : p));
+                      }}
+                      onDelete={async (id) => {
+                        await sb.from("next_actions").delete().eq("id", id);
+                        setTodayPlans(ps => ps.filter(p => p.id !== id));
+                      }}
+                      color="var(--planning)"
+                      badge={t.context || null}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            <SuggestedTasks />
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 400 }}>Today</span>
+              </div>
+              <TodayCalendarTab />
             </div>
           </div>
-        )}
-
-        {/* Suggested — recurring weekly tasks for today */}
-        <SuggestedTasks />
-
-        {/* Calendar events */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 400 }}>Today</span>
-          </div>
-          <TodayCalendarTab />
-        </div>
-
-      </div>
+        </>
+      )}
     </div>
   );
 }
