@@ -3310,11 +3310,11 @@ const NAV_PRIMARY = [
   { key: "today", label: "Today", icon: "◎" },
   { key: "week",  label: "Week",  icon: "▦" },
   { key: "month", label: "Month", icon: "◫" },
-  { key: "tasks", label: "Tasks", icon: "◈" },
+  { key: "tasks", label: "Tasks", icon: "◈", albaOnly: true },
 ];
 
 const NAV_MORE = [
-  { key: "plan",     label: "Plan",    icon: "◷" },
+  { key: "plan",     label: "Plan",    icon: "◷", albaOnly: true },
   { key: "connect",  label: "Connect", icon: "♡", albaOnly: true },
   { key: "todo",     label: "Do",      icon: "◉", albaOnly: true },
   { key: "freetime", label: "Me",      icon: "◌", albaOnly: true },
@@ -3378,7 +3378,7 @@ function BottomNav({ active, onChange, who }) {
         <div style={{
           display: "flex", padding: "8px 0 env(safe-area-inset-bottom, 18px)",
         }}>
-          {NAV_PRIMARY.map(n => (
+          {NAV_PRIMARY.filter(n => !n.albaOnly || who === "alba").map(n => (
             <button key={n.key} onClick={() => { setShowMore(false); onChange(n.key); }} style={{
               flex: 1, background: "none", border: "none",
               display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
