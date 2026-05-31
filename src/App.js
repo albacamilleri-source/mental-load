@@ -801,6 +801,7 @@ function TodayMeetingAgenda() {
 function TodayScreen({ who }) {
   const [tasks, setTasks] = useState([]);
   const [completions, setCompletions] = useState(new Set());
+  const [delegations, setDelegations] = useState(new Set()); // task_ids delegated to Josh today
   const [tab, setTab] = useState("morning");
   const [loading, setLoading] = useState(true);
   const [todayPlans, setTodayPlans] = useState([]);
@@ -824,12 +825,14 @@ function TodayScreen({ who }) {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [{ data: t }, { data: c }] = await Promise.all([
+      const [{ data: t }, { data: c }, { data: d }] = await Promise.all([
         sb.from("routine_tasks").select("*").in("type", ["morning", "evening"]).order("sort_order"),
         sb.from("routine_completions").select("task_id").eq("period_key", pKey),
+        sb.from("routine_delegations").select("task_id").eq("period_key", pKey),
       ]);
       setTasks(t || []);
       setCompletions(new Set((c || []).map(r => r.task_id)));
+      setDelegations(new Set((d || []).map(r => r.task_id)));
       setLoading(false);
     };
     load();
@@ -839,7 +842,13 @@ function TodayScreen({ who }) {
         sb.from("routine_completions").select("task_id").eq("period_key", pKey).then(({ data }) => {
           setCompletions(new Set((data || []).map(r => r.task_id)));
         });
-      }).subscribe();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "routine_delegations" }, () => {
+        sb.from("routine_delegations").select("task_id").eq("period_key", pKey).then(({ data }) => {
+          setDelegations(new Set((data || []).map(r => r.task_id)));
+        });
+      })
+      .subscribe();
 
     return () => sb.removeChannel(sub);
   }, [pKey]);
@@ -896,7 +905,7 @@ function TodayScreen({ who }) {
 
   const visible = tasks.filter(t => {
     if (t.type !== tab) return false;
-    if (who === "josh") return t.assigned_to === "josh";
+    if (who === "josh") return delegations.has(t.id);
     return true;
   });
   const doneCount = visible.filter(t => completions.has(t.id)).length;
@@ -922,7 +931,7 @@ function TodayScreen({ who }) {
         <div style={{ padding: "16px 0 0" }}>
           {["morning", "evening"].map(routineType => {
             const routineColor = routineType === "morning" ? "var(--morning)" : "var(--evening)";
-            const routineTasks = tasks.filter(t => t.type === routineType && t.assigned_to === "josh");
+            const routineTasks = tasks.filter(t => t.type === routineType && delegations.has(t.id));
             const routineDone = routineTasks.filter(t => completions.has(t.id)).length;
             return (
               <div key={routineType} style={{ marginBottom: 28 }}>
@@ -985,19 +994,24 @@ function TodayScreen({ who }) {
                     <TaskRow text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} taskId={t.id} subCompletions={completions} onSubToggle={toggleSub} />
                     {!completions.has(t.id) && (
                       <button onClick={async () => {
-                        const isAssigned = t.assigned_to === "josh";
-                        await sb.from("routine_tasks").update({ assigned_to: isAssigned ? null : "josh" }).eq("id", t.id);
-                        setTasks(ts => ts.map(r => r.id === t.id ? { ...r, assigned_to: isAssigned ? null : "josh" } : r));
-                        if (!isAssigned) notifyJosh(t.text);
+                        const isAssigned = delegations.has(t.id);
+                        if (isAssigned) {
+                          await sb.from("routine_delegations").delete().eq("task_id", t.id).eq("period_key", pKey);
+                          setDelegations(s => { const n = new Set(s); n.delete(t.id); return n; });
+                        } else {
+                          await sb.from("routine_delegations").upsert({ task_id: t.id, period_key: pKey });
+                          setDelegations(s => new Set([...s, t.id]));
+                          notifyJosh(t.text);
+                        }
                       }} style={{
                         position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                        background: t.assigned_to === "josh" ? "var(--josh)" : "var(--surface2)",
+                        background: delegations.has(t.id) ? "var(--josh)" : "var(--surface2)",
                         border: "none", borderRadius: 999, padding: "3px 9px",
                         fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em",
-                        color: t.assigned_to === "josh" ? "#fff" : "var(--muted)",
+                        color: delegations.has(t.id) ? "#fff" : "var(--muted)",
                         cursor: "pointer", transition: "all 0.18s", zIndex: 2,
                       }}>
-                        {t.assigned_to === "josh" ? "J ✓" : "→J"}
+                        {delegations.has(t.id) ? "J ✓" : "→J"}
                       </button>
                     )}
                   </div>
@@ -3582,6 +3596,40 @@ function AppInner() {
     }
   }, [who]);
 
+  // ── Pull-to-refresh ──────────────────────────────────────────────────────────
+  const [pullY, setPullY] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const pullStart = useRef(null);
+  const PULL_THRESHOLD = 80;
+
+  useEffect(() => {
+    const onTouchStart = (e) => {
+      if (window.scrollY === 0) pullStart.current = e.touches[0].clientY;
+    };
+    const onTouchMove = (e) => {
+      if (pullStart.current === null) return;
+      const dy = e.touches[0].clientY - pullStart.current;
+      if (dy > 0) setPullY(Math.min(dy, PULL_THRESHOLD + 20));
+    };
+    const onTouchEnd = () => {
+      if (pullY >= PULL_THRESHOLD && !refreshing) {
+        setRefreshing(true);
+        setTimeout(() => window.location.reload(), 400);
+      } else {
+        setPullY(0);
+      }
+      pullStart.current = null;
+    };
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchend", onTouchEnd);
+    return () => {
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [pullY, refreshing]);
+
 
 
   if (!who) return (<><GlobalStyles /><WelcomeScreen onChoose={chooseWho} /></>);
@@ -3640,6 +3688,28 @@ function AppInner() {
           {who === "alba" ? "Alba" : "Josh"} · <button onClick={() => { localStorage.removeItem("hb_who"); window.location.reload(); }} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", cursor: "pointer", padding: 0, textDecoration: "underline" }}>switch</button>
         </div>
       </div>
+
+      {/* Pull-to-refresh indicator */}
+      {pullY > 0 && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 999,
+          display: "flex", justifyContent: "center",
+          transform: `translateY(${Math.min(pullY - 30, 20)}px)`,
+          transition: pullY >= PULL_THRESHOLD ? "none" : "transform 0.1s",
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: 999, padding: "5px 14px",
+            fontSize: 10, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em",
+            color: pullY >= PULL_THRESHOLD ? "var(--sage)" : "var(--muted2)",
+            boxShadow: "0 2px 8px rgba(28,26,24,0.1)",
+            transition: "color 0.18s",
+          }}>
+            {refreshing ? "refreshing…" : pullY >= PULL_THRESHOLD ? "↑ release" : "↓ pull to refresh"}
+          </div>
+        </div>
+      )}
 
       {/* Push notification prompt for Josh */}
       {showPushPrompt && who === "josh" && (
