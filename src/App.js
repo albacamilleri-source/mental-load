@@ -650,7 +650,7 @@ function SuggestedTasks() {
   const today = new Date();
   const dow = today.getDay(); // 0=Sun ... 6=Sat
 
-  // ISO week key — resets completions every week automatically
+  // ISO week key — resets on Monday midnight
   const weekKey = (() => {
     const d = new Date(today);
     d.setHours(0, 0, 0, 0);
@@ -662,12 +662,27 @@ function SuggestedTasks() {
 
   useEffect(() => {
     const load = async () => {
+      // Load ALL tasks for the week, filter client-side
       const [{ data: t }, { data: c }] = await Promise.all([
-        sb.from("suggested_tasks").select("*").eq("day_of_week", dow).order("sort_order"),
+        sb.from("suggested_tasks").select("*").order("day_of_week").order("sort_order"),
         sb.from("suggested_completions").select("task_id").eq("week_key", weekKey),
       ]);
-      setTasks(t || []);
-      setDone(new Set((c || []).map(r => r.task_id)));
+      const completedIds = new Set((c || []).map(r => r.task_id));
+
+      // Days of week in order Mon=1 through Sun=0
+      // Convert to a "day index" where Mon=0, Tue=1 ... Sun=6
+      const toIdx = d => d === 0 ? 6 : d - 1;
+      const todayIdx = toIdx(dow);
+
+      const visible = (t || []).filter(task => {
+        const taskIdx = toIdx(task.day_of_week);
+        if (taskIdx === todayIdx) return true; // always show today's
+        if (taskIdx < todayIdx && !completedIds.has(task.id)) return true; // undone from earlier this week
+        return false;
+      });
+
+      setTasks(visible);
+      setDone(completedIds);
       setLoading(false);
     };
     load();
@@ -905,12 +920,23 @@ function TodayScreen({ who }) {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
               {todayPlans.map(t => (
-                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
-                  <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>
-                    {t.context === "phone" ? "📱" : t.context === "errand" ? "🚗" : t.context === "home" ? "🏠" : "◈"}
-                  </span>
-                  <span style={{ fontSize: 14, color: "var(--text)", flex: 1 }}>{t.text}</span>
-                </div>
+                <EditableTaskRow key={t.id} task={t}
+                  onToggle={async () => {
+                    await sb.from("next_actions").update({ done: true }).eq("id", t.id);
+                    await sb.from("history_items").insert({ text: t.text, notes: t.notes || "", source: "next_action" });
+                    setTodayPlans(ps => ps.filter(p => p.id !== t.id));
+                  }}
+                  onSave={async (task, newText, newContext, newDate, newNotes) => {
+                    const { error } = await sb.from("next_actions").update({ text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null }).eq("id", task.id);
+                    if (!error) setTodayPlans(ps => ps.map(p => p.id === task.id ? { ...p, text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null } : p));
+                  }}
+                  onDelete={async (id) => {
+                    await sb.from("next_actions").delete().eq("id", id);
+                    setTodayPlans(ps => ps.filter(p => p.id !== id));
+                  }}
+                  color="var(--planning)"
+                  badge={t.context || null}
+                />
               ))}
             </div>
           </div>
@@ -1276,9 +1302,11 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
           }}>{l}</button>
         ))}
       </div>
-      <input value={editDate} onChange={e => setEditDate(e.target.value)}
-        placeholder="Due date (YYYY-MM-DD) — optional"
-        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "7px 11px", color: "var(--text)", fontSize: 16, outline: "none" }}
+      <input
+        type="date"
+        value={editDate}
+        onChange={e => setEditDate(e.target.value)}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "7px 11px", color: editDate ? "var(--text)" : "var(--muted2)", fontSize: 16, outline: "none", width: "100%" }}
       />
       <div style={{ display: "flex", gap: 6 }}>
         <button onClick={save} style={{ flex: 1, padding: "7px", background: color, border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Save</button>
