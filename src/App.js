@@ -982,7 +982,7 @@ function TodayScreen({ who }) {
         )}
 
         {/* Due today — next actions */}
-        {!plansLoading && todayPlans.length > 0 && (
+        {who === "alba" && !plansLoading && todayPlans.length > 0 && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 400 }}>Due Today</span>
@@ -3391,8 +3391,8 @@ function BottomNav({ active, onChange, who }) {
               <div style={{ width: 16, height: 2, borderRadius: 1, background: active === n.key ? "var(--sage)" : "transparent", marginTop: 1, transition: "background 0.18s" }} />
             </button>
           ))}
-          {/* More button */}
-          <button onClick={() => setShowMore(s => !s)} style={{
+          {/* More button — alba only */}
+          {who === "alba" && <button onClick={() => setShowMore(s => !s)} style={{
             flex: 1, background: "none", border: "none",
             display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
             padding: "4px 4px",
@@ -3402,7 +3402,7 @@ function BottomNav({ active, onChange, who }) {
             <span style={{ fontSize: 18, lineHeight: 1 }}>•••</span>
             <span style={{ fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>More</span>
             <div style={{ width: 16, height: 2, borderRadius: 1, background: isMoreActive || showMore ? "var(--sage)" : "transparent", marginTop: 1, transition: "background 0.18s" }} />
-          </button>
+          </button>}
         </div>
       </div>
     </>
