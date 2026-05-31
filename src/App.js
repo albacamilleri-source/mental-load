@@ -3605,11 +3605,13 @@ function AppInner() {
   useEffect(() => {
     const onTouchStart = (e) => {
       if (window.scrollY === 0) pullStart.current = e.touches[0].clientY;
+      else pullStart.current = null;
     };
     const onTouchMove = (e) => {
       if (pullStart.current === null) return;
       const dy = e.touches[0].clientY - pullStart.current;
       if (dy > 0) setPullY(Math.min(dy, PULL_THRESHOLD + 20));
+      else { pullStart.current = null; setPullY(0); }
     };
     const onTouchEnd = () => {
       if (pullY >= PULL_THRESHOLD && !refreshing) {
