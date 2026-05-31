@@ -38,6 +38,53 @@ const GCAL_REDIRECT_URI = "https://albacamilleri-source.github.io/mental-load";
 const GCAL_EDGE_FN      = "https://qvibdnrfywisvfsqgqux.supabase.co/functions/v1/gcal-auth";
 const GCAL_APP_SECRET   = "ml-alba-2026";
 
+// ─── PUSH NOTIFICATIONS ───────────────────────────────────────────────────────
+const PUSH_EDGE_FN     = "https://qvibdnrfywisvfsqgqux.supabase.co/functions/v1/push-notify";
+const VAPID_PUBLIC_KEY = "BI1EoEJUUW-AInYBCb19XuRUUZO_1YkxWqp6JAw_UnqLiam0arV05Y30sDZDh50zPK6AUhKzeEKMMQPx2n4Dqho";
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+async function registerPushForJosh() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+  try {
+    const reg = await navigator.serviceWorker.register("/mental-load/sw.js");
+    await navigator.serviceWorker.ready;
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return false;
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+    await fetch(PUSH_EDGE_FN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_ANON}` },
+      body: JSON.stringify({ action: "save", subscription, secret: GCAL_APP_SECRET }),
+    });
+    localStorage.setItem("push_registered_josh", "1");
+    return true;
+  } catch (e) {
+    console.error("Push registration failed:", e);
+    return false;
+  }
+}
+
+async function notifyJosh(taskText) {
+  try {
+    await fetch(PUSH_EDGE_FN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${SUPABASE_ANON}` },
+      body: JSON.stringify({ action: "notify", taskText, secret: GCAL_APP_SECRET }),
+    });
+  } catch (e) {
+    console.error("Push notify failed:", e);
+  }
+}
+
 let _gcalToken = null;
 const getGCalToken = () => _gcalToken;
 const setGCalToken = (t) => { _gcalToken = t; };
@@ -847,7 +894,11 @@ function TodayScreen({ who }) {
   };
 
 
-  const visible = tasks.filter(t => t.type === tab);
+  const visible = tasks.filter(t => {
+    if (t.type !== tab) return false;
+    if (who === "josh") return t.assigned_to === "josh";
+    return true;
+  });
   const doneCount = visible.filter(t => completions.has(t.id)).length;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Morning" : hour < 18 ? "Afternoon" : "Evening";
@@ -897,7 +948,26 @@ function TodayScreen({ who }) {
         {loading ? <SkeletonCard rows={3} /> : (
           <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
             {visible.map(t => (
-              <TaskRow key={t.id} text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} taskId={t.id} subCompletions={completions} onSubToggle={toggleSub} />
+              <div key={t.id} style={{ position: "relative" }}>
+                <TaskRow text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} taskId={t.id} subCompletions={completions} onSubToggle={toggleSub} />
+                {who === "alba" && !completions.has(t.id) && (
+                  <button onClick={async () => {
+                    const isAssigned = t.assigned_to === "josh";
+                    await sb.from("routine_tasks").update({ assigned_to: isAssigned ? null : "josh" }).eq("id", t.id);
+                    setTasks(ts => ts.map(r => r.id === t.id ? { ...r, assigned_to: isAssigned ? null : "josh" } : r));
+                    if (!isAssigned) notifyJosh(t.text);
+                  }} style={{
+                    position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                    background: t.assigned_to === "josh" ? "var(--josh)" : "var(--surface2)",
+                    border: "none", borderRadius: 999, padding: "3px 9px",
+                    fontSize: 9, fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em",
+                    color: t.assigned_to === "josh" ? "#fff" : "var(--muted)",
+                    cursor: "pointer", transition: "all 0.18s", zIndex: 2,
+                  }}>
+                    {t.assigned_to === "josh" ? "J ✓" : "→J"}
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -3465,6 +3535,7 @@ function AppInner() {
   const [screen, setScreen] = useState("today");
   const [slideDir, setSlideDir] = useState("left");
   const [editing, setEditing] = useState(false);
+  const [showPushPrompt, setShowPushPrompt] = useState(false);
   const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
   const [desktop, setDesktop] = useState(isDesktop);
 
@@ -3481,6 +3552,12 @@ function AppInner() {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
+  useEffect(() => {
+    if (who === "josh" && !localStorage.getItem("push_registered_josh")) {
+      setShowPushPrompt(true);
+    }
+  }, [who]);
 
 
 
@@ -3540,6 +3617,25 @@ function AppInner() {
           {who === "alba" ? "Alba" : "Josh"} · <button onClick={() => { localStorage.removeItem("hb_who"); window.location.reload(); }} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", cursor: "pointer", padding: 0, textDecoration: "underline" }}>switch</button>
         </div>
       </div>
+
+      {/* Push notification prompt for Josh */}
+      {showPushPrompt && who === "josh" && (
+        <div style={{ position: "fixed", bottom: 90, left: 0, right: 0, zIndex: 300, padding: "0 16px" }}>
+          <div style={{ background: "var(--text)", borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 4px 20px rgba(28,26,24,0.25)" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 14, color: "var(--bg)", marginBottom: 2 }}>Enable notifications</div>
+              <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: "0.18em", color: "var(--muted2)" }}>Get notified when Alba assigns you tasks</div>
+            </div>
+            <button onClick={async () => {
+              const ok = await registerPushForJosh();
+              if (ok) setShowPushPrompt(false);
+            }} style={{ background: "var(--sage)", border: "none", borderRadius: 10, padding: "8px 16px", color: "#fff", fontSize: 12, fontFamily: "'DM Mono', monospace", letterSpacing: "0.1em", cursor: "pointer", flexShrink: 0 }}>
+              Allow
+            </button>
+            <button onClick={() => { setShowPushPrompt(false); localStorage.setItem("push_registered_josh", "dismissed"); }} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 18, cursor: "pointer", padding: "0 4px" }}>×</button>
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <div style={{ marginLeft: desktop ? SIDEBAR_W : 0, paddingBottom: desktop ? 0 : 100 }}>
