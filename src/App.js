@@ -243,6 +243,46 @@ const advanceTriggerMonth = (tm) => {
   return `${m}/${parseInt(y) + 1}`;
 };
 
+async function runPlanRollover() {
+  const currentMonthKey = (() => {
+    const d = new Date();
+    return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  })();
+
+  const { data: meta } = await sb.from("app_meta").select("value").eq("key", "plan_rollover_last_run").maybeSingle();
+  if (meta?.value === currentMonthKey) return; // already ran this month
+
+  const { data: due } = await sb.from("planning_events")
+    .select("*")
+    .eq("trigger_month", currentMonthKey)
+    .eq("done", false)
+    .eq("promoted", false);
+
+  for (const item of (due || [])) {
+    await sb.from("next_actions").insert({
+      id: `na_plan_${item.id}_${Date.now()}`,
+      text: item.text,
+      assigned: "alba",
+      context: "phone",
+      done: false,
+    });
+    await sb.from("planning_events").update({ promoted: true }).eq("id", item.id);
+    if (item.recurring) {
+      await sb.from("planning_events").insert({
+        id: `pl_${item.id}_${Date.now()}`,
+        text: item.text,
+        trigger_month: advanceTriggerMonth(item.trigger_month),
+        notes: item.notes || "",
+        recurring: true,
+        done: false,
+        promoted: false,
+      });
+    }
+  }
+
+  await sb.from("app_meta").upsert({ key: "plan_rollover_last_run", value: currentMonthKey });
+}
+
 const JOSH_AGENDA = [
   "Review the week",
   "Next week — what needs doing",
@@ -1835,7 +1875,7 @@ function MonthScreen({ who }) {
     setPlanItems(ps => ps.filter(p => p.id !== item.id));
   };
 
-  const promotePlanItem = async (item) => {
+const promotePlanItem = async (item) => {
     await sb.from("planning_events").update({ promoted: true }).eq("id", item.id);
     const promotedItem = {
       id: `na_plan_${Date.now()}`,
@@ -1846,6 +1886,18 @@ function MonthScreen({ who }) {
     };
     const { error: promoteError } = await sb.from("next_actions").insert(promotedItem);
     if (promoteError) console.error("promote error:", promoteError);
+    if (item.recurring) {
+      const { error: rollError } = await sb.from("planning_events").insert({
+        id: `pl_${item.id}_${Date.now()}`,
+        text: item.text,
+        trigger_month: advanceTriggerMonth(item.trigger_month),
+        notes: item.notes || "",
+        recurring: true,
+        done: false,
+        promoted: false,
+      });
+      if (rollError) console.error("rollover error:", rollError);
+    }
     setPlanItems(ps => ps.filter(p => p.id !== item.id));
   };
 
@@ -3595,6 +3647,10 @@ function AppInner() {
       setShowPushPrompt(true);
     }
   }, [who]);
+
+  useEffect(() => {
+  if (who) runPlanRollover();
+}, [who]);
 
   // ── Pull-to-refresh ──────────────────────────────────────────────────────────
   const [pullY, setPullY] = useState(0);
