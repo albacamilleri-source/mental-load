@@ -243,44 +243,56 @@ const advanceTriggerMonth = (tm) => {
   return `${m}/${parseInt(y) + 1}`;
 };
 
+// ─── PLAN ROLLOVER (runs once per calendar month, checkpointed in app_meta) ───
 async function runPlanRollover() {
   const currentMonthKey = (() => {
     const d = new Date();
     return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
   })();
 
-  const { data: meta } = await sb.from("app_meta").select("value").eq("key", "plan_rollover_last_run").maybeSingle();
-  if (meta?.value === currentMonthKey) return; // already ran this month
+  try {
+    const { data: meta } = await sb.from("app_meta").select("value").eq("key", "plan_rollover_last_run").maybeSingle();
+    if (meta?.value === currentMonthKey) return; // already ran this month
 
-  const { data: due } = await sb.from("planning_events")
-    .select("*")
-    .eq("trigger_month", currentMonthKey)
-    .eq("done", false)
-    .eq("promoted", false);
+    const { data: due, error: dueError } = await sb.from("planning_events")
+      .select("*")
+      .eq("trigger_month", currentMonthKey)
+      .eq("done", false)
+      .eq("promoted", false);
+    if (dueError) { console.error("Plan rollover: failed to load due items:", dueError); return; }
 
-  for (const item of (due || [])) {
-    await sb.from("next_actions").insert({
-      id: `na_plan_${item.id}_${Date.now()}`,
-      text: item.text,
-      assigned: "alba",
-      context: "phone",
-      done: false,
-    });
-    await sb.from("planning_events").update({ promoted: true }).eq("id", item.id);
-    if (item.recurring) {
-      await sb.from("planning_events").insert({
-        id: `pl_${item.id}_${Date.now()}`,
+    for (const item of (due || [])) {
+      const { error: naError } = await sb.from("next_actions").insert({
+        id: `na_plan_${item.id}_${Date.now()}`,
         text: item.text,
-        trigger_month: advanceTriggerMonth(item.trigger_month),
-        notes: item.notes || "",
-        recurring: true,
+        assigned: "alba",
+        context: "phone",
         done: false,
-        promoted: false,
       });
-    }
-  }
+      if (naError) { console.error("Plan rollover: failed to copy item to Tasks:", item.text, naError); continue; }
 
-  await sb.from("app_meta").upsert({ key: "plan_rollover_last_run", value: currentMonthKey });
+      const { error: promoteError } = await sb.from("planning_events").update({ promoted: true }).eq("id", item.id);
+      if (promoteError) console.error("Plan rollover: failed to mark promoted:", item.text, promoteError);
+
+      if (item.recurring) {
+        const { error: rollError } = await sb.from("planning_events").insert({
+          id: `pl_${item.id}_${Date.now()}`,
+          text: item.text,
+          trigger_month: advanceTriggerMonth(item.trigger_month),
+          notes: item.notes || "",
+          recurring: true,
+          done: false,
+          promoted: false,
+        });
+        if (rollError) console.error("Plan rollover: failed to create next-year copy:", item.text, rollError);
+      }
+    }
+
+    const { error: metaError } = await sb.from("app_meta").upsert({ key: "plan_rollover_last_run", value: currentMonthKey });
+    if (metaError) console.error("Plan rollover: failed to write checkpoint:", metaError);
+  } catch (e) {
+    console.error("Plan rollover: unexpected error:", e);
+  }
 }
 
 const JOSH_AGENDA = [
@@ -1875,7 +1887,7 @@ function MonthScreen({ who }) {
     setPlanItems(ps => ps.filter(p => p.id !== item.id));
   };
 
-const promotePlanItem = async (item) => {
+  const promotePlanItem = async (item) => {
     await sb.from("planning_events").update({ promoted: true }).eq("id", item.id);
     const promotedItem = {
       id: `na_plan_${Date.now()}`,
@@ -1886,18 +1898,6 @@ const promotePlanItem = async (item) => {
     };
     const { error: promoteError } = await sb.from("next_actions").insert(promotedItem);
     if (promoteError) console.error("promote error:", promoteError);
-    if (item.recurring) {
-      const { error: rollError } = await sb.from("planning_events").insert({
-        id: `pl_${item.id}_${Date.now()}`,
-        text: item.text,
-        trigger_month: advanceTriggerMonth(item.trigger_month),
-        notes: item.notes || "",
-        recurring: true,
-        done: false,
-        promoted: false,
-      });
-      if (rollError) console.error("rollover error:", rollError);
-    }
     setPlanItems(ps => ps.filter(p => p.id !== item.id));
   };
 
@@ -3649,8 +3649,8 @@ function AppInner() {
   }, [who]);
 
   useEffect(() => {
-  if (who) runPlanRollover();
-}, [who]);
+    if (who) runPlanRollover();
+  }, [who]);
 
   // ── Pull-to-refresh ──────────────────────────────────────────────────────────
   const [pullY, setPullY] = useState(0);
