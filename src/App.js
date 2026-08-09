@@ -1898,6 +1898,18 @@ function MonthScreen({ who }) {
     };
     const { error: promoteError } = await sb.from("next_actions").insert(promotedItem);
     if (promoteError) console.error("promote error:", promoteError);
+    if (item.recurring) {
+      const { error: rollError } = await sb.from("planning_events").insert({
+        id: `pl_${item.id}_${Date.now()}`,
+        text: item.text,
+        trigger_month: advanceTriggerMonth(item.trigger_month),
+        notes: item.notes || "",
+        recurring: true,
+        done: false,
+        promoted: false,
+      });
+      if (rollError) console.error("rollover error:", rollError);
+    }
     setPlanItems(ps => ps.filter(p => p.id !== item.id));
   };
 
