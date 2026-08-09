@@ -643,7 +643,7 @@ const wmoEmoji = (code) => {
 const WEEK_DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 function WeatherStrip({ weather }) {
-  if (!weather) return null;
+  if (!weather || !weather.current || !weather.daily) return null;
   const cur = weather.current;
   const daily = weather.daily;
   const sunrise = daily.sunrise?.[0] ? new Date(daily.sunrise[0]).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Malta" }) : null;
@@ -686,7 +686,7 @@ function WeatherStrip({ weather }) {
 }
 
 // ─── TODAY SCREEN ─────────────────────────────────────────────────────────────
-function SuggestedTaskRow({ task, isDone, onToggle, color = "var(--sage)" }) {
+function SuggestedTaskRow({ task, isDone, onToggle, color = "var(--sage)", badge }) {
   const [swipeX, setSwipeX] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const startX = useRef(null);
@@ -736,20 +736,20 @@ function SuggestedTaskRow({ task, isDone, onToggle, color = "var(--sage)" }) {
         }}>
         <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: isDone ? "var(--border)" : color, transition: "all 0.18s" }} />
         <span style={{ fontSize: 14, color: isDone ? "var(--muted2)" : "var(--text)", textDecoration: isDone ? "line-through" : "none", flex: 1, transition: "all 0.18s" }}>{task.text}</span>
+        {badge && !isDone && <span style={{ fontSize: 8, padding: "2px 7px", borderRadius: 20, background: `${color}15`, color, fontFamily: "'DM Mono', monospace", letterSpacing: "0.12em", flexShrink: 0 }}>{badge}</span>}
       </div>
     </div>
   );
 }
 
-function SuggestedTasks() {
-  const [tasks, setTasks] = useState([]);
-  const [done, setDone] = useState(new Set());
+function SuggestedTasks({ who }) {
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const today = new Date();
   const dow = today.getDay(); // 0=Sun ... 6=Sat
 
-  // ISO week key — resets on Monday midnight
+  // ISO week key — resets on Monday midnight (used for the original day-of-week suggested items)
   const weekKey = (() => {
     const d = new Date(today);
     d.setHours(0, 0, 0, 0);
@@ -759,56 +759,88 @@ function SuggestedTasks() {
     return `${d.getFullYear()}-W${String(week).padStart(2, "0")}`;
   })();
 
-  useEffect(() => {
-    const load = async () => {
-      // Load ALL tasks for the week, filter client-side
-      const [{ data: t }, { data: c }] = await Promise.all([
-        sb.from("suggested_tasks").select("*").order("day_of_week").order("sort_order"),
-        sb.from("suggested_completions").select("task_id").eq("week_key", weekKey),
-      ]);
-      const completedIds = new Set((c || []).map(r => r.task_id));
+  // Same period keys the Month/Week screens use — so completions stay in sync both ways
+  const mKey = monthlyKey();
+  const wKey = weeklyKey();
 
-      // Days of week in order Mon=1 through Sun=0
-      // Convert to a "day index" where Mon=0, Tue=1 ... Sun=6
-      const toIdx = d => d === 0 ? 6 : d - 1;
-      const todayIdx = toIdx(dow);
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [
+      { data: sugTasks },
+      { data: sugCompletions },
+      { data: routineTasks },
+      { data: monthlyCompletions },
+      { data: weeklyCompletions },
+    ] = await Promise.all([
+      sb.from("suggested_tasks").select("*").order("day_of_week").order("sort_order"),
+      sb.from("suggested_completions").select("task_id").eq("week_key", weekKey),
+      sb.from("routine_tasks").select("*").in("type", ["monthly", "weekly_other"]).order("sort_order"),
+      sb.from("routine_completions").select("task_id").eq("period_key", mKey),
+      sb.from("routine_completions").select("task_id").eq("period_key", wKey),
+    ]);
 
-      const visible = (t || []).filter(task => {
+    const sugDone = new Set((sugCompletions || []).map(r => r.task_id));
+    const monthDone = new Set((monthlyCompletions || []).map(r => r.task_id));
+    const weekDone = new Set((weeklyCompletions || []).map(r => r.task_id));
+
+    // Days of week in order Mon=1 through Sun=0 → convert to Mon=0 ... Sun=6
+    const toIdx = d => d === 0 ? 6 : d - 1;
+    const todayIdx = toIdx(dow);
+
+    const sugVisible = (sugTasks || [])
+      .filter(task => {
         const taskIdx = toIdx(task.day_of_week);
         if (taskIdx === todayIdx) return true; // always show today's
-        if (taskIdx < todayIdx && !completedIds.has(task.id)) return true; // undone from earlier this week
+        if (taskIdx < todayIdx && !sugDone.has(task.id)) return true; // undone from earlier this week
         return false;
-      });
+      })
+      .map(t => ({ id: t.id, text: t.text, source: "suggested", color: "var(--sage)", badge: null, isDone: sugDone.has(t.id) }));
 
-      setTasks(visible);
-      setDone(completedIds);
-      setLoading(false);
-    };
-    load();
-  }, []);
+    // Monthly Tasks — show anything not yet done this month; disappear once ticked
+    const monthlyVisible = (routineTasks || [])
+      .filter(t => t.type === "monthly" && !monthDone.has(t.id))
+      .map(t => ({ id: t.id, text: t.text, source: "monthly", color: "var(--planning)", badge: "monthly", isDone: false }));
 
-  const toggle = async (taskId) => {
+    // Weekly Admin — show anything not yet done this week; disappear once ticked
+    const weeklyAdminVisible = (routineTasks || [])
+      .filter(t => t.type === "weekly_other" && !weekDone.has(t.id))
+      .map(t => ({ id: t.id, text: t.text, source: "weekly_admin", color: "var(--admin)", badge: "weekly", isDone: false }));
+
+    setItems([...sugVisible, ...monthlyVisible, ...weeklyAdminVisible]);
+    setLoading(false);
+  }, [weekKey, mKey, wKey, dow]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggle = async (item) => {
     haptic(8);
-    if (done.has(taskId)) {
-      await sb.from("suggested_completions").delete().eq("task_id", taskId).eq("week_key", weekKey);
-      setDone(s => { const n = new Set(s); n.delete(taskId); return n; });
-    } else {
-      await sb.from("suggested_completions").upsert({ task_id: taskId, week_key: weekKey });
-      setDone(s => new Set([...s, taskId]));
+    if (item.source === "suggested") {
+      if (item.isDone) {
+        await sb.from("suggested_completions").delete().eq("task_id", item.id).eq("week_key", weekKey);
+      } else {
+        await sb.from("suggested_completions").upsert({ task_id: item.id, week_key: weekKey });
+      }
+    } else if (item.source === "monthly") {
+      await sb.from("routine_completions").upsert({ task_id: item.id, period_key: mKey, completed_by: who });
+    } else if (item.source === "weekly_admin") {
+      await sb.from("routine_completions").upsert({ task_id: item.id, period_key: wKey, completed_by: who });
     }
+    load();
   };
 
-  if (loading || tasks.length === 0) return null;
+  if (loading || items.length === 0) return null;
+
+  const doneCount = items.filter(i => i.isDone).length;
 
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--sage)", textTransform: "uppercase", letterSpacing: "0.22em" }}>Suggested</span>
-        <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{tasks.filter(t => done.has(t.id)).length}/{tasks.length}</span>
+        <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted2)" }}>{doneCount}/{items.length}</span>
       </div>
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {tasks.map(t => (
-          <SuggestedTaskRow key={t.id} task={t} isDone={done.has(t.id)} onToggle={() => toggle(t.id)} />
+        {items.map(item => (
+          <SuggestedTaskRow key={`${item.source}_${item.id}`} task={item} isDone={item.isDone} onToggle={() => toggle(item)} color={item.color} badge={item.badge} />
         ))}
       </div>
     </div>
@@ -1103,7 +1135,7 @@ function TodayScreen({ who }) {
                 </div>
               </div>
             )}
-            <SuggestedTasks />
+            <SuggestedTasks who={who} />
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--planning)", textTransform: "uppercase", letterSpacing: "0.22em", fontWeight: 400 }}>Today</span>
