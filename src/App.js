@@ -815,17 +815,24 @@ function SuggestedTasks({ who }) {
   const toggle = async (item) => {
     haptic(8);
     if (item.source === "suggested") {
-      if (item.isDone) {
-        await sb.from("suggested_completions").delete().eq("task_id", item.id).eq("week_key", weekKey);
-      } else {
-        await sb.from("suggested_completions").upsert({ task_id: item.id, week_key: weekKey });
+      const nowDone = !item.isDone;
+      setItems(its => its.map(i => (i.source === "suggested" && i.id === item.id) ? { ...i, isDone: nowDone } : i));
+      const { error } = nowDone
+        ? await sb.from("suggested_completions").upsert({ task_id: item.id, week_key: weekKey })
+        : await sb.from("suggested_completions").delete().eq("task_id", item.id).eq("week_key", weekKey);
+      if (error) {
+        console.error("Suggested toggle failed:", error);
+        setItems(its => its.map(i => (i.source === "suggested" && i.id === item.id) ? { ...i, isDone: item.isDone } : i));
       }
     } else if (item.source === "monthly") {
-      await sb.from("routine_completions").upsert({ task_id: item.id, period_key: mKey, completed_by: who });
+      setItems(its => its.filter(i => !(i.source === "monthly" && i.id === item.id)));
+      const { error } = await sb.from("routine_completions").upsert({ task_id: item.id, period_key: mKey, completed_by: who });
+      if (error) { console.error("Monthly toggle failed:", error); setItems(its => [...its, item]); }
     } else if (item.source === "weekly_admin") {
-      await sb.from("routine_completions").upsert({ task_id: item.id, period_key: wKey, completed_by: who });
+      setItems(its => its.filter(i => !(i.source === "weekly_admin" && i.id === item.id)));
+      const { error } = await sb.from("routine_completions").upsert({ task_id: item.id, period_key: wKey, completed_by: who });
+      if (error) { console.error("Weekly admin toggle failed:", error); setItems(its => [...its, item]); }
     }
-    load();
   };
 
   if (loading || items.length === 0) return null;
