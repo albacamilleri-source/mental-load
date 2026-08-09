@@ -1884,6 +1884,18 @@ function MonthScreen({ who }) {
 
   const tickPlanItem = async (item) => {
     await sb.from("planning_events").update({ done: true }).eq("id", item.id);
+    if (item.recurring) {
+      const { error: rollError } = await sb.from("planning_events").insert({
+        id: `pl_${item.id}_${Date.now()}`,
+        text: item.text,
+        trigger_month: advanceTriggerMonth(item.trigger_month),
+        notes: item.notes || "",
+        recurring: true,
+        done: false,
+        promoted: false,
+      });
+      if (rollError) console.error("rollover error:", rollError);
+    }
     setPlanItems(ps => ps.filter(p => p.id !== item.id));
   };
 
@@ -1986,7 +1998,7 @@ function PlanScreen() {
   const eventPanelRef = useRef(null);
 
   const load = useCallback(async () => {
-    const { data } = await sb.from("planning_events").select("*").eq("promoted", false).order("trigger_month");
+    const { data } = await sb.from("planning_events").select("*").eq("promoted", false).eq("done", false).order("trigger_month");
     setEvents(data || []);
     setLoading(false);
   }, []);
