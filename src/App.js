@@ -2144,17 +2144,22 @@ function PlanScreen() {
                         border: `1px solid ${isSelected ? "transparent" : current ? "var(--sage)" : "var(--border)"}`,
                         opacity: past ? 0.38 : 1,
                         cursor: past ? "default" : "pointer",
-                        minHeight: 72,
+                        height: 104,
                         overflow: "hidden",
                         transition: "all 0.18s",
                         boxShadow: current && !isSelected ? "0 0 0 1.5px var(--sage)44" : "none",
                       }}
                     >
                       <div style={{ fontSize: 11, fontWeight: isSelected || current ? 500 : 400, fontFamily: "'Outfit', system-ui, sans-serif", color: isSelected ? "#fff" : "var(--text)", marginBottom: 4 }}>{mon}</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                         {evs.slice(0, 2).map((e, i) => (
-                          <div key={i} style={{ fontSize: 10, color: isSelected ? "rgba(255,255,255,0.85)" : "var(--planning)", fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.5 }}>
-                            {e.text.replace(/^Plan /, "")}
+                          <div key={i} style={{
+                            fontSize: 10, color: isSelected ? "rgba(255,255,255,0.85)" : "var(--planning)",
+                            fontFamily: "'DM Mono', monospace", lineHeight: 1.4,
+                            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                            overflow: "hidden", textOverflow: "ellipsis", wordBreak: "break-word",
+                          }}>
+                            {e.text}
                           </div>
                         ))}
                         {evs.length > 2 && (
