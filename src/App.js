@@ -1986,7 +1986,7 @@ function PlanScreen() {
   const eventPanelRef = useRef(null);
 
   const load = useCallback(async () => {
-    const { data } = await sb.from("planning_events").select("*").order("trigger_month");
+    const { data } = await sb.from("planning_events").select("*").eq("promoted", false).order("trigger_month");
     setEvents(data || []);
     setLoading(false);
   }, []);
