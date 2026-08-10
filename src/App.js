@@ -1624,8 +1624,10 @@ function TasksScreen({ who }) {
   const [newDate, setNewDate] = useState("");
   const [addingWF, setAddingWF] = useState(false);
   const [newWF, setNewWF] = useState("");
+  const [newWFNotes, setNewWFNotes] = useState("");
   const [editingWF, setEditingWF] = useState(null);
   const [editWFText, setEditWFText] = useState("");
+  const [editWFNotes, setEditWFNotes] = useState("");
   const [completingWF, setCompletingWF] = useState(null);
   const [loading, setLoading] = useState(true);
   const isDesktop = window.innerWidth >= 768;
@@ -1692,12 +1694,12 @@ function TasksScreen({ who }) {
   const addWF = async () => {
     if (!newWF.trim()) return;
     const { data, error } = await sb.from("waiting_for")
-      .insert({ text: newWF.trim() })
-      .select("id, text")
+      .insert({ text: newWF.trim(), notes: newWFNotes.trim() || "" })
+      .select("id, text, notes")
       .single();
     if (error) console.error("addWF error:", error);
-    setWaiting(ws => [...ws, data || { id: `wf_${Date.now()}`, text: newWF.trim() }]);
-    setNewWF(""); setAddingWF(false);
+    setWaiting(ws => [...ws, data || { id: `wf_${Date.now()}`, text: newWF.trim(), notes: newWFNotes.trim() || "" }]);
+    setNewWF(""); setNewWFNotes(""); setAddingWF(false);
   };
 
   const removeWF = async (id) => {
@@ -1708,26 +1710,30 @@ function TasksScreen({ who }) {
   const startEditingWF = (item) => {
     setEditingWF(item.id);
     setEditWFText(item.text);
+    setEditWFNotes(item.notes || "");
   };
 
   const saveWF = async (item) => {
     const text = editWFText.trim();
     if (!text) return;
-    const { error } = await sb.from("waiting_for").update({ text }).eq("id", item.id);
+    const notes = editWFNotes.trim();
+    const { error } = await sb.from("waiting_for").update({ text, notes }).eq("id", item.id);
     if (error) { console.error("saveWF error:", error.message); return; }
-    setWaiting(ws => ws.map(w => w.id === item.id ? { ...w, text } : w));
+    setWaiting(ws => ws.map(w => w.id === item.id ? { ...w, text, notes } : w));
     setEditingWF(null);
     setEditWFText("");
+    setEditWFNotes("");
   };
 
   const cancelEditingWF = () => {
     setEditingWF(null);
     setEditWFText("");
+    setEditWFNotes("");
   };
 
   const tickWF = async (item) => {
     await sb.from("waiting_for").delete().eq("id", item.id);
-    await sb.from("history_items").insert({ text: item.text, notes: "", source: "waiting_for" });
+    await sb.from("history_items").insert({ text: item.text, notes: item.notes || "", source: "waiting_for" });
     setWaiting(ws => ws.filter(w => w.id !== item.id));
     setCompletingWF(null);
   };
@@ -1920,7 +1926,7 @@ function TasksScreen({ who }) {
               onChange={e => setNewDate(e.target.value)}
               style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: newDate ? "var(--text)" : "var(--muted2)", fontSize: 16, outline: "none", width: "100%" }}
             />
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, background: "var(--surface)", borderRadius: 12, padding: 12, border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(28,26,24,0.06)" }}>
               <button onClick={addTask} style={{ flex: 1, padding: "9px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 500 }}>Add</button>
               <button onClick={() => setAdding(false)} style={{ padding: "9px 16px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 13 }}>Cancel</button>
             </div>
@@ -1933,24 +1939,29 @@ function TasksScreen({ who }) {
       <div style={{ padding: "24px 20px 0" }}>
         <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.22em" }}>Waiting For</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {waiting.map(w => (
+          {waiting.map(w => editingWF === w.id ? (
+            <div key={w.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--sage)44", boxShadow: "0 2px 8px rgba(28,26,24,0.06)" }}>
+              <input autoFocus value={editWFText} onChange={e => setEditWFText(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") saveWF(w); if (e.key === "Escape") cancelEditingWF(); }}
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none" }}
+              />
+              <textarea value={editWFNotes} onChange={e => setEditWFNotes(e.target.value)} placeholder="Notes — optional" rows={3}
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", resize: "vertical", lineHeight: 1.45 }}
+              />
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => saveWF(w)} style={{ flex: 1, padding: "7px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Save</button>
+                <button onClick={cancelEditingWF} style={{ padding: "7px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                <button onClick={() => removeWF(w.id)} style={{ padding: "7px 12px", background: "none", border: "none", color: "var(--danger)", fontSize: 12, cursor: "pointer" }}>Delete</button>
+              </div>
+            </div>
+          ) : (
             <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: completingWF === w.id ? "transparent" : "var(--surface)", borderRadius: 10, border: `1px solid ${completingWF === w.id ? "transparent" : "var(--border)"}`, boxShadow: completingWF === w.id ? "none" : "0 1px 4px rgba(28,26,24,0.04)", opacity: completingWF === w.id ? 0 : 1, transition: completingWF === w.id ? "opacity 0.4s 0.2s ease, background 0.2s ease, border 0.2s ease" : "none" }}>
               <div onClick={() => completeWF(w)} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: completingWF === w.id ? "var(--border)" : "var(--sage)", opacity: 0.7, cursor: "pointer", transition: "all 0.18s" }} />
-              {editingWF === w.id ? (
-                <input autoFocus value={editWFText} onChange={e => setEditWFText(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") saveWF(w); if (e.key === "Escape") cancelEditingWF(); }}
-                  style={{ flex: 1, minWidth: 0, background: "var(--bg)", border: "1px solid var(--sage)", borderRadius: 8, padding: "7px 9px", color: "var(--text)", fontSize: 16, outline: "none" }}
-                />
-              ) : (
-                <span onClick={() => completingWF !== w.id && startEditingWF(w)} style={{ flex: 1, fontSize: 14, color: completingWF === w.id ? "var(--muted2)" : "var(--text)", cursor: "text", textDecoration: completingWF === w.id ? "line-through" : "none", transition: "all 0.2s" }}>{w.text}</span>
-              )}
-              {editingWF === w.id ? <>
-                <button onClick={() => saveWF(w)} style={{ padding: "7px 10px", background: "var(--sage)", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, cursor: "pointer" }}>Save</button>
-                <button onClick={cancelEditingWF} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
-              </> : (
-                completingWF !== w.id && <button onClick={() => startEditingWF(w)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }} title="Edit">✎</button>
-              )}
-              {completingWF !== w.id && <button onClick={() => removeWF(w.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 14 }} title="Delete permanently">×</button>}
+              <div onClick={() => completingWF !== w.id && startEditingWF(w)} style={{ flex: 1, minWidth: 0, cursor: "text" }}>
+                <div style={{ fontSize: 14, color: completingWF === w.id ? "var(--muted2)" : "var(--text)", textDecoration: completingWF === w.id ? "line-through" : "none", transition: "all 0.2s" }}>{w.text}</div>
+                {w.notes && completingWF !== w.id && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{w.notes}</div>}
+              </div>
+              {completingWF !== w.id && <button onClick={() => startEditingWF(w)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }} title="Edit">✎</button>}
             </div>
           ))}
           {!addingWF ? (
@@ -1960,9 +1971,15 @@ function TasksScreen({ who }) {
               <input autoFocus value={newWF} onChange={e => setNewWF(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") addWF(); if (e.key === "Escape") setAddingWF(false); }}
                 placeholder="Waiting for…"
-                style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 12px", color: "var(--text)", fontSize: 16, outline: "none" }}
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "9px 12px", color: "var(--text)", fontSize: 16, outline: "none" }}
               />
-              <button onClick={addWF} style={{ padding: "9px 14px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13 }}>Add</button>
+              <textarea value={newWFNotes} onChange={e => setNewWFNotes(e.target.value)} placeholder="Notes — optional" rows={3}
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", resize: "vertical", lineHeight: 1.45 }}
+              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={addWF} style={{ flex: 1, padding: "9px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 500 }}>Save</button>
+                <button onClick={() => { setAddingWF(false); setNewWF(""); setNewWFNotes(""); }} style={{ padding: "9px 16px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 13 }}>Cancel</button>
+              </div>
             </div>
           )}
         </div>
