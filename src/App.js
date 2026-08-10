@@ -1626,6 +1626,7 @@ function TasksScreen({ who }) {
   const [newWF, setNewWF] = useState("");
   const [editingWF, setEditingWF] = useState(null);
   const [editWFText, setEditWFText] = useState("");
+  const [completingWF, setCompletingWF] = useState(null);
   const [loading, setLoading] = useState(true);
   const isDesktop = window.innerWidth >= 768;
 
@@ -1728,6 +1729,14 @@ function TasksScreen({ who }) {
     await sb.from("waiting_for").delete().eq("id", item.id);
     await sb.from("history_items").insert({ text: item.text, notes: "", source: "waiting_for" });
     setWaiting(ws => ws.filter(w => w.id !== item.id));
+    setCompletingWF(null);
+  };
+
+  const completeWF = (item) => {
+    if (completingWF || editingWF === item.id) return;
+    haptic(8);
+    setCompletingWF(item.id);
+    setTimeout(() => tickWF(item), 600);
   };
 
   const filtered = context === "all" ? tasks : tasks.filter(t => t.context === context);
@@ -1925,23 +1934,23 @@ function TasksScreen({ who }) {
         <div style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.22em" }}>Waiting For</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {waiting.map(w => (
-            <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
-              <div onClick={() => tickWF(w)} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: "var(--sage)", opacity: 0.7, cursor: "pointer" }} />
+            <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: completingWF === w.id ? "transparent" : "var(--surface)", borderRadius: 10, border: `1px solid ${completingWF === w.id ? "transparent" : "var(--border)"}`, boxShadow: completingWF === w.id ? "none" : "0 1px 4px rgba(28,26,24,0.04)", opacity: completingWF === w.id ? 0 : 1, transition: completingWF === w.id ? "opacity 0.4s 0.2s ease, background 0.2s ease, border 0.2s ease" : "none" }}>
+              <div onClick={() => completeWF(w)} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: completingWF === w.id ? "var(--border)" : "var(--sage)", opacity: 0.7, cursor: "pointer", transition: "all 0.18s" }} />
               {editingWF === w.id ? (
                 <input autoFocus value={editWFText} onChange={e => setEditWFText(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") saveWF(w); if (e.key === "Escape") cancelEditingWF(); }}
                   style={{ flex: 1, minWidth: 0, background: "var(--bg)", border: "1px solid var(--sage)", borderRadius: 8, padding: "7px 9px", color: "var(--text)", fontSize: 16, outline: "none" }}
                 />
               ) : (
-                <span onClick={() => startEditingWF(w)} style={{ flex: 1, fontSize: 14, color: "var(--text)", cursor: "text" }}>{w.text}</span>
+                <span onClick={() => completingWF !== w.id && startEditingWF(w)} style={{ flex: 1, fontSize: 14, color: completingWF === w.id ? "var(--muted2)" : "var(--text)", cursor: "text", textDecoration: completingWF === w.id ? "line-through" : "none", transition: "all 0.2s" }}>{w.text}</span>
               )}
               {editingWF === w.id ? <>
                 <button onClick={() => saveWF(w)} style={{ padding: "7px 10px", background: "var(--sage)", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, cursor: "pointer" }}>Save</button>
                 <button onClick={cancelEditingWF} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
               </> : (
-                <button onClick={() => startEditingWF(w)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }} title="Edit">edit</button>
+                completingWF !== w.id && <button onClick={() => startEditingWF(w)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }} title="Edit">✎</button>
               )}
-              <button onClick={() => removeWF(w.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 14 }} title="Delete permanently">×</button>
+              {completingWF !== w.id && <button onClick={() => removeWF(w.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 14 }} title="Delete permanently">×</button>}
             </div>
           ))}
           {!addingWF ? (
