@@ -1624,6 +1624,8 @@ function TasksScreen({ who }) {
   const [newDate, setNewDate] = useState("");
   const [addingWF, setAddingWF] = useState(false);
   const [newWF, setNewWF] = useState("");
+  const [editingWF, setEditingWF] = useState(null);
+  const [editWFText, setEditWFText] = useState("");
   const [loading, setLoading] = useState(true);
   const isDesktop = window.innerWidth >= 768;
 
@@ -1700,6 +1702,26 @@ function TasksScreen({ who }) {
   const removeWF = async (id) => {
     await sb.from("waiting_for").delete().eq("id", id);
     setWaiting(ws => ws.filter(w => w.id !== id));
+  };
+
+  const startEditingWF = (item) => {
+    setEditingWF(item.id);
+    setEditWFText(item.text);
+  };
+
+  const saveWF = async (item) => {
+    const text = editWFText.trim();
+    if (!text) return;
+    const { error } = await sb.from("waiting_for").update({ text }).eq("id", item.id);
+    if (error) { console.error("saveWF error:", error.message); return; }
+    setWaiting(ws => ws.map(w => w.id === item.id ? { ...w, text } : w));
+    setEditingWF(null);
+    setEditWFText("");
+  };
+
+  const cancelEditingWF = () => {
+    setEditingWF(null);
+    setEditWFText("");
   };
 
   const tickWF = async (item) => {
@@ -1905,7 +1927,20 @@ function TasksScreen({ who }) {
           {waiting.map(w => (
             <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
               <div onClick={() => tickWF(w)} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: "var(--sage)", opacity: 0.7, cursor: "pointer" }} />
-              <span style={{ flex: 1, fontSize: 14, color: "var(--text)" }}>{w.text}</span>
+              {editingWF === w.id ? (
+                <input autoFocus value={editWFText} onChange={e => setEditWFText(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveWF(w); if (e.key === "Escape") cancelEditingWF(); }}
+                  style={{ flex: 1, minWidth: 0, background: "var(--bg)", border: "1px solid var(--sage)", borderRadius: 8, padding: "7px 9px", color: "var(--text)", fontSize: 16, outline: "none" }}
+                />
+              ) : (
+                <span onClick={() => startEditingWF(w)} style={{ flex: 1, fontSize: 14, color: "var(--text)", cursor: "text" }}>{w.text}</span>
+              )}
+              {editingWF === w.id ? <>
+                <button onClick={() => saveWF(w)} style={{ padding: "7px 10px", background: "var(--sage)", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, cursor: "pointer" }}>Save</button>
+                <button onClick={cancelEditingWF} style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+              </> : (
+                <button onClick={() => startEditingWF(w)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }} title="Edit">edit</button>
+              )}
               <button onClick={() => removeWF(w.id)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 14 }} title="Delete permanently">×</button>
             </div>
           ))}
