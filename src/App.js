@@ -1629,6 +1629,9 @@ function TasksScreen({ who }) {
   const [editWFText, setEditWFText] = useState("");
   const [editWFNotes, setEditWFNotes] = useState("");
   const [completingWF, setCompletingWF] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const pendingDeleteRef = useRef(null);
+  const deleteTimerRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const isDesktop = window.innerWidth >= 768;
 
@@ -1638,8 +1641,9 @@ function TasksScreen({ who }) {
       sb.from("waiting_for").select("*").order("created_at"),
     ]);
     if (te) console.error("next_actions load error:", te.message);
-    setTasks(t || []);
-    setWaiting(w || []);
+    const pending = pendingDeleteRef.current;
+    setTasks((t || []).filter(item => !(pending?.kind === "task" && item.id === pending.item.id)));
+    setWaiting((w || []).filter(item => !(pending?.kind === "waiting" && item.id === pending.item.id)));
     setLoading(false);
   }, []);
 
@@ -1666,9 +1670,57 @@ function TasksScreen({ who }) {
     setTasks(ts => ts.map(t => t.id === task.id ? { ...t, text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null } : t));
   };
 
-  const deleteTask = async (id) => {
-    await sb.from("next_actions").delete().eq("id", id);
+  const commitDelete = (pending) => {
+    if (!pending) return;
+    const table = pending.kind === "task" ? "next_actions" : "waiting_for";
+    sb.from(table).delete().eq("id", pending.item.id).then(({ error }) => {
+      if (error) console.error("delete error:", error.message);
+    });
+  };
+
+  const queueDelete = (kind, item, index) => {
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    if (pendingDeleteRef.current) commitDelete(pendingDeleteRef.current);
+    const pending = { kind, item, index };
+    pendingDeleteRef.current = pending;
+    setPendingDelete(pending);
+    deleteTimerRef.current = setTimeout(() => {
+      const current = pendingDeleteRef.current;
+      pendingDeleteRef.current = null;
+      setPendingDelete(null);
+      commitDelete(current);
+      deleteTimerRef.current = null;
+    }, 5000);
+  };
+
+  const undoDelete = () => {
+    const pending = pendingDeleteRef.current;
+    if (!pending) return;
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    if (pending.kind === "task") {
+      setTasks(items => {
+        const restored = [...items];
+        restored.splice(Math.min(pending.index, restored.length), 0, pending.item);
+        return restored;
+      });
+    } else {
+      setWaiting(items => {
+        const restored = [...items];
+        restored.splice(Math.min(pending.index, restored.length), 0, pending.item);
+        return restored;
+      });
+    }
+    pendingDeleteRef.current = null;
+    deleteTimerRef.current = null;
+    setPendingDelete(null);
+  };
+
+  const deleteTask = (id) => {
+    const index = tasks.findIndex(t => t.id === id);
+    if (index < 0) return;
+    const item = tasks[index];
     setTasks(ts => ts.filter(t => t.id !== id));
+    queueDelete("task", item, index);
   };
 
   const addTask = async () => {
@@ -1702,9 +1754,13 @@ function TasksScreen({ who }) {
     setNewWF(""); setNewWFNotes(""); setAddingWF(false);
   };
 
-  const removeWF = async (id) => {
-    await sb.from("waiting_for").delete().eq("id", id);
+  const removeWF = (id) => {
+    const index = waiting.findIndex(w => w.id === id);
+    if (index < 0) return;
+    const item = waiting[index];
     setWaiting(ws => ws.filter(w => w.id !== id));
+    setEditingWF(null);
+    queueDelete("waiting", item, index);
   };
 
   const startEditingWF = (item) => {
@@ -1777,6 +1833,14 @@ function TasksScreen({ who }) {
 
   return (
     <div style={{ padding: "0 0 100px" }}>
+      {pendingDelete && (
+        <div style={{ position: "fixed", left: "50%", bottom: 92, transform: "translateX(-50%)", zIndex: 400, width: "calc(100% - 40px)", maxWidth: 420, padding: "0 4px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--text)", color: "var(--bg)", borderRadius: 12, padding: "12px 14px", boxShadow: "0 6px 24px rgba(28,26,24,0.22)" }}>
+            <span style={{ flex: 1, fontSize: 13 }}>{pendingDelete.kind === "task" ? "Task deleted" : "Waiting For item deleted"}</span>
+            <button onClick={undoDelete} style={{ background: "none", border: "none", color: "var(--sage-light)", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer", padding: "4px" }}>Undo</button>
+          </div>
+        </div>
+      )}
       <div style={{ padding: "72px 20px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <div>
           <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 40, fontWeight: 400, color: "var(--text)", marginBottom: 4, letterSpacing: "-0.02em" }}>Next Actions<span style={{ color: "var(--sage)" }}>.</span></div>
