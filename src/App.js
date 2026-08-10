@@ -1967,7 +1967,7 @@ function TasksScreen({ who }) {
           {!addingWF ? (
             <button onClick={() => setAddingWF(true)} style={{ padding: "9px", background: "none", border: "1.5px dashed var(--border)", borderRadius: 10, color: "var(--muted)", fontSize: 13 }}>+ Add waiting for</button>
           ) : (
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", background: "var(--surface)", borderRadius: 12, padding: 12, border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(28,26,24,0.06)" }}>
               <input autoFocus value={newWF} onChange={e => setNewWF(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") addWF(); if (e.key === "Escape") setAddingWF(false); }}
                 placeholder="Waiting for…"
