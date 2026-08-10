@@ -1353,6 +1353,21 @@ function WeekScreen({ who }) {
     }
   };
 
+  const toggleRoom = async (rts, allDone) => {
+    haptic(8);
+    if (allDone) {
+      // Un-tick every task in the room
+      setCompletions(s => { const n = new Set(s); rts.forEach(t => n.delete(t.id)); return n; });
+      const { error } = await sb.from("routine_completions").delete().eq("period_key", pKey).in("task_id", rts.map(t => t.id));
+      if (error) { console.error("toggleRoom un-tick error:", error); setCompletions(s => new Set([...s, ...rts.map(t => t.id)])); }
+    } else {
+      // Tick every task in the room
+      setCompletions(s => new Set([...s, ...rts.map(t => t.id)]));
+      const { error } = await sb.from("routine_completions").upsert(rts.map(t => ({ task_id: t.id, period_key: pKey, completed_by: who })));
+      if (error) { console.error("toggleRoom tick error:", error); setCompletions(s => { const n = new Set(s); rts.forEach(t => n.delete(t.id)); return n; }); }
+    }
+  };
+
   const isWed = new Date().getDay() === 3;
   const totalRoomDone = roomTasks.filter(t => completions.has(t.id)).length;
   const otherDone = otherTasks.filter(t => completions.has(t.id)).length;
@@ -1377,17 +1392,21 @@ function WeekScreen({ who }) {
               const isOpen = openRoom === room.id;
               return (
                 <div key={room.id} style={{ borderRadius: 12, overflow: "hidden", border: `1px solid var(--border)`, background: "var(--surface)", boxShadow: "0 1px 4px rgba(28,26,24,0.04)" }}>
-                  {/* Header — tap to expand/collapse only, not to complete */}
-                  <button onClick={() => setOpenRoom(isOpen ? null : room.id)} style={{ width: "100%", padding: "13px 15px", background: "none", border: "none", display: "flex", alignItems: "center", justifyContent: "space-between", color: allDone ? "var(--muted2)" : "var(--text)", cursor: "pointer" }}>
+                  {/* Header — label/chevron expand-collapse, dot bulk-toggles all sub-tasks */}
+                  <div onClick={() => setOpenRoom(isOpen ? null : room.id)} style={{ width: "100%", padding: "13px 15px", display: "flex", alignItems: "center", justifyContent: "space-between", color: allDone ? "var(--muted2)" : "var(--text)", cursor: "pointer" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: allDone ? "var(--border)" : "var(--chores)", flexShrink: 0, transition: "all 0.18s" }} />
+                      <div
+                        onClick={(e) => { e.stopPropagation(); if (rts.length > 0) toggleRoom(rts, allDone); }}
+                        style={{ width: 18, height: 18, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: rts.length > 0 ? "pointer" : "default" }}>
+                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: allDone ? "var(--border)" : "var(--chores)", transition: "all 0.18s" }} />
+                      </div>
                       <span style={{ fontSize: 14, textAlign: "left", textDecoration: allDone ? "line-through" : "none", color: allDone ? "var(--muted2)" : "var(--text)", transition: "all 0.18s" }}>{room.label}</span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>{done}/{rts.length}</span>
                       <span style={{ fontSize: 10, color: "var(--muted)", transform: isOpen ? "rotate(180deg)" : "none", transition: "0.2s" }}>▾</span>
                     </div>
-                  </button>
+                  </div>
                   {isOpen && (
                     <div style={{ borderTop: "1px solid var(--border)", padding: "8px 14px 12px", display: "flex", flexDirection: "column", gap: 2 }}>
                       {rts.map(t => {
