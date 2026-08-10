@@ -721,9 +721,22 @@ function WeatherStrip({ weather }) {
 function SuggestedTaskRow({ task, isDone, onToggle, color = "var(--sage)", badge }) {
   const [swipeX, setSwipeX] = useState(0);
   const [swiping, setSwiping] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const startX = useRef(null);
   const toggling = useRef(false);
   const THRESHOLD = 72;
+  const visuallyDone = isDone || completing;
+
+  const complete = () => {
+    if (completing) return;
+    haptic(8);
+    if (isDone) { onToggle(); return; }
+    setCompleting(true);
+    setTimeout(async () => {
+      await onToggle();
+      setCompleting(false);
+    }, 600);
+  };
 
   const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; setSwiping(true); };
   const handleTouchMove = (e) => {
@@ -732,14 +745,14 @@ function SuggestedTaskRow({ task, isDone, onToggle, color = "var(--sage)", badge
     setSwipeX(Math.max(-10, Math.min(80, dx))); // right only
   };
   const handleTouchEnd = () => {
-    if (swipeX >= THRESHOLD) { onToggle(); }
+    if (swipeX >= THRESHOLD) { complete(); }
     setSwipeX(0); setSwiping(false); startX.current = null;
   };
 
   const progress = Math.min(swipeX / THRESHOLD, 1);
 
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 12, marginBottom: 3 }}>
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 12, marginBottom: 3, opacity: completing ? 0 : 1, transition: completing ? "opacity 0.4s 0.2s ease" : "none" }}>
       <div style={{
         position: "absolute", inset: 0, borderRadius: 12,
         background: `rgba(124,158,138,${progress * 0.25})`,
@@ -753,22 +766,22 @@ function SuggestedTaskRow({ task, isDone, onToggle, color = "var(--sage)", badge
         onTouchEnd={handleTouchEnd}
         onClick={() => {
           if (Math.abs(swipeX) < 5 && !toggling.current) {
-            toggling.current = true; onToggle();
+            toggling.current = true; complete();
             setTimeout(() => { toggling.current = false; }, 500);
           }
         }}
         style={{
           display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderRadius: 12,
-          background: isDone ? "transparent" : "var(--surface)",
-          border: `1px solid ${isDone ? "transparent" : "var(--border)"}`,
-          boxShadow: isDone ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
+          background: visuallyDone ? "transparent" : "var(--surface)",
+          border: `1px solid ${visuallyDone ? "transparent" : "var(--border)"}`,
+          boxShadow: visuallyDone ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
           transform: `translateX(${swipeX}px)`,
           transition: swiping ? "none" : "all 0.28s cubic-bezier(0.32,0,0.24,1)",
           userSelect: "none", cursor: "pointer",
         }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: isDone ? "var(--border)" : color, transition: "all 0.18s" }} />
-        <span style={{ fontSize: 14, color: isDone ? "var(--muted2)" : "var(--text)", textDecoration: isDone ? "line-through" : "none", flex: 1, transition: "all 0.18s" }}>{task.text}</span>
-        {badge && !isDone && <span style={{ fontSize: 8, padding: "2px 7px", borderRadius: 20, background: `${color}15`, color, fontFamily: "'DM Mono', monospace", letterSpacing: "0.12em", flexShrink: 0 }}>{badge}</span>}
+        <div style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: visuallyDone ? "var(--border)" : color, transition: "all 0.18s" }} />
+        <span style={{ fontSize: 14, color: visuallyDone ? "var(--muted2)" : "var(--text)", textDecoration: visuallyDone ? "line-through" : "none", flex: 1, transition: "all 0.18s" }}>{task.text}</span>
+        {badge && !visuallyDone && <span style={{ fontSize: 8, padding: "2px 7px", borderRadius: 20, background: `${color}15`, color, fontFamily: "'DM Mono', monospace", letterSpacing: "0.12em", flexShrink: 0 }}>{badge}</span>}
       </div>
     </div>
   );
@@ -845,7 +858,6 @@ function SuggestedTasks({ who }) {
   useEffect(() => { load(); }, [load]);
 
   const toggle = async (item) => {
-    haptic(8);
     if (item.source === "suggested") {
       const nowDone = !item.isDone;
       setItems(its => its.map(i => (i.source === "suggested" && i.id === item.id) ? { ...i, isDone: nowDone } : i));
