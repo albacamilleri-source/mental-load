@@ -228,6 +228,19 @@ const fromISODate = (iso) => {
   return `${d}/${m}/${y}`;
 };
 
+// Calculate overdue state in the UI so it stays accurate as the date changes,
+// without relying on a database field being refreshed.
+const isPastDue = (ddmmyyyy) => {
+  if (!ddmmyyyy) return false;
+  const [d, m, y] = ddmmyyyy.split("/").map(Number);
+  if (!d || !m || !y) return false;
+  const due = new Date(y, m - 1, d);
+  due.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return due < today;
+};
+
 // ─── STATIC DATA ─────────────────────────────────────────────────────────────
 const ROOMS = [
   { id: "ensuite", label: "Ensuite" },
@@ -1490,6 +1503,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   const [swiping, setSwiping] = useState(false);
   const startX = useRef(null);
   const THRESHOLD = 72;
+  const overdue = isPastDue(task.due_date) && !task.done;
 
   useEffect(() => { setEditContext(task.context || "phone"); }, [task.context]);
   useEffect(() => { setEditText(task.text); }, [task.text]);
@@ -1567,9 +1581,10 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
       <div
         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 12,
-          background: completing ? "transparent" : "var(--surface)",
-          border: `1px solid ${completing ? "transparent" : task.overdue ? "#C44A4A22" : "var(--border)"}`,
-          boxShadow: completing ? "none" : "0 1px 4px rgba(28,26,24,0.04)",
+          background: completing ? "transparent" : overdue ? "#C44A4A0A" : "var(--surface)",
+          border: `1px solid ${completing ? "transparent" : overdue ? "#C44A4A35" : "var(--border)"}`,
+          borderLeft: `3px solid ${completing ? "transparent" : overdue ? "#B86B62" : "var(--border)"}`,
+          boxShadow: completing ? "none" : overdue ? "0 2px 8px rgba(184,107,98,0.08)" : "0 1px 4px rgba(28,26,24,0.04)",
           transform: `translateX(${swipeX}px)`,
           transition: swiping ? "none" : "all 0.28s cubic-bezier(0.32,0,0.24,1)",
           userSelect: "none",
@@ -1579,8 +1594,8 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
         <div style={{ flex: 1 }} onClick={() => !completing && setEditing(true)}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, color: completing ? "var(--muted2)" : "var(--text)", textDecoration: completing ? "line-through" : "none", transition: "all 0.2s" }}>{task.text}</span>
-            {task.overdue && !completing && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#C44A4A15", color: "var(--danger)", fontFamily: "'DM Mono', monospace" }}>overdue {task.due_date}</span>}
-            {task.due_date && !task.overdue && !completing && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{task.due_date}</span>}
+            {overdue && !completing && <span style={{ fontSize: 9, padding: "3px 8px", borderRadius: 20, background: "#C44A4A14", color: "#A5554D", border: "1px solid #C44A4A20", fontFamily: "'DM Mono', monospace", letterSpacing: "0.04em" }}>Overdue · {task.due_date}</span>}
+            {task.due_date && !overdue && !completing && <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "var(--surface2)", color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>{task.due_date}</span>}
           </div>
           {task.notes && !completing && <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{task.notes}</div>}
         </div>
