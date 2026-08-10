@@ -1656,11 +1656,11 @@ function TasksScreen({ who }) {
     return () => sb.removeChannel(sub);
   }, [load]);
 
-  const toggle = async (task) => {
-    await sb.from("next_actions").update({ done: true }).eq("id", task.id);
-    const historyNotes = [task.notes, task.due_date ? `Due: ${task.due_date}` : ""].filter(Boolean).join("\n\n");
-    await sb.from("history_items").insert({ text: task.text, notes: historyNotes, source: "next_action" });
+  const toggle = (task) => {
+    const index = tasks.findIndex(t => t.id === task.id);
+    if (index < 0) return;
     setTasks(ts => ts.filter(t => t.id !== task.id));
+    queueRemoval("complete", "task", task, index);
   };
 
   const saveTask = async (task, newText, newContext, newDate, newNotes) => {
@@ -1670,25 +1670,37 @@ function TasksScreen({ who }) {
     setTasks(ts => ts.map(t => t.id === task.id ? { ...t, text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null } : t));
   };
 
-  const commitDelete = (pending) => {
+  const commitRemoval = async (pending) => {
     if (!pending) return;
-    const table = pending.kind === "task" ? "next_actions" : "waiting_for";
-    sb.from(table).delete().eq("id", pending.item.id).then(({ error }) => {
+    if (pending.action === "delete") {
+      const table = pending.kind === "task" ? "next_actions" : "waiting_for";
+      const { error } = await sb.from(table).delete().eq("id", pending.item.id);
       if (error) console.error("delete error:", error.message);
-    });
+      return;
+    }
+    if (pending.kind === "task") {
+      const { error } = await sb.from("next_actions").update({ done: true }).eq("id", pending.item.id);
+      if (error) { console.error("complete task error:", error.message); return; }
+      const historyNotes = [pending.item.notes, pending.item.due_date ? `Due: ${pending.item.due_date}` : ""].filter(Boolean).join("\n\n");
+      await sb.from("history_items").insert({ text: pending.item.text, notes: historyNotes, source: "next_action" });
+    } else {
+      const { error } = await sb.from("waiting_for").delete().eq("id", pending.item.id);
+      if (error) { console.error("complete waiting-for error:", error.message); return; }
+      await sb.from("history_items").insert({ text: pending.item.text, notes: pending.item.notes || "", source: "waiting_for" });
+    }
   };
 
-  const queueDelete = (kind, item, index) => {
+  const queueRemoval = (action, kind, item, index) => {
     if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
-    if (pendingDeleteRef.current) commitDelete(pendingDeleteRef.current);
-    const pending = { kind, item, index };
+    if (pendingDeleteRef.current) commitRemoval(pendingDeleteRef.current);
+    const pending = { action, kind, item, index };
     pendingDeleteRef.current = pending;
     setPendingDelete(pending);
     deleteTimerRef.current = setTimeout(() => {
       const current = pendingDeleteRef.current;
       pendingDeleteRef.current = null;
       setPendingDelete(null);
-      commitDelete(current);
+      commitRemoval(current);
       deleteTimerRef.current = null;
     }, 5000);
   };
@@ -1720,7 +1732,7 @@ function TasksScreen({ who }) {
     if (index < 0) return;
     const item = tasks[index];
     setTasks(ts => ts.filter(t => t.id !== id));
-    queueDelete("task", item, index);
+    queueRemoval("delete", "task", item, index);
   };
 
   const addTask = async () => {
@@ -1760,7 +1772,7 @@ function TasksScreen({ who }) {
     const item = waiting[index];
     setWaiting(ws => ws.filter(w => w.id !== id));
     setEditingWF(null);
-    queueDelete("waiting", item, index);
+    queueRemoval("delete", "waiting", item, index);
   };
 
   const startEditingWF = (item) => {
@@ -1787,11 +1799,12 @@ function TasksScreen({ who }) {
     setEditWFNotes("");
   };
 
-  const tickWF = async (item) => {
-    await sb.from("waiting_for").delete().eq("id", item.id);
-    await sb.from("history_items").insert({ text: item.text, notes: item.notes || "", source: "waiting_for" });
+  const tickWF = (item) => {
+    const index = waiting.findIndex(w => w.id === item.id);
+    if (index < 0) return;
     setWaiting(ws => ws.filter(w => w.id !== item.id));
     setCompletingWF(null);
+    queueRemoval("complete", "waiting", item, index);
   };
 
   const completeWF = (item) => {
@@ -1836,7 +1849,11 @@ function TasksScreen({ who }) {
       {pendingDelete && (
         <div style={{ position: "fixed", left: "50%", bottom: 92, transform: "translateX(-50%)", zIndex: 400, width: "calc(100% - 40px)", maxWidth: 420, padding: "0 4px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--text)", color: "var(--bg)", borderRadius: 12, padding: "12px 14px", boxShadow: "0 6px 24px rgba(28,26,24,0.22)" }}>
-            <span style={{ flex: 1, fontSize: 13 }}>{pendingDelete.kind === "task" ? "Task deleted" : "Waiting For item deleted"}</span>
+            <span style={{ flex: 1, fontSize: 13 }}>
+              {pendingDelete.action === "complete"
+                ? pendingDelete.kind === "task" ? "Task completed" : "Waiting For item completed"
+                : pendingDelete.kind === "task" ? "Task deleted" : "Waiting For item deleted"}
+            </span>
             <button onClick={undoDelete} style={{ background: "none", border: "none", color: "var(--sage-light)", fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 500, letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer", padding: "4px" }}>Undo</button>
           </div>
         </div>
