@@ -209,6 +209,25 @@ const weeklyKey = () => {
 };
 const monthlyKey = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Malta" }).slice(0, 7);
 
+// ─── DATE FORMAT CONVERSION ────────────────────────────────────────────────────
+// Every due_date in this app is stored as DD/MM/YYYY, but native <input type="date">
+// pickers only accept/return ISO (YYYY-MM-DD). Convert at the UI boundary only —
+// the database and every matching/comparison in the app stays DD/MM/YYYY.
+const toISODate = (ddmmyyyy) => {
+  if (!ddmmyyyy) return "";
+  const parts = ddmmyyyy.split("/");
+  if (parts.length !== 3) return "";
+  const [d, m, y] = parts;
+  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+};
+const fromISODate = (iso) => {
+  if (!iso) return "";
+  const parts = iso.split("-");
+  if (parts.length !== 3) return "";
+  const [y, m, d] = parts;
+  return `${d}/${m}/${y}`;
+};
+
 // ─── STATIC DATA ─────────────────────────────────────────────────────────────
 const ROOMS = [
   { id: "ensuite", label: "Ensuite" },
@@ -1465,7 +1484,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   const [editText, setEditText] = useState(task.text);
   const [editNotes, setEditNotes] = useState(task.notes || "");
   const [editContext, setEditContext] = useState(task.context || "phone");
-  const [editDate, setEditDate] = useState(task.due_date || "");
+  const [editDate, setEditDate] = useState(toISODate(task.due_date || ""));
   const [completing, setCompleting] = useState(false);
   const [swipeX, setSwipeX] = useState(0);
   const [swiping, setSwiping] = useState(false);
@@ -1476,7 +1495,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
   useEffect(() => { setEditText(task.text); }, [task.text]);
 
   const save = () => {
-    if (editText.trim()) onSave(task, editText.trim(), editContext, editDate, editNotes.trim());
+    if (editText.trim()) onSave(task, editText.trim(), editContext, fromISODate(editDate), editNotes.trim());
     setEditing(false);
   };
 
@@ -1640,7 +1659,7 @@ function TasksScreen({ who }) {
       notes: newNotes.trim() || "",
       assigned: "alba",
       context: newContext,
-      due_date: newDate.trim() || null,
+      due_date: newDate ? fromISODate(newDate) : null,
       done: false,
     };
     const { data, error } = await sb.from("next_actions")
@@ -1849,9 +1868,11 @@ function TasksScreen({ who }) {
                 }}>{l}</button>
               ))}
             </div>
-            <input value={newDate} onChange={e => setNewDate(e.target.value)}
-              placeholder="Due date (DD/MM/YYYY) — optional"
-              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: "var(--text)", fontSize: 16, outline: "none" }}
+            <input
+              type="date"
+              value={newDate}
+              onChange={e => setNewDate(e.target.value)}
+              style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: newDate ? "var(--text)" : "var(--muted2)", fontSize: 16, outline: "none", width: "100%" }}
             />
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={addTask} style={{ flex: 1, padding: "9px", background: "var(--sage)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 500 }}>Add</button>
