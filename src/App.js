@@ -3821,7 +3821,7 @@ function AppInner() {
             color: screen === n.key ? "var(--text)" : "var(--muted)",
             fontSize: 13, textAlign: "left", transition: "all 0.15s",
           }}>
-            <span style={{ fontSize: 13 }}>{n.icon}</span>
+            <span style={{ fontSize: 13, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
             <span>{n.label}</span>
           </button>
         ))}
