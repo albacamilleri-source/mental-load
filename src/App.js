@@ -1659,13 +1659,23 @@ function TasksScreen({ who }) {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
+    useEffect(() => {
+    // Clear any stale pending deletes on mount
+    pendingDeleteRef.current = null;
+    if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+
     load();
     const sub = sb.channel("tasks_rt")
       .on("postgres_changes", { event: "*", schema: "public", table: "next_actions" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "waiting_for" }, load)
       .subscribe();
-    return () => sb.removeChannel(sub);
+
+    return () => {
+      sb.removeChannel(sub);
+      // Clean up on unmount
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+      pendingDeleteRef.current = null;
+    };
   }, [load]);
 
   const toggle = (task) => {
