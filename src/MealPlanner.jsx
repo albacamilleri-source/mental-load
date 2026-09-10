@@ -455,10 +455,17 @@ export default function MealPlanner({ onDirtyChange } = {}) {
   }, [pastRows, search, recipeTags]);
 
   return <div className="meal-planner"><div className="app"><div className="shell">
-    <header className="plannerHeader"><div className="plannerMonth">{new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</div><h1 className="brand">Meal Planner<span className="brandDot">.</span></h1><div className="sub">Six meals, your day categories, one grocery list.</div></header>
+    <header className="plannerHeader">
+      <div className="plannerMonth">{new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</div>
+      <div className="plannerTitleRow">
+        <h1 className="brand">Meal Planner<span className="brandDot">.</span></h1>
+        <button className="categoryToggle" disabled={busy || loadingWeek || !!loadError} aria-expanded={settingsOpen} aria-controls="day-categories" onClick={() => setSettingsOpen(v => !v)}>{settingsOpen ? 'Close categories' : 'Edit categories'}</button>
+      </div>
+      <div className="sub">Six meals, your day categories, one grocery list.</div>
+    </header>
     {loadError && <div className="plannerNotice" role="alert">{loadError} <button className="btn secondary" onClick={() => setReload(n => n + 1)}>Retry</button></div>}
-    <section className="card">
-      <div className="rowBetween"><h2 className="sectionTitle">Day categories</h2><button className="btn ghost" disabled={busy || loadingWeek || !!loadError} aria-expanded={settingsOpen} onClick={() => setSettingsOpen(v => !v)}>{settingsOpen ? 'Close' : 'Edit categories'}</button></div>
+    <section className="card" id="day-categories">
+      <h2 className="sectionTitle">Day categories</h2>
       {!settingsOpen && <div className="tagChips">{categories.map(c => <span className="tagChip" key={c.day_number}>Day {c.day_number} · {c.name || (c.accepted_tags.length ? c.accepted_tags.join(' or ') : 'Any recipe')}</span>)}</div>}
       {settingsOpen && <CategoryEditor categories={categories} onSave={saveCategories} busy={busy}/>}
     </section>
