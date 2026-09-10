@@ -33,3 +33,9 @@
 .meal-planner .sub { font:11px var(--font-mono); letter-spacing:normal; text-transform:none; margin:4px 0 0; color:var(--muted2); }
 .meal-planner .modalBack { z-index:500; }
 .meal-planner .toast { z-index:600; bottom:100px; }
+
+.meal-planner .plannerTitleRow { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+.meal-planner .categoryToggle { margin-left:auto; flex-shrink:0; padding:7px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--muted); font:12px 'DM Mono', monospace; letter-spacing:.18em; cursor:pointer; transition:all .18s; }
+.meal-planner .categoryToggle[aria-expanded="true"] { background:var(--text); color:var(--bg); }
+.meal-planner .categoryToggle:disabled { opacity:.42; cursor:not-allowed; }
+.meal-planner .categoryToggle:focus-visible { outline:2px solid var(--sage); outline-offset:3px; }
