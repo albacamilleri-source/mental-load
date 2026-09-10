@@ -5,7 +5,8 @@ import MealPlanner from './MealPlanner';
 import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
 
 const mockFrom = jest.fn();
-jest.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (...args) => mockFrom(...args) }) }));
+const mockInvoke = jest.fn();
+jest.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (...args) => mockFrom(...args), functions: { invoke: (...args) => mockInvoke(...args) } }) }));
 let container, root, current, past, tagRows, categories, writes, failure;
 const sample = (n, tags = []) => ({ id: `meal-${n}`, meal_number: n, title: `Recipe ${n}`, source_ref: `Book ${n}`, week_of: '2026-W36', ingredients: [{name: 'carrot', qty: 1, unit: 'item'}], extracted_at: null, tags });
 function setupQueries() {
@@ -94,4 +95,18 @@ test('load errors do not leave an editable planner with missing category rules',
   expect(container.querySelector('[role="alert"]').textContent).toContain(failure);
   expect(button('Generate grocery list').disabled).toBe(true);
   expect(container.querySelectorAll('.meal')).toHaveLength(0);
+});
+
+
+test('URL extraction displays the function error in the review modal', async () => {
+  const message = 'AI backend not configured: OPENAI_API_KEY is missing in Supabase Edge Function secrets.';
+  mockInvoke.mockResolvedValue({error: {message: 'Edge Function returned a non-2xx status code', context: {json: async () => ({error: message})}}});
+  await render(); await change('Day 2 meal title', 'Chicken'); await change('Day 2 source', 'https://example.com/recipe');
+  await click(button('Extract ingredients', day(2)));
+  const modal = document.body.querySelector('.modal');
+  await click(button('URL', modal));
+  await click(button('Extract ingredients', modal));
+  expect(modal.textContent).toContain(message);
+  expect(modal.textContent).not.toContain('non-2xx');
+  expect(mockInvoke).toHaveBeenCalledWith('meal-ingredients', {body: {mode: 'url', url: 'https://example.com/recipe'}});
 });
