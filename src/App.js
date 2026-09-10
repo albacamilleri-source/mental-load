@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import MealPlanner from "./MealPlanner";
 
 
 // ─── HAPTIC FEEDBACK ──────────────────────────────────────────────────────────
@@ -3909,7 +3910,8 @@ export default function App() {
 
 function AppInner() {
   const [who, chooseWho] = useWho();
-  const [screen, setScreen] = useState("today");
+  const [screen, setScreen] = useState(() => window.location.hash === "#meal-planner" ? "meal-planner" : "today");
+  const [mealPlannerDirty, setMealPlannerDirty] = useState(false);
   const [slideDir, setSlideDir] = useState("left");
   const [editing, setEditing] = useState(false);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
@@ -3917,16 +3919,33 @@ function AppInner() {
   const [desktop, setDesktop] = useState(isDesktop);
 
   const navigateTo = (next) => {
-    if (next === "meal-planner") {
-      window.location.assign(`${process.env.PUBLIC_URL || ''}/meal-planner/`);
-      return;
-    }
+    if (next === screen) return;
+    if (screen === "meal-planner" && mealPlannerDirty && !window.confirm("Leave Meal Planner? Any unsaved changes will be lost.")) return;
     const order = NAV.map(n => n.key);
     const from = order.indexOf(screen);
     const to   = order.indexOf(next);
     setSlideDir(to >= from ? "left" : "right");
     setScreen(next);
+    const url = new URL(window.location.href);
+    if (next === "meal-planner") url.hash = "meal-planner";
+    else if (url.hash === "#meal-planner") url.hash = "";
+    window.history.replaceState(window.history.state, "", url);
+    window.scrollTo(0, 0);
   };
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const next = window.location.hash === "#meal-planner" ? "meal-planner" : "today";
+      if (screen === "meal-planner" && next !== screen && mealPlannerDirty && !window.confirm("Leave Meal Planner? Any unsaved changes will be lost.")) {
+        window.history.replaceState(window.history.state, "", "#meal-planner");
+        return;
+      }
+      setSlideDir(next === "meal-planner" ? "left" : "right");
+      setScreen(next);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [screen, mealPlannerDirty]);
 
   useEffect(() => {
     const handler = () => setDesktop(window.innerWidth >= 768);
@@ -3991,6 +4010,7 @@ function AppInner() {
   );
 
   const screens = {
+    "meal-planner": <MealPlanner onDirtyChange={setMealPlannerDirty} />,
     today: <TodayScreen who={who} />,
     week: <WeekScreen who={who} />,
     month: <MonthScreen who={who} />,

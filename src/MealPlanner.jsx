@@ -1,17 +1,9 @@
+import { createPortal } from 'react-dom';
+import './MealPlanner.css';
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { DEFAULT_CATEGORIES, parseTags, recipeKey, matchesCategory, mealValidation, matchingDays } from "./mealPlanning";
 
-const TAG_CSS = `
-.plannerBack{display:inline-block;color:var(--muted);font-size:13px;margin-bottom:14px;text-decoration:none}
-.dayHeading{font-family:Lora,Georgia,serif;font-size:18px;margin:0 0 6px}.dayCategory{font-size:13px;color:var(--planning-dark);margin-bottom:12px}
-.tagField{display:block;font-size:12px;color:var(--muted);margin-top:12px}.tagField .input{display:block;margin-top:6px}
-.tagChips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.tagChip{font-size:11px;color:var(--planning-dark);background:rgba(196,168,130,.15);border-radius:99px;padding:4px 9px}
-.dayActions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}.dayActions .small{flex:1}.saveError{color:var(--danger);font-size:13px;margin:10px 0;line-height:1.5}
-.categoryGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.categoryCard{border:1px solid var(--border);border-radius:12px;padding:12px}.categoryCard h3{margin:0;font-size:15px;font-weight:500}.categoryIntro{margin:12px 0;font-size:13px;color:var(--muted);line-height:1.5}
-.recipeCard{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--paper)}.recipeCard h4{margin:0 0 5px;font-size:15px}.recipeCard select{max-width:100%;width:auto;flex:1}.plannerNotice{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px}
-@media(max-width:700px){.categoryGrid{grid-template-columns:1fr}.dayActions .small{flex-basis:100%}}
-`;
 
 const SUPABASE_URL = "https://qvibdnrfywisvfsqgqux.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2aWJkbnJmeXdpc3Zmc3FncXV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTE5MTcsImV4cCI6MjA5NDQ2NzkxN30.qPNjcpQpHPV5_SVz3U-JC18CcZ6vxio9vImA3CKg5jk";
@@ -28,33 +20,6 @@ const emptyMeal = (meal_number) => ({
   notes: "",
 });
 
-const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Outfit:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
-:root{
-  --bg:#F7F4F0; --surface:#FFFFFF; --surface2:#EFEAE0; --border:#E4DED6;
-  --text:#1C1A18; --muted:#7A706A; --muted2:#B8B0A6;
-  --sage:#7C9E8A; --planning:#C4A882; --rose:#D4A8A0; --danger:#C44A4A;
-  --paper:#FAF8F5; --planning-dark:#9B7E5A;
-  --shadow:0 1px 4px rgba(28,26,24,.04); --shadow-elev:0 4px 20px rgba(28,26,24,.08);
-  --radius:14px;
-}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent} body{margin:0;background:var(--bg);color:var(--text);font-family:Outfit,system-ui,sans-serif}
-button,input,textarea{font:inherit}.app{min-height:100vh;padding:28px 16px 64px}.shell{max-width:840px;margin:0 auto}
-.brand{font-family:Lora,Georgia,serif;font-size:40px;font-weight:400;letter-spacing:-.02em;margin:4px 0 4px}.brandDot{color:var(--sage)}.sub{color:var(--muted);font:10px 'DM Mono',monospace;letter-spacing:.22em;text-transform:uppercase;margin-bottom:24px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:16px}
-.sectionTitle{font-family:Lora,Georgia,serif;font-size:24px;font-weight:400;letter-spacing:-.015em;margin:0}.sectionHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
-.weekNav{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:5px}.weekLabel{min-width:190px;text-align:center;font:500 11px 'DM Mono',monospace;letter-spacing:.08em}.iconBtn{border:0;background:transparent;width:34px;height:34px;border-radius:50%;cursor:pointer;color:var(--text);font-size:20px}.iconBtn:hover{background:var(--surface)}
-.meal{border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;background:var(--surface)}.mealTop{display:flex;gap:12px;align-items:flex-start}.num{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:rgba(196,168,130,.16);color:var(--planning-dark);font:500 11px 'DM Mono',monospace;flex:0 0 auto}.fields{display:grid;grid-template-columns:1.15fr 1fr auto;gap:10px;flex:1}.input{width:100%;border:1px solid var(--border);background:var(--paper);border-radius:10px;padding:11px 12px;color:var(--text);outline:none}.input:focus,.textarea:focus{border-color:var(--planning);box-shadow:0 0 0 3px rgba(196,168,130,.13)}
-.btn{border:0;border-radius:10px;padding:11px 14px;font-weight:500;cursor:pointer;transition:.15s ease;background:var(--planning);color:#fff}.btn:hover{filter:brightness(.96)}.btn.secondary{background:var(--surface);color:var(--text);border:1px solid var(--border)}.btn.ghost{background:transparent;color:var(--planning-dark);border:1px solid rgba(196,168,130,.5)}.btn:disabled{opacity:.42;cursor:not-allowed;filter:none}
-.status{font-size:12px;margin:9px 0 0 42px;color:var(--muted)}.status.loaded{color:var(--sage);font-weight:500}.status.error{color:var(--danger)}
-.generate{width:100%;margin-top:6px;padding:14px}.hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
-.groceryBox{white-space:pre-wrap;background:var(--paper);border:1px dashed var(--planning);border-radius:12px;padding:14px;line-height:1.8;font-size:14px}.rowBetween{display:flex;justify-content:space-between;align-items:center;gap:10px}.mergeBox{margin:14px 0;padding:12px;background:rgba(196,168,130,.10);border-radius:12px}.mergeRow{display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:13px;padding:7px 0;border-bottom:1px solid rgba(196,168,130,.2)}.mergeRow:last-child{border-bottom:0}.toggle{accent-color:var(--planning)}
-.collapsible{cursor:pointer;user-select:none}.pastWeek{border-top:1px solid var(--border);padding:12px 0}.pastWeek:first-child{border-top:0}.pastMeals{display:grid;gap:8px;margin-top:10px}.pastMeal{width:100%;text-align:left;border:1px solid var(--border);background:var(--paper);border-radius:10px;padding:10px 12px;cursor:pointer}.pastMeal:hover{border-color:var(--planning)}.small{font-size:12px;color:var(--muted)}
-.modalBack{position:fixed;inset:0;background:rgba(28,26,24,.44);display:grid;place-items:center;padding:16px;z-index:20}.modal{width:min(760px,100%);max-height:92vh;overflow:auto;background:var(--bg);border-radius:20px;box-shadow:0 30px 70px rgba(0,0,0,.22);padding:18px}.modalHead{display:flex;justify-content:space-between;align-items:center;gap:12px}.tabs{display:flex;gap:6px;margin:14px 0;background:var(--surface2);padding:5px;border-radius:12px}.tab{flex:1;border:0;background:transparent;border-radius:9px;padding:9px;cursor:pointer;font-weight:500;color:var(--muted)}.tab.active{background:var(--surface);color:var(--text);box-shadow:var(--shadow)}.textarea{width:100%;min-height:160px;border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:12px;resize:vertical;outline:none}.upload{display:block;border:1.5px dashed var(--planning);border-radius:12px;padding:22px;text-align:center;background:var(--surface);cursor:pointer}.upload input{display:none}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:7px}@keyframes spin{to{transform:rotate(360deg)}}
-.reviewTable{display:grid;gap:8px}.ingredientRow{display:grid;grid-template-columns:1.4fr .55fr .7fr 38px;gap:8px}.ingredientRow input{min-width:0}.dangerBtn{border:0;background:#fff1ef;color:var(--danger);border-radius:10px;cursor:pointer}.jsonBox{margin-top:12px}.jsonBox summary{cursor:pointer;color:var(--muted);font-size:12px}.jsonText{margin-top:8px;min-height:130px;font-family:'DM Mono',ui-monospace,monospace;font-size:12px}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:#fff;border-radius:999px;padding:10px 14px;font-size:12px;z-index:30}.search{margin:2px 0 14px}.empty{text-align:center;color:var(--muted);padding:22px 6px;font-size:13px}
-@media(max-width:700px){.app{padding:16px 10px 48px}.brand{font-size:34px}.card{padding:14px;border-radius:14px}.sectionHead{align-items:flex-start;flex-direction:column}.weekNav{width:100%;justify-content:space-between}.weekLabel{min-width:0}.mealTop{gap:9px}.fields{grid-template-columns:1fr}.status{margin-left:39px}.btn.extract{width:100%}.ingredientRow{grid-template-columns:1fr .55fr .65fr 36px}.modal{padding:14px}.rowBetween{align-items:flex-start}.copyBtn{flex:0 0 auto}}
-`;
 
 function isoWeek(date) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -320,7 +285,7 @@ function PastRecipe({ meal, tags, categories, meals, onTagsSaved, onUse, busy })
   </div>;
 }
 
-export default function MealPlanner() {
+export default function MealPlanner({ onDirtyChange } = {}) {
   const [week, setWeek] = useState(isoWeek(new Date()));
   const [meals, setMeals] = useState([]);
   const [loadingWeek, setLoadingWeek] = useState(true);
@@ -340,6 +305,10 @@ export default function MealPlanner() {
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState('');
   const dirty = meals.some(m => m.dirty);
+  useEffect(() => {
+    onDirtyChange?.(dirty || busy || !!modalMeal || settingsOpen);
+    return () => onDirtyChange?.(false);
+  }, [dirty, busy, modalMeal, settingsOpen, onDirtyChange]);
 
   useEffect(() => {
     let cancelled = false;
@@ -484,9 +453,8 @@ export default function MealPlanner() {
     return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
   }, [pastRows, search, recipeTags]);
 
-  return <><style>{CSS + TAG_CSS}</style><div className="app"><div className="shell">
-    <a className="plannerBack" href={`${process.env.PUBLIC_URL || ''}/`}>← Mental Load</a>
-    <div className="brand">meal planner.</div><div className="sub">Six meals, your day categories, one grocery list.</div>
+  return <div className="meal-planner"><div className="app"><div className="shell">
+    <header className="plannerHeader"><div className="plannerMonth">{new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</div><h1 className="brand">Meal Planner<span className="brandDot">.</span></h1><div className="sub">Six meals, your day categories, one grocery list.</div></header>
     {loadError && <div className="plannerNotice" role="alert">{loadError} <button className="btn secondary" onClick={() => setReload(n => n + 1)}>Retry</button></div>}
     <section className="card">
       <div className="rowBetween"><h2 className="sectionTitle">Day categories</h2><button className="btn ghost" disabled={busy || loadingWeek || !!loadError} aria-expanded={settingsOpen} onClick={() => setSettingsOpen(v => !v)}>{settingsOpen ? 'Close' : 'Edit categories'}</button></div>
@@ -531,6 +499,6 @@ export default function MealPlanner() {
         {expandedWeeks[wk] && <div className="pastMeals">{rows.map(r => <PastRecipe key={r.id} meal={r} tags={recipeTags[recipeKey(r)] || EMPTY_TAGS} categories={categories} meals={meals} onTagsSaved={savePastTags} onUse={duplicateMeal} busy={busy}/>)}</div>}
       </div>)}</div>}
     </section>
-  </div></div>{modalMeal && <ExtractionModal meal={modalMeal} tags={parseTags(modalMeal.tagsText)} category={categoryFor(modalMeal.meal_number)} onClose={() => setModalMeal(null)} onSaved={onIngredientSaved}/>} {toast && <div className="toast" role="status">{toast}</div>}</>;
+  </div></div>{(modalMeal || toast) && createPortal(<div className="meal-planner">{modalMeal && <ExtractionModal meal={modalMeal} tags={parseTags(modalMeal.tagsText)} category={categoryFor(modalMeal.meal_number)} onClose={() => setModalMeal(null)} onSaved={onIngredientSaved}/>} {toast && <div className="toast" role="status">{toast}</div>}</div>, document.body)}</div>;
 }
 const EMPTY_TAGS = [];
