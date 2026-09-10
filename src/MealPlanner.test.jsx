@@ -7,19 +7,23 @@ import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
 const mockFrom = jest.fn();
 const mockInvoke = jest.fn();
 jest.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (...args) => mockFrom(...args), functions: { invoke: (...args) => mockInvoke(...args) } }) }));
-let container, root, current, past, tagRows, categories, writes, failure;
+let container, root, current, past, library, tagRows, categories, writes, failure;
 const sample = (n, tags = []) => ({ id: `meal-${n}`, meal_number: n, title: `Recipe ${n}`, source_ref: `Book ${n}`, week_of: '2026-W36', ingredients: [{name: 'carrot', qty: 1, unit: 'item'}], extracted_at: null, tags });
 function setupQueries() {
   mockFrom.mockImplementation(table => {
-    let isPast = false, payload;
+    let isPast = false, payload, deleting = false;
     const query = {
-      select: () => query, eq: () => query, lt: () => { isPast = true; return query; }, order: () => query,
+      select: () => query,
+      eq: (field, value) => { if (deleting) writes.push({ table, delete: { field, value } }); return query; },
+      lt: () => { isPast = true; return query; }, order: () => query,
       upsert: value => { payload = value; writes.push({ table, value }); return query; },
+      delete: () => { deleting = true; return query; },
       single: () => query,
       then: (resolve, reject) => {
         if (failure) return Promise.resolve({ error: {message: failure} }).then(resolve, reject);
-        let data = table === 'weekly_meals' ? (isPast ? past : current) : table === 'meal_recipe_tags' ? tagRows : categories;
+        let data = table === 'weekly_meals' ? (isPast ? past : current) : table === 'meal_recipe_tags' ? tagRows : table === 'meal_day_categories' ? categories : library;
         if (payload && table === 'weekly_meals') data = { id: 'saved', ...payload };
+        if (payload && table === 'meal_recipe_library') data = payload;
         return Promise.resolve({ data, error: null }).then(resolve, reject);
       },
     };
@@ -36,7 +40,7 @@ async function click(el) { await act(async () => { el.click(); }); }
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-  current = []; past = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; setupQueries();
+  current = []; past = []; library = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; setupQueries();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
 
@@ -109,4 +113,30 @@ test('URL extraction displays the function error in the review modal', async () 
   expect(modal.textContent).toContain(message);
   expect(modal.textContent).not.toContain('non-2xx');
   expect(mockInvoke).toHaveBeenCalledWith('meal-ingredients', {body: {mode: 'url', url: 'https://example.com/recipe'}});
+});
+
+test('marking a saved meal cooked banks the recipe and clears its day', async () => {
+  current = [sample(1, ['pasta'])];
+  tagRows = [{recipe_key: recipeKey(current[0]), tags: ['pasta']}];
+  await render();
+  await click(button('Mark cooked', day(1)));
+  expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1'});
+  expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1'}});
+  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
+  expect(container.querySelector('#cooked-recipes').textContent).toContain('Recipe 1');
+});
+
+test('cooked recipes are searchable and can be dragged onto a matching empty day', async () => {
+  const cooked = {...sample(1), recipe_key: recipeKey(sample(1)), cooked_at: '2026-09-10T20:00:00Z'};
+  library = [cooked];
+  tagRows = [{recipe_key: cooked.recipe_key, tags: ['soup']}];
+  await render();
+  await change('Search cooked recipes', 'soup');
+  const card = container.querySelector('#cooked-recipes .recipeCard');
+  expect(card).not.toBeNull();
+  const transfer = { values: {}, setData(type, value) { this.values[type] = value; }, getData(type) { return this.values[type] || ''; }, effectAllowed: '', dropEffect: '' };
+  await act(async () => { Simulate.dragStart(card, {dataTransfer: transfer}); });
+  await act(async () => { Simulate.dragOver(day(6), {dataTransfer: transfer}); Simulate.drop(day(6), {dataTransfer: transfer}); });
+  expect(writes[writes.length - 1].value).toMatchObject({meal_number: 6, title: 'Recipe 1'});
+  expect(container.querySelector('[aria-label="Day 6 recipe tags"]').value).toBe('soup');
 });
