@@ -3,6 +3,7 @@ import './MealPlanner.css';
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { DEFAULT_CATEGORIES, parseTags, recipeKey, matchesCategory, mealValidation, matchingDays } from "./mealPlanning";
+import { extractionErrorMessage } from "./extractionError";
 
 
 const SUPABASE_URL = "https://qvibdnrfywisvfsqgqux.supabase.co";
@@ -169,13 +170,13 @@ function ExtractionModal({ meal, onClose, onSaved, category, tags }) {
         body = { mode:"text", text:text.trim() };
       }
       const { data, error: fnError } = await sb.functions.invoke("meal-ingredients", { body });
-      if (fnError) throw new Error(fnError.message || "Ingredient extraction failed.");
+      if (fnError) throw new Error(await extractionErrorMessage(fnError));
       if (data?.error) throw new Error(data.error);
       if (!Array.isArray(data?.ingredients)) throw new Error("The AI returned an unexpected response.");
       setIngredients(data.ingredients);
     } catch (e) {
       const msg = e?.message || String(e);
-      setError(msg.includes("fetch") && tab === "url" ? "That URL couldn't be read. Try the Text tab and paste the recipe instead." : msg);
+      setError(msg);
     } finally { setLoading(false); }
   }
 
