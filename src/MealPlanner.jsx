@@ -1,5 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { DEFAULT_CATEGORIES, parseTags, recipeKey, matchesCategory, mealValidation, matchingDays } from "./mealPlanning";
+
+const TAG_CSS = `
+.plannerBack{display:inline-block;color:var(--muted);font-size:13px;margin-bottom:14px;text-decoration:none}
+.dayHeading{font-family:Lora,Georgia,serif;font-size:18px;margin:0 0 6px}.dayCategory{font-size:13px;color:var(--planning-dark);margin-bottom:12px}
+.tagField{display:block;font-size:12px;color:var(--muted);margin-top:12px}.tagField .input{display:block;margin-top:6px}
+.tagChips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.tagChip{font-size:11px;color:var(--planning-dark);background:rgba(196,168,130,.15);border-radius:99px;padding:4px 9px}
+.dayActions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}.dayActions .small{flex:1}.saveError{color:var(--danger);font-size:13px;margin:10px 0;line-height:1.5}
+.categoryGrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.categoryCard{border:1px solid var(--border);border-radius:12px;padding:12px}.categoryCard h3{margin:0;font-size:15px;font-weight:500}.categoryIntro{margin:12px 0;font-size:13px;color:var(--muted);line-height:1.5}
+.recipeCard{border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--paper)}.recipeCard h4{margin:0 0 5px;font-size:15px}.recipeCard select{max-width:100%;width:auto;flex:1}.plannerNotice{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;font-size:13px}
+@media(max-width:700px){.categoryGrid{grid-template-columns:1fr}.dayActions .small{flex-basis:100%}}
+`;
 
 const SUPABASE_URL = "https://qvibdnrfywisvfsqgqux.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2aWJkbnJmeXdpc3Zmc3FncXV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTE5MTcsImV4cCI6MjA5NDQ2NzkxN30.qPNjcpQpHPV5_SVz3U-JC18CcZ6vxio9vImA3CKg5jk";
@@ -164,7 +176,7 @@ function aggregateIngredients(ingredients, suggestions) {
   });
 }
 
-function ExtractionModal({ meal, onClose, onSaved }) {
+function ExtractionModal({ meal, onClose, onSaved, category, tags }) {
   const [tab, setTab] = useState("photo");
   const [file, setFile] = useState(null);
   const [url, setUrl] = useState(meal.source_ref?.startsWith("http") ? meal.source_ref : "");
@@ -215,6 +227,8 @@ function ExtractionModal({ meal, onClose, onSaved }) {
   }
   async function save() {
     setError("");
+    const validation = mealValidation(meal, tags, category);
+    if (validation) { setError(validation); return; }
     if (!meal.title.trim() || !meal.source_ref.trim()) { setError("Add the meal title and source before saving ingredients."); return; }
     if (!Array.isArray(ingredients) || !ingredients.length) { setError("There are no ingredients to save."); return; }
     const clean = ingredients.map(x=>({ name:String(x.name||"").trim(), qty:x.qty==null?null:Number(x.qty), unit:String(x.unit||"").trim() })).filter(x=>x.name);
@@ -233,7 +247,7 @@ function ExtractionModal({ meal, onClose, onSaved }) {
 
   return <div className="modalBack" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
     <div className="modal">
-      <div className="modalHead"><div><h3 className="sectionTitle" style={{fontSize:22}}>Load ingredients</h3><div className="small">Meal {meal.meal_number}: {meal.title || "Untitled"}</div></div><button className="iconBtn" onClick={onClose}>×</button></div>
+      <div className="modalHead"><div><h3 className="sectionTitle" style={{fontSize:22}}>Load ingredients</h3><div className="small">Day {meal.meal_number}: {meal.title || "Untitled"}</div></div><button className="iconBtn" aria-label="Close ingredients" onClick={onClose}>×</button></div>
       <div className="tabs">
         {[["photo","Photo"],["url","URL"],["text","Text"]].map(([id,label])=><button key={id} className={`tab ${tab===id?"active":""}`} onClick={()=>{setTab(id);setError("")}}>{label}</button>)}
       </div>
@@ -261,109 +275,262 @@ function ExtractionModal({ meal, onClose, onSaved }) {
     </div>
   </div>;
 }
+function CategoryEditor({ categories, onSave, busy }) {
+  const [draft, setDraft] = useState(() => categories.map(c => ({ ...c, tagsText: c.accepted_tags.join(', ') })));
+  const [error, setError] = useState('');
+  async function submit(e) {
+    e.preventDefault();
+    const next = draft.map(({ tagsText, ...c }) => ({ ...c, name: c.name.trim(), accepted_tags: parseTags(tagsText) }));
+    const message = await onSave(next);
+    setError(message || '');
+  }
+  return <form onSubmit={submit}>
+    <p className="categoryIntro">Name any day and add its required recipe tags, separated by commas. A recipe must match at least one accepted tag. Leave tags empty to allow any recipe. These categories repeat every week.</p>
+    <div className="categoryGrid">{draft.map((c, i) => <div className="categoryCard" key={c.day_number}>
+      <h3>Day {c.day_number}</h3>
+      <label className="tagField">Category name<input className="input" aria-label={`Day ${c.day_number} category name`} value={c.name} disabled={busy} placeholder="e.g. Soup Sunday" onChange={e => setDraft(prev => prev.map((x, j) => i === j ? { ...x, name: e.target.value } : x))}/></label>
+      <label className="tagField">Accepted tags (any one)<input className="input" aria-label={`Day ${c.day_number} accepted tags`} value={c.tagsText} disabled={busy} placeholder="e.g. instant pot, slow cooker" onChange={e => setDraft(prev => prev.map((x, j) => i === j ? { ...x, tagsText: e.target.value } : x))}/></label>
+    </div>)}</div>
+    {error && <div className="saveError" role="alert">{error}</div>}
+    <div className="actions"><button className="btn" disabled={busy}>Save day categories</button></div>
+  </form>;
+}
+
+function PastRecipe({ meal, tags, categories, meals, onTagsSaved, onUse, busy }) {
+  const [draft, setDraft] = useState(tags.join(', '));
+  const [target, setTarget] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => setDraft(tags.join(', ')), [tags]);
+  const available = matchingDays(tags, categories).filter(c => !meals[c.day_number - 1].title.trim() && !meals[c.day_number - 1].source_ref.trim());
+  const selected = available.some(c => String(c.day_number) === target) ? target : String(available[0]?.day_number || '');
+  const changed = JSON.stringify(parseTags(draft)) !== JSON.stringify(parseTags(tags));
+  return <div className="recipeCard">
+    <h4>{meal.title}</h4><div className="small">{meal.source_ref}</div>
+    <label className="tagField">Recipe tags<input className="input" aria-label={`Tags for ${meal.title}`} value={draft} disabled={busy} onChange={e => setDraft(e.target.value)} placeholder="e.g. soup, vegetarian"/></label>
+    <div className="dayActions">
+      <button className="btn ghost" disabled={busy || !changed} onClick={async () => setError(await onTagsSaved(meal, parseTags(draft)) || '')}>Save tags</button>
+      <select className="input" aria-label={`Destination for ${meal.title}`} value={selected} disabled={busy || !available.length || changed} onChange={e => setTarget(e.target.value)}>
+        {!available.length && <option value="">No matching empty day</option>}
+        {available.map(c => <option key={c.day_number} value={c.day_number}>Day {c.day_number}{c.name ? ` · ${c.name}` : ''}</option>)}
+      </select>
+      <button className="btn" disabled={busy || !selected || changed} onClick={async () => setError(await onUse(meal, Number(selected)) || '')}>Use recipe</button>
+    </div>
+    <div className="hint">{changed ? 'Save tags before choosing a day.' : 'Only empty days with a matching category are available.'}</div>
+    {error && <div className="saveError" role="alert">{error}</div>}
+  </div>;
+}
 
 export default function MealPlanner() {
   const [week, setWeek] = useState(isoWeek(new Date()));
-  const [meals, setMeals] = useState(Array.from({length:6},(_,i)=>emptyMeal(i+1)));
+  const [meals, setMeals] = useState([]);
   const [loadingWeek, setLoadingWeek] = useState(true);
+  const [reload, setReload] = useState(0);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [recipeTags, setRecipeTags] = useState({});
+  const [loadError, setLoadError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [mealErrors, setMealErrors] = useState({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [modalMeal, setModalMeal] = useState(null);
   const [groceryGenerated, setGroceryGenerated] = useState(false);
   const [mergeSuggestions, setMergeSuggestions] = useState([]);
   const [pastOpen, setPastOpen] = useState(false);
   const [pastRows, setPastRows] = useState([]);
   const [expandedWeeks, setExpandedWeeks] = useState({});
-  const [search, setSearch] = useState("");
-  const [toast, setToast] = useState("");
+  const [search, setSearch] = useState('');
+  const [toast, setToast] = useState('');
+  const dirty = meals.some(m => m.dirty);
 
-  useEffect(()=>{ loadWeek(); },[week]);
-  useEffect(()=>{ loadPast(); },[week]);
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingWeek(true); setLoadError(''); setGroceryGenerated(false); setMealErrors({}); setSettingsOpen(false);
+    async function load() {
+      try {
+        const responses = await Promise.all([
+          sb.from('weekly_meals').select('*').eq('week_of', week).order('meal_number'),
+          sb.from('weekly_meals').select('*').lt('week_of', week).order('week_of', { ascending: false }).order('meal_number'),
+          sb.from('meal_recipe_tags').select('*'),
+          sb.from('meal_day_categories').select('*').order('day_number'),
+        ]);
+        if (cancelled) return;
+        const failed = responses.find(r => r.error);
+        if (failed) throw failed.error;
+        const [current, past, tagRows, dayRows] = responses.map(r => r.data || []);
+        if (dayRows.length !== 6) throw new Error('Day categories could not be loaded. Please retry.');
+        const tags = Object.fromEntries(tagRows.map(r => [r.recipe_key, parseTags(r.tags)]));
+        const next = Array.from({ length: 6 }, (_, i) => ({ ...emptyMeal(i + 1), week_of: week, tagsText: '', dirty: false }));
+        current.forEach(row => {
+          if (row.meal_number >= 1 && row.meal_number <= 6) next[row.meal_number - 1] = { ...row, tagsText: (tags[recipeKey(row)] || []).join(', '), dirty: false };
+        });
+        setMeals(next); setPastRows(past); setRecipeTags(tags); setCategories(dayRows);
+      } catch (e) { if (!cancelled) setLoadError(e.message || 'Could not load the meal planner.'); }
+      finally { if (!cancelled) setLoadingWeek(false); }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [week, reload]);
 
-  async function loadWeek() {
-    setLoadingWeek(true); setGroceryGenerated(false);
-    const { data, error } = await sb.from("weekly_meals").select("*").eq("week_of",week).order("meal_number");
-    if (error) { console.error(error); setLoadingWeek(false); return; }
-    const next = Array.from({length:6},(_,i)=>emptyMeal(i+1));
-    (data||[]).forEach(row=>{ next[row.meal_number-1] = row; });
-    setMeals(next.map(m=>({...m,week_of:week}))); setLoadingWeek(false);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(''), 2800);
+    return () => clearTimeout(timer);
+  }, [toast]);
+  useEffect(() => {
+    const warn = e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  const categoryFor = day => categories.find(c => c.day_number === day);
+  function changeWeek(delta) {
+    if (dirty && !window.confirm('Discard unsaved meal changes and switch weeks?')) return;
+    setWeek(shiftWeek(week, delta));
   }
-  async function loadPast() {
-    const { data, error } = await sb.from("weekly_meals").select("*").lt("week_of",week).order("week_of",{ascending:false}).order("meal_number");
-    if (!error) setPastRows(data||[]);
-  }
-
   function updateMealField(index, field, value) {
-    setMeals(prev=>prev.map((m,i)=>i===index?{...m,[field]:value}:m));
+    setMeals(prev => prev.map((m, i) => i === index ? { ...m, [field]: value, dirty: true } : m));
+    setMealErrors(prev => ({ ...prev, [index]: '' }));
+    setGroceryGenerated(false);
   }
-  async function saveBasics(index) {
-    const meal = meals[index];
-    if (!meal.title.trim() || !meal.source_ref.trim()) return;
-    const payload = { week_of:week, meal_number:meal.meal_number, title:meal.title.trim(), source_ref:meal.source_ref.trim() };
-    if (meal.ingredients) payload.ingredients = meal.ingredients;
-    if (meal.extracted_at) payload.extracted_at = meal.extracted_at;
-    const { data, error } = await sb.from("weekly_meals").upsert(payload,{onConflict:"week_of,meal_number"}).select().single();
-    if (!error && data) setMeals(prev=>prev.map((m,i)=>i===index?{...m,...data}:m));
+  function applyTags(key, tags, savedIndex = -1) {
+    setRecipeTags(prev => ({ ...prev, [key]: tags }));
+    setMeals(prev => prev.map((m, i) => recipeKey(m) === key && (i === savedIndex || !m.dirty) ? { ...m, tagsText: tags.join(', ') } : m));
+    setGroceryGenerated(false);
+  }
+  async function persistMeal(meal, tags) {
+    const validation = mealValidation(meal, tags, categoryFor(meal.meal_number));
+    if (validation) throw new Error(validation);
+    const key = recipeKey(meal);
+    const { error: tagError } = await sb.from('meal_recipe_tags').upsert({ recipe_key: key, tags });
+    if (tagError) throw tagError;
+    applyTags(key, tags, meal.meal_number - 1);
+    const payload = {
+      week_of: week, meal_number: meal.meal_number, title: meal.title.trim(), source_ref: meal.source_ref.trim(),
+      ingredients: meal.ingredients, extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '',
+    };
+    const { data, error } = await sb.from('weekly_meals').upsert(payload, { onConflict: 'week_of,meal_number' }).select().single();
+    if (error) throw error;
+    const saved = { ...data, tagsText: tags.join(', '), dirty: false };
+    setMeals(prev => prev.map(m => m.meal_number === saved.meal_number ? saved : m));
+    return saved;
+  }
+  async function saveMeal(index, extractAfter = false) {
+    if (busy || loadingWeek || loadError) return;
+    setBusy(true); setMealErrors(prev => ({ ...prev, [index]: '' }));
+    try {
+      const saved = await persistMeal(meals[index], parseTags(meals[index].tagsText));
+      if (extractAfter) setModalMeal(saved);
+      else setToast(`Day ${saved.meal_number} saved`);
+    } catch (e) { setMealErrors(prev => ({ ...prev, [index]: e.message || 'Could not save this meal. Please retry.' })); }
+    finally { setBusy(false); }
+  }
+  async function saveCategories(next) {
+    setBusy(true);
+    try {
+      const { error } = await sb.from('meal_day_categories').upsert(next);
+      if (error) throw error;
+      setCategories(next); setSettingsOpen(false); setGroceryGenerated(false); setToast('Day categories saved');
+      return '';
+    } catch (e) { return e.message || 'Could not save categories. Please retry.'; }
+    finally { setBusy(false); }
+  }
+  async function savePastTags(meal, tags) {
+    setBusy(true);
+    try {
+      const key = recipeKey(meal);
+      const { error } = await sb.from('meal_recipe_tags').upsert({ recipe_key: key, tags });
+      if (error) throw error;
+      applyTags(key, tags); setToast('Recipe tags saved');
+      return '';
+    } catch (e) { return e.message || 'Could not save tags. Please retry.'; }
+    finally { setBusy(false); }
+  }
+  async function duplicateMeal(pastMeal, day) {
+    if (busy) return 'Please wait for the current save.';
+    const slot = meals[day - 1];
+    if (!slot || slot.title.trim() || slot.source_ref.trim()) return 'Choose an empty day.';
+    setBusy(true);
+    try {
+      await persistMeal({ ...pastMeal, meal_number: day, rating: null }, recipeTags[recipeKey(pastMeal)] || []);
+      setToast(`Added ${pastMeal.title} to Day ${day}`); return '';
+    } catch (e) { return e.message || 'Could not use this recipe. Please retry.'; }
+    finally { setBusy(false); }
   }
 
-  const allIngredients = useMemo(()=>meals.flatMap(m=>Array.isArray(m.ingredients)?m.ingredients:[]),[meals]);
-  const ready = meals.every(m=>Array.isArray(m.ingredients) && m.ingredients.length>0);
-  const groceryLines = useMemo(()=>aggregateIngredients(allIngredients,mergeSuggestions),[allIngredients,mergeSuggestions]);
-  const groceryText = groceryLines.join("\n");
-
+  const allIngredients = useMemo(() => meals.flatMap(m => Array.isArray(m.ingredients) ? m.ingredients : []), [meals]);
+  const ready = !loadingWeek && !loadError && !busy && meals.length === 6 && meals.every(m => !m.dirty && !mealValidation(m, parseTags(m.tagsText), categoryFor(m.meal_number)) && Array.isArray(m.ingredients) && m.ingredients.length > 0);
+  const groceryLines = useMemo(() => aggregateIngredients(allIngredients, mergeSuggestions), [allIngredients, mergeSuggestions]);
+  const groceryText = groceryLines.join('\n');
   function generate() {
-    const suggestions = buildMergeSuggestions(allIngredients);
-    setMergeSuggestions(suggestions); setGroceryGenerated(true);
-    setTimeout(()=>document.getElementById("grocery")?.scrollIntoView({behavior:"smooth",block:"start"}),50);
+    if (!ready) return;
+    setMergeSuggestions(buildMergeSuggestions(allIngredients)); setGroceryGenerated(true);
+    setTimeout(() => document.getElementById('grocery')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
-  function flash(msg){ setToast(msg); setTimeout(()=>setToast(""),1800); }
-  async function copyList(){ try{ await navigator.clipboard.writeText(groceryText); flash("Copied to clipboard"); }catch{ flash("Couldn't copy automatically"); } }
-  function onIngredientSaved(row){ setMeals(prev=>prev.map(m=>m.meal_number===row.meal_number?row:m)); loadPast(); }
-
-  const pastByWeek = useMemo(()=>{
-    const map={};
-    const q=search.trim().toLowerCase();
-    pastRows.forEach(r=>{ if(q && !r.title.toLowerCase().includes(q)) return; (map[r.week_of] ||= []).push(r); });
-    return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0]));
-  },[pastRows,search]);
-
-  async function duplicateMeal(pastMeal){
-    const idx = meals.findIndex(m=>!m.title.trim());
-    if(idx<0){ flash("This week already has 6 meals"); return; }
-    const target = { ...pastMeal, id:undefined, week_of:week, meal_number:idx+1, created_at:undefined };
-    const payload = { week_of:week, meal_number:idx+1, title:target.title, source_ref:target.source_ref, ingredients:target.ingredients, extracted_at:target.ingredients?new Date().toISOString():null, rating:null, notes:target.notes||"" };
-    const { data,error } = await sb.from("weekly_meals").upsert(payload,{onConflict:"week_of,meal_number"}).select().single();
-    if(error){flash(error.message);return;}
-    setMeals(prev=>prev.map((m,i)=>i===idx?data:m)); flash(`Added “${pastMeal.title}” to meal ${idx+1}`);
+  async function copyList() {
+    try { await navigator.clipboard.writeText(groceryText); setToast('Copied to clipboard'); }
+    catch { setToast("Couldn't copy automatically"); }
   }
+  function onIngredientSaved(row) {
+    setMeals(prev => prev.map(m => m.meal_number === row.meal_number ? { ...row, tagsText: m.tagsText, dirty: false } : m));
+    setGroceryGenerated(false);
+  }
+  const pastByWeek = useMemo(() => {
+    const map = {};
+    const q = search.trim().toLowerCase();
+    pastRows.forEach(r => {
+      const tags = recipeTags[recipeKey(r)] || [];
+      if (q && !`${r.title} ${tags.join(' ')}`.toLowerCase().includes(q)) return;
+      (map[r.week_of] ||= []).push(r);
+    });
+    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [pastRows, search, recipeTags]);
 
-  return <><style>{CSS}</style><div className="app"><div className="shell">
-    <div className="brand">meal planner.</div><div className="sub">Six dinners, one grocery list, less weekly admin.</div>
-
+  return <><style>{CSS + TAG_CSS}</style><div className="app"><div className="shell">
+    <a className="plannerBack" href={`${process.env.PUBLIC_URL || ''}/`}>← Mental Load</a>
+    <div className="brand">meal planner.</div><div className="sub">Six meals, your day categories, one grocery list.</div>
+    {loadError && <div className="plannerNotice" role="alert">{loadError} <button className="btn secondary" onClick={() => setReload(n => n + 1)}>Retry</button></div>}
     <section className="card">
-      <div className="sectionHead"><h2 className="sectionTitle">This week's meals</h2><div className="weekNav"><button className="iconBtn" onClick={()=>setWeek(shiftWeek(week,-1))}>‹</button><div className="weekLabel">{formatWeekLabel(week)}</div><button className="iconBtn" onClick={()=>setWeek(shiftWeek(week,1))}>›</button></div></div>
-      {loadingWeek ? <div className="empty">Loading week…</div> : meals.map((meal,index)=><div className="meal" key={meal.meal_number}>
-        <div className="mealTop"><div className="num">{meal.meal_number}</div><div className="fields">
-          <input className="input" value={meal.title} onChange={e=>updateMealField(index,"title",e.target.value)} onBlur={()=>saveBasics(index)} placeholder="Meal title"/>
-          <input className="input" value={meal.source_ref} onChange={e=>updateMealField(index,"source_ref",e.target.value)} onBlur={()=>saveBasics(index)} placeholder="Source — e.g. Cookish p.47 or URL"/>
-          <button className="btn secondary extract" onClick={()=>setModalMeal({...meal,week_of:week})}>{meal.ingredients?"Review":"Extract"}</button>
-        </div></div>
-        {meal.ingredients ? <div className="status loaded">✓ Ingredients loaded · {meal.ingredients.length} items</div> : (meal.title||meal.source_ref) ? <div className="status">Add ingredients when you're ready.</div> : null}
-      </div>)}
-      <button className="btn generate" onClick={generate} disabled={!ready}>Generate grocery list</button>
-      {!ready && <div className="hint">Available once all 6 meals have saved ingredients.</div>}
+      <div className="rowBetween"><h2 className="sectionTitle">Day categories</h2><button className="btn ghost" disabled={busy || loadingWeek || !!loadError} aria-expanded={settingsOpen} onClick={() => setSettingsOpen(v => !v)}>{settingsOpen ? 'Close' : 'Edit categories'}</button></div>
+      {!settingsOpen && <div className="tagChips">{categories.map(c => <span className="tagChip" key={c.day_number}>Day {c.day_number} · {c.name || (c.accepted_tags.length ? c.accepted_tags.join(' or ') : 'Any recipe')}</span>)}</div>}
+      {settingsOpen && <CategoryEditor categories={categories} onSave={saveCategories} busy={busy}/>}
     </section>
-
-    {groceryGenerated && <section className="card" id="grocery">
+    <section className="card">
+      <div className="sectionHead"><h2 className="sectionTitle">This week's meals</h2><div className="weekNav"><button className="iconBtn" aria-label="Previous week" disabled={busy || loadingWeek} onClick={() => changeWeek(-1)}>‹</button><div className="weekLabel">{formatWeekLabel(week)}</div><button className="iconBtn" aria-label="Next week" disabled={busy || loadingWeek} onClick={() => changeWeek(1)}>›</button></div></div>
+      {loadingWeek ? <div className="empty">Loading week…</div> : !loadError && meals.map((meal, index) => {
+        const category = categoryFor(meal.meal_number);
+        const tags = parseTags(meal.tagsText);
+        const match = matchesCategory(tags, category);
+        return <div className="meal" key={meal.meal_number}>
+          <h3 className="dayHeading">Day {meal.meal_number}</h3>
+          <div className="dayCategory">{category?.name || 'Any recipe'}{category?.accepted_tags.length > 0 && <> · Requires {category.accepted_tags.join(' or ')}</>}</div>
+          <div className="fields">
+            <input className="input" aria-label={`Day ${meal.meal_number} meal title`} value={meal.title} disabled={busy} onChange={e => updateMealField(index, 'title', e.target.value)} placeholder="Meal title"/>
+            <input className="input" aria-label={`Day ${meal.meal_number} source`} value={meal.source_ref} disabled={busy} onChange={e => updateMealField(index, 'source_ref', e.target.value)} placeholder="Source — e.g. Cookish p.47 or URL"/>
+          </div>
+          <label className="tagField">Recipe tags (comma-separated)<input className="input" aria-label={`Day ${meal.meal_number} recipe tags`} value={meal.tagsText} disabled={busy} onChange={e => updateMealField(index, 'tagsText', e.target.value)} placeholder="e.g. soup, instant pot, vegetarian"/></label>
+          {tags.length > 0 && <div className="tagChips">{tags.map(tag => <span className="tagChip" key={tag}>{tag}</span>)}</div>}
+          {!match && <div className="saveError">Add a recipe tagged {category.accepted_tags.join(' or ')} for this day.</div>}
+          {mealErrors[index] && <div className="saveError" role="alert">{mealErrors[index]}</div>}
+          <div className="dayActions"><span className="small">{meal.dirty ? 'Unsaved changes' : meal.id ? 'Saved' : 'Add a title, source and any required tags.'}{meal.ingredients?.length > 0 && ` · ✓ ${meal.ingredients.length} ingredients loaded`}</span>
+            <button className="btn ghost" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim() || (!meal.dirty && !!meal.id)} onClick={() => saveMeal(index)}>Save meal</button>
+            <button className="btn secondary" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim()} onClick={() => saveMeal(index, true)}>{meal.ingredients ? 'Review ingredients' : 'Extract ingredients'}</button>
+          </div>
+        </div>;
+      })}
+      <button className="btn generate" onClick={generate} disabled={!ready}>Generate grocery list</button>
+      {!ready && <div className="hint">Save all six meals with ingredients and matching day tags to generate your list.</div>}
+    </section>
+    {groceryGenerated && ready && <section className="card" id="grocery">
       <div className="rowBetween"><div><h2 className="sectionTitle">Grocery list</h2><div className="small">Plain text, ready for iOS Reminders.</div></div><button className="btn copyBtn" onClick={copyList}>Copy</button></div>
-      {mergeSuggestions.length>0 && <div className="mergeBox"><div style={{fontWeight:600,fontSize:13,marginBottom:4}}>Suggested merges — confirm these</div>{mergeSuggestions.map(s=><label className="mergeRow" key={s.id}><span><b>{s.variants.join(" + ")}</b> → {s.canonical}</span><input className="toggle" type="checkbox" checked={s.enabled} onChange={()=>setMergeSuggestions(prev=>prev.map(x=>x.id===s.id?{...x,enabled:!x.enabled}:x))}/></label>)}</div>}
+      {mergeSuggestions.length > 0 && <div className="mergeBox"><div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Suggested merges — confirm these</div>{mergeSuggestions.map(s => <label className="mergeRow" key={s.id}><span><b>{s.variants.join(' + ')}</b> → {s.canonical}</span><input className="toggle" type="checkbox" checked={s.enabled} onChange={() => setMergeSuggestions(prev => prev.map(x => x.id === s.id ? { ...x, enabled: !x.enabled } : x))}/></label>)}</div>}
       <div className="groceryBox">{groceryText}</div>
     </section>}
-
     <section className="card">
-      <div className="rowBetween collapsible" onClick={()=>setPastOpen(v=>!v)}><div><h2 className="sectionTitle">Past weeks</h2><div className="small">Reuse meals you've already planned.</div></div><div style={{fontSize:22}}>{pastOpen?"⌃":"⌄"}</div></div>
-      {pastOpen && <div style={{marginTop:14}}><input className="input search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search past meals by title…"/>{pastByWeek.length===0?<div className="empty">No matching past meals yet.</div>:pastByWeek.map(([wk,rows])=><div className="pastWeek" key={wk}>
-        <div className="rowBetween collapsible" onClick={()=>setExpandedWeeks(p=>({...p,[wk]:!p[wk]}))}><div><b>{formatWeekLabel(wk)}</b><div className="small">{rows.length} meal{rows.length===1?"":"s"}</div></div><span>{expandedWeeks[wk]?"−":"+"}</span></div>
-        {expandedWeeks[wk] && <div className="pastMeals">{rows.sort((a,b)=>a.meal_number-b.meal_number).map(r=><button className="pastMeal" key={r.id} onClick={()=>duplicateMeal(r)}><b>{r.title}</b><div className="small">{r.source_ref} · tap to add to current week</div></button>)}</div>}
+      <div className="rowBetween"><div><h2 className="sectionTitle">Past weeks</h2><div className="small">Tag saved recipes and reuse them on a matching day.</div></div><button className="btn ghost" aria-expanded={pastOpen} disabled={loadingWeek || !!loadError} onClick={() => setPastOpen(v => !v)}>{pastOpen ? 'Hide recipes' : 'Browse recipes'}</button></div>
+      {pastOpen && !loadingWeek && !loadError && <div style={{ marginTop: 14 }}><input className="input search" aria-label="Search past recipes" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by meal title or tag…"/>{pastByWeek.length === 0 ? <div className="empty">No matching past meals yet.</div> : pastByWeek.map(([wk, rows]) => <div className="pastWeek" key={wk}>
+        <button className="btn secondary" aria-expanded={!!expandedWeeks[wk]} onClick={() => setExpandedWeeks(p => ({ ...p, [wk]: !p[wk] }))}>{formatWeekLabel(wk)} · {rows.length} meals {expandedWeeks[wk] ? '−' : '+'}</button>
+        {expandedWeeks[wk] && <div className="pastMeals">{rows.map(r => <PastRecipe key={r.id} meal={r} tags={recipeTags[recipeKey(r)] || EMPTY_TAGS} categories={categories} meals={meals} onTagsSaved={savePastTags} onUse={duplicateMeal} busy={busy}/>)}</div>}
       </div>)}</div>}
     </section>
-  </div></div>{modalMeal&&<ExtractionModal meal={modalMeal} onClose={()=>setModalMeal(null)} onSaved={onIngredientSaved}/>} {toast&&<div className="toast">{toast}</div>}</>;
+  </div></div>{modalMeal && <ExtractionModal meal={modalMeal} tags={parseTags(modalMeal.tagsText)} category={categoryFor(modalMeal.meal_number)} onClose={() => setModalMeal(null)} onSaved={onIngredientSaved}/>} {toast && <div className="toast" role="status">{toast}</div>}</>;
 }
+const EMPTY_TAGS = [];

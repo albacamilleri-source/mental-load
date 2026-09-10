@@ -3690,6 +3690,7 @@ const NAV_PRIMARY = [
 ];
 
 const NAV_MORE = [
+  { key: "meal-planner", label: "Meal Planner", icon: "♧" },
   { key: "plan",     label: "Plan",    icon: "◷", albaOnly: true },
   { key: "connect",  label: "Connect", icon: "♡", albaOnly: true },
   { key: "todo",     label: "Do",      icon: "◉", albaOnly: true },
@@ -3767,8 +3768,8 @@ function BottomNav({ active, onChange, who }) {
               <div style={{ width: 16, height: 2, borderRadius: 1, background: active === n.key ? "var(--sage)" : "transparent", marginTop: 1, transition: "background 0.18s" }} />
             </button>
           ))}
-          {/* More button — alba only */}
-          {who === "alba" && <button onClick={() => setShowMore(s => !s)} style={{
+          {/* More button */}
+          {visibleMore.length > 0 && <button onClick={() => setShowMore(s => !s)} style={{
             flex: 1, background: "none", border: "none",
             display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
             padding: "4px 4px",
@@ -3916,6 +3917,10 @@ function AppInner() {
   const [desktop, setDesktop] = useState(isDesktop);
 
   const navigateTo = (next) => {
+    if (next === "meal-planner") {
+      window.location.assign(`${process.env.PUBLIC_URL || ''}/meal-planner/`);
+      return;
+    }
     const order = NAV.map(n => n.key);
     const from = order.indexOf(screen);
     const to   = order.indexOf(next);
