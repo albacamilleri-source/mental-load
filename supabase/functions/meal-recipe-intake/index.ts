@@ -48,17 +48,24 @@ Deno.serve(async (req: Request) => {
     if (categories.length !== 6) throw new Error("Day categories could not be loaded.");
     const categoryTags = [...new Set(categories.flatMap(category => parseTags(category.accepted_tags)))];
 
-    const extractionResponse = await fetch(`${supabaseUrl}/functions/v1/meal-recipe-import`, {
-      method: "POST",
-      headers: { Authorization: authorization, apikey, "Content-Type": "application/json" },
-      body: JSON.stringify({ url: sourceUrl, categoryTags }),
-    });
-    const extraction = await extractionResponse.json().catch(() => ({}));
-    if (!extractionResponse.ok) return json({ error: extraction?.error || "The recipe could not be extracted.", code: extraction?.code || "EXTRACTION_FAILED" }, extractionResponse.status);
+    let extraction = body?.recipe;
+    if (extraction) {
+      let suppliedUrl = "";
+      try { suppliedUrl = normalizeRecipeUrl(extraction.source_ref); } catch { /* handled below */ }
+      if (suppliedUrl !== sourceUrl) return json({ error: "The reviewed recipe does not match this page." }, 400);
+    } else {
+      const extractionResponse = await fetch(`${supabaseUrl}/functions/v1/meal-recipe-import`, {
+        method: "POST",
+        headers: { Authorization: authorization, apikey, "Content-Type": "application/json" },
+        body: JSON.stringify({ url: sourceUrl, categoryTags }),
+      });
+      extraction = await extractionResponse.json().catch(() => ({}));
+      if (!extractionResponse.ok) return json({ error: extraction?.error || "The recipe could not be extracted.", code: extraction?.code || "EXTRACTION_FAILED" }, extractionResponse.status);
+    }
 
     const title = String(extraction?.title || "").trim();
     const ingredients = Array.isArray(extraction?.ingredients) ? extraction.ingredients : [];
-    const tags = parseTags(extraction?.tags);
+    const tags = body?.tags === undefined ? parseTags(extraction?.tags) : parseTags(body.tags);
     if (!title || !ingredients.length) return json({ error: "The importer could not find a complete recipe on that page.", code: "INCOMPLETE_RECIPE" }, 422);
     const now = new Date().toISOString();
     const existingLibrary = existingLibraryResult.data;

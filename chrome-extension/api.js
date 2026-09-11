@@ -10,7 +10,7 @@ export function currentIsoWeek(date = new Date()) {
   return `${local.getFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
-export async function sendRecipe({ url, destination, dryRun = false }, fetcher = fetch) {
+export async function sendRecipe({ url, destination, dryRun = false, recipe, tags }, fetcher = fetch) {
   if (!/^https?:\/\//i.test(String(url || '').trim())) throw new Error('This tab does not have a recipe website URL.');
   const response = await fetcher(INTAKE_ENDPOINT, {
     method: 'POST',
@@ -19,7 +19,7 @@ export async function sendRecipe({ url, destination, dryRun = false }, fetcher =
       apikey: PUBLIC_ANON_KEY,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ url, destination, weekOf: currentIsoWeek(), dryRun }),
+    body: JSON.stringify({ url, destination, weekOf: currentIsoWeek(), dryRun, ...(recipe ? { recipe, tags } : {}) }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.ok) throw new Error(data.error || `Mental Load could not import this recipe (${response.status}).`);
