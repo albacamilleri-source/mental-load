@@ -161,6 +161,57 @@ test('recipe library combines current, past, queued, and cooked recipes without 
   expect([...container.querySelectorAll('h2')].map(heading => heading.textContent)).not.toContain('Cooked recipes');
 });
 
+test('library cards show scheduled and queued day indicators', async () => {
+  current = [sample(1)];
+  queue = [{...sample(2), id:'q2', day_number:1, position:1, created_at:'2026-09-11T08:00:00Z'}];
+  await render();
+  const cards = [...container.querySelectorAll('#recipe-library .recipeCard')];
+  const scheduled = cards.find(card => card.textContent.includes('Recipe 1'));
+  const queued = cards.find(card => card.textContent.includes('Recipe 2'));
+  expect(scheduled.textContent).toContain('Scheduled · Day 1');
+  expect(scheduled.textContent).not.toContain('Queued ·');
+  expect(queued.textContent).toContain('Queued · Day 1');
+  expect(queued.textContent).not.toContain('Scheduled ·');
+});
+
+test('a saved meal can be unscheduled and remains in the recipe library', async () => {
+  current = [sample(1)];
+  await render();
+  await click(button('Unschedule', day(1)));
+  expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({
+    title: 'Recipe 1', source_ref: 'Book 1', has_been_cooked: false, is_deleted: false,
+  });
+  expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
+  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
+  expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 1');
+});
+
+test('dragging a scheduled meal to the library unschedules it', async () => {
+  current = [sample(1)];
+  await render();
+  const transfer = { values: {}, setData(type, value) { this.values[type] = value; }, getData(type) { return this.values[type] || ''; }, effectAllowed: '', dropEffect: '' };
+  const dragHandle = [...day(1).querySelectorAll('[draggable="true"]')].find(el => el.textContent === 'Drag to library');
+  const recipeLibrary = container.querySelector('#recipe-library');
+  await act(async () => { Simulate.dragStart(dragHandle, {dataTransfer: transfer}); });
+  expect(recipeLibrary.className).toContain('libraryDropReady');
+  await act(async () => { Simulate.dragOver(recipeLibrary, {dataTransfer: transfer}); Simulate.drop(recipeLibrary, {dataTransfer: transfer}); });
+  expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
+  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
+  expect(recipeLibrary.textContent).toContain('Recipe 1');
+});
+
+test('unscheduling a queued meal removes it from the queue and fills the day with the next recipe', async () => {
+  const first = {...sample(2), id:'q1', day_number:2, position:1, created_at:'2026-09-11T08:00:00Z'};
+  const second = {...sample(3), id:'q2', day_number:2, position:2, created_at:'2026-09-11T09:00:00Z'};
+  queue = [first, second];
+  current = [{...first, id:'meal-2', meal_number:2, queue_item_id:'q1', is_override:false, override_type:null}];
+  await render();
+  await click(button('Unschedule', day(2)));
+  expect(writes).toContainEqual({table: 'meal_recipe_queue', delete: {field: 'id', value: 'q1', payload: undefined}});
+  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Recipe 3');
+  expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 2');
+});
+
 test('imports a URL with AI details, assigns a queue, and fills its blank day', async () => {
   mockInvoke.mockResolvedValue({data: {title: 'Lemony Pasta', source_ref: 'https://example.com/pasta', ingredients: [{name:'lemon', qty:1, unit:'item'}], tags:['pasta','quick']}, error: null});
   await render();
