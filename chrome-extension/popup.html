@@ -14,10 +14,20 @@
         <div id="page-title" class="title">Reading this page…</div>
         <div id="page-url" class="url"></div>
       </section>
-      <div class="actions">
+      <div id="initial-actions" class="actions">
         <button id="import-queue" type="button">Import &amp; queue</button>
         <button id="import-only" class="secondary" type="button">Import only</button>
       </div>
+      <section id="tag-review" class="review" hidden aria-label="Review recipe tags">
+        <div id="review-title" class="review-title"></div>
+        <label for="recipe-tags">Edit tags before saving</label>
+        <input id="recipe-tags" type="text" autocomplete="off" placeholder="e.g. chicken, quick, pasta" aria-describedby="tag-help">
+        <div id="tag-help" class="help">Separate tags with commas. These remain editable in your Recipe library.</div>
+        <div class="actions">
+          <button id="confirm-import" type="button">Save recipe</button>
+          <button id="cancel-review" class="secondary" type="button">Cancel</button>
+        </div>
+      </section>
       <div id="status" class="status" role="status" aria-live="polite"></div>
     </main>
     <script type="module" src="popup.js"></script>

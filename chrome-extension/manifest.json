@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Send to Mental Load",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Save the recipe in your current tab to Mental Load.",
   "permissions": ["activeTab", "contextMenus"],
   "host_permissions": ["https://qvibdnrfywisvfsqgqux.supabase.co/*"],
