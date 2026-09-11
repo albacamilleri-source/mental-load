@@ -272,6 +272,36 @@ test('imports a URL directly to the library without scheduling it', async () => 
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
 });
 
+test('adds a manual recipe to the library from the recipe details modal', async () => {
+  await render();
+  await click(button('Add manually'));
+  const modal = document.body.querySelector('[aria-label="Add a recipe manually"]');
+  expect(modal).not.toBeNull();
+  await change('Manual recipe title', 'Family Pie');
+  await change('Manual recipe URL or source', 'Grandma’s notebook');
+  await change('Manual recipe tags', 'pie, family');
+  await change('Manual recipe ingredients', '2 carrots\n500 g beef');
+  await change('Manual recipe method', '1. Assemble.\n2. Bake.');
+  await click(button('Save to library', modal));
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.title === 'Family Pie')).toMatchObject({value:{source_ref:'Grandma’s notebook', method:'1. Assemble.\n2. Bake.', ingredients:[{name:'2 carrots',qty:null,unit:''},{name:'500 g beef',qty:null,unit:''}]}});
+  expect(document.body.querySelector('[aria-label="Add a recipe manually"]')).toBeNull();
+});
+
+test('adds a manual recipe to its matching queue', async () => {
+  categories[0] = {...categories[0], name:'Pasta Thursday', accepted_tags:['pasta']};
+  await render();
+  await click(button('Add manually'));
+  const modal = document.body.querySelector('[aria-label="Add a recipe manually"]');
+  await change('Manual recipe title', 'Handwritten Pasta');
+  await change('Manual recipe URL or source', 'Recipe card');
+  await change('Manual recipe tags', 'pasta');
+  await change('Manual recipe ingredients', '200 g pasta');
+  await change('Manual recipe method', 'Boil until tender.');
+  await click(button('Save & queue', modal));
+  expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toMatchObject({insert:{day_number:1,title:'Handwritten Pasta',method:'Boil until tender.'}});
+  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Handwritten Pasta');
+});
+
 test('library cards open a modal with ingredients, editable source and method, and can be removed', async () => {
   library = [{...sample(1), method:'1. Boil the carrots.', recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:true, is_deleted:false}];
   await render();
