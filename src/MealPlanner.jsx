@@ -583,7 +583,13 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       };
       const { data: saved, error } = await sb.from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (error) throw error;
+      const { error: queueError } = await sb.from('meal_recipe_queue').update({ method: payload.method }).eq('source_ref', payload.source_ref);
+      if (queueError) throw queueError;
+      const { error: scheduleError } = await sb.from('weekly_meals').update({ method: payload.method }).eq('source_ref', payload.source_ref);
+      if (scheduleError) throw scheduleError;
       setLibraryRecords(prev => [saved, ...prev.filter(row => row.recipe_key !== key)]);
+      setQueueRows(prev => prev.map(row => recipeKey(row) === key ? { ...row, method: payload.method } : row));
+      setMeals(prev => prev.map(row => recipeKey(row) === key ? { ...row, method: payload.method } : row));
       setToast('Recipe method saved');
       return '';
     } catch (e) { return e.message || 'Could not save the recipe method. Please retry.'; }
