@@ -272,13 +272,19 @@ test('imports a URL directly to the library without scheduling it', async () => 
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
 });
 
-test('library cards show ingredients and can be removed without changing a schedule', async () => {
-  library = [{...sample(1), recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:true, is_deleted:false}];
+test('library cards expand to show ingredients and an editable method, and can be removed', async () => {
+  library = [{...sample(1), method:'1. Boil the carrots.', recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:true, is_deleted:false}];
   await render();
   const recipeLibrary = container.querySelector('#recipe-library');
   expect(recipeLibrary.textContent).toContain('✓ Cooked');
-  expect(recipeLibrary.textContent).toContain('View ingredients · 1');
+  expect(recipeLibrary.textContent).not.toContain('View ingredients');
+  expect(recipeLibrary.textContent).not.toContain('carrot · 1');
+  await click(button('View recipe', recipeLibrary));
   expect(recipeLibrary.textContent).toContain('carrot · 1');
+  expect(recipeLibrary.querySelector('[aria-label="Method for Recipe 1"]').value).toBe('1. Boil the carrots.');
+  await change('Method for Recipe 1', '1. Roast the carrots.');
+  await click(button('Save method', recipeLibrary));
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.method === '1. Roast the carrots.')).toBeTruthy();
   await click(button('Delete', recipeLibrary));
   expect(window.confirm).toHaveBeenCalled();
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.is_deleted)).toBeTruthy();

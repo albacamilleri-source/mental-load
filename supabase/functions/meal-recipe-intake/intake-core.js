@@ -56,6 +56,7 @@ export function queueMealPayload(item, weekOf, day) {
     title: String(item.title).trim(),
     source_ref: String(item.source_ref).trim(),
     ingredients: item.ingredients,
+    method: item.method || '',
     extracted_at: item.extracted_at,
     rating: item.rating,
     notes: item.notes || '',

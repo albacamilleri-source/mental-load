@@ -24,9 +24,10 @@ const recipeSchema = {
         additionalProperties: false,
       },
     },
+    method: { type: "string" },
     tags: { type: "array", items: { type: "string" } },
   },
-  required: ["title", "source_ref", "ingredients", "tags"],
+  required: ["title", "source_ref", "ingredients", "method", "tags"],
   additionalProperties: false,
 };
 
@@ -86,7 +87,8 @@ Deno.serve(async (req: Request) => {
       : [];
     const instruction = [
       "Extract this recipe for a meal-planning queue.",
-      "Return the recipe title, the supplied page URL as source_ref, all ingredients needed to cook it, and 2-6 concise lowercase tags.",
+      "Return the recipe title, the supplied page URL as source_ref, all ingredients needed to cook it, the complete cooking method, and 2-6 concise lowercase tags.",
+      "Write the method as clear numbered steps in a single text string. Preserve temperatures, timings, and useful preparation details.",
       "Normalize ingredient names, preserve stated quantities, use numeric quantities when stated, and use qty null for 'to taste' or 'as needed'.",
       "For countable items with no unit, use unit 'item'. Exclude equipment and method steps.",
       categoryTags.length ? `Prefer these existing category tags when they accurately apply: ${categoryTags.join(", ")}.` : "Use practical tags such as soup, pasta, instant pot, slow cooker, vegetarian, chicken, fish, or quick.",
