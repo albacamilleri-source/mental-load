@@ -397,18 +397,15 @@ export default function MealPlanner({ onDirtyChange } = {}) {
   const [modalMeal, setModalMeal] = useState(null);
   const [groceryGenerated, setGroceryGenerated] = useState(false);
   const [mergeSuggestions, setMergeSuggestions] = useState([]);
-  const [pastOpen, setPastOpen] = useState(false);
   const [pastRows, setPastRows] = useState([]);
   const [cookedRecipes, setCookedRecipes] = useState([]);
-  const [cookedOpen, setCookedOpen] = useState(true);
-  const [cookedSearch, setCookedSearch] = useState('');
+  const [libraryOpen, setLibraryOpen] = useState(true);
+  const [librarySearch, setLibrarySearch] = useState('');
   const [draggedRecipeKey, setDraggedRecipeKey] = useState('');
   const [dropTarget, setDropTarget] = useState(null);
   const [queueRows, setQueueRows] = useState([]);
   const [queueOpen, setQueueOpen] = useState(false);
   const [switchDay, setSwitchDay] = useState(null);
-  const [expandedWeeks, setExpandedWeeks] = useState({});
-  const [search, setSearch] = useState('');
   const [toast, setToast] = useState('');
   const dirty = meals.some(m => m.dirty);
   useEffect(() => {
@@ -423,7 +420,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       try {
         const responses = await Promise.all([
           sb.from('weekly_meals').select('*').eq('week_of', week).order('meal_number'),
-          sb.from('weekly_meals').select('*').lt('week_of', week).order('week_of', { ascending: false }).order('meal_number'),
+          sb.from('weekly_meals').select('*').order('week_of', { ascending: false }).order('meal_number'),
           sb.from('meal_recipe_tags').select('*'),
           sb.from('meal_day_categories').select('*').order('day_number'),
           sb.from('meal_recipe_library').select('*').order('cooked_at', { ascending: false }),
@@ -708,7 +705,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
   async function dropRecipe(event, day) {
     event.preventDefault();
     const key = event.dataTransfer.getData('application/x-meal-recipe') || draggedRecipeKey;
-    const recipe = cookedRecipes.find(row => recipeKey(row) === key);
+    const recipe = libraryRecipes.find(row => recipeKey(row) === key);
     setDraggedRecipeKey(''); setDropTarget(null);
     if (!recipe) return;
     const message = await duplicateMeal(recipe, day);
@@ -732,23 +729,32 @@ export default function MealPlanner({ onDirtyChange } = {}) {
     setMeals(prev => prev.map(m => m.meal_number === row.meal_number ? { ...row, tagsText: m.tagsText, dirty: false } : m));
     setGroceryGenerated(false);
   }
-  const pastByWeek = useMemo(() => {
-    const map = {};
-    const q = search.trim().toLowerCase();
-    pastRows.forEach(r => {
-      const tags = recipeTags[recipeKey(r)] || [];
-      if (q && !`${r.title} ${tags.join(' ')}`.toLowerCase().includes(q)) return;
-      (map[r.week_of] ||= []).push(r);
+  const libraryRecipes = useMemo(() => {
+    const recipes = new Map();
+    const savedMeals = meals.filter(meal => meal.id && !meal.dirty);
+    [...pastRows, ...queueRows, ...savedMeals, ...cookedRecipes].forEach(recipe => {
+      if (!recipe?.title?.trim() || !recipe?.source_ref?.trim()) return;
+      const key = recipeKey(recipe);
+      const previous = recipes.get(key);
+      recipes.set(key, previous ? {
+        ...previous,
+        ...recipe,
+        ingredients: recipe.ingredients?.length ? recipe.ingredients : previous.ingredients,
+        extracted_at: recipe.extracted_at || previous.extracted_at,
+        notes: recipe.notes || previous.notes,
+        rating: recipe.rating ?? previous.rating,
+        recipe_key: recipe.recipe_key || previous.recipe_key || key,
+      } : { ...recipe, recipe_key: recipe.recipe_key || key });
     });
-    return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [pastRows, search, recipeTags]);
-  const filteredCookedRecipes = useMemo(() => {
-    const q = cookedSearch.trim().toLowerCase();
-    return cookedRecipes.filter(recipe => {
+    return [...recipes.values()].sort((a, b) => a.title.localeCompare(b.title));
+  }, [pastRows, queueRows, meals, cookedRecipes]);
+  const filteredLibraryRecipes = useMemo(() => {
+    const q = librarySearch.trim().toLowerCase();
+    return libraryRecipes.filter(recipe => {
       const tags = recipeTags[recipeKey(recipe)] || [];
       return !q || `${recipe.title} ${recipe.source_ref} ${tags.join(' ')}`.toLowerCase().includes(q);
     });
-  }, [cookedRecipes, cookedSearch, recipeTags]);
+  }, [libraryRecipes, librarySearch, recipeTags]);
 
   return <div className="meal-planner"><div className="app"><div className="shell">
     <header className="plannerHeader">
@@ -804,21 +810,14 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       {mergeSuggestions.length > 0 && <div className="mergeBox"><div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Suggested merges — confirm these</div>{mergeSuggestions.map(s => <label className="mergeRow" key={s.id}><span><b>{s.variants.join(' + ')}</b> → {s.canonical}</span><input className="toggle" type="checkbox" checked={s.enabled} onChange={() => setMergeSuggestions(prev => prev.map(x => x.id === s.id ? { ...x, enabled: !x.enabled } : x))}/></label>)}</div>}
       <div className="groceryBox">{groceryText}</div>
     </section>}
-    <section className="card" id="cooked-recipes">
-      <div className="rowBetween"><div><h2 className="sectionTitle">Cooked recipes</h2><div className="small">Your searchable recipe bank. Drag a recipe onto a matching empty day.</div></div><button className="btn ghost" aria-expanded={cookedOpen} disabled={loadingWeek || !!loadError} onClick={() => setCookedOpen(v => !v)}>{cookedOpen ? 'Hide library' : 'Browse library'}</button></div>
-      {cookedOpen && !loadingWeek && !loadError && <div className="recipeLibrary"><input className="input search" aria-label="Search cooked recipes" value={cookedSearch} onChange={e => setCookedSearch(e.target.value)} placeholder="Search by recipe, source or tag…"/>{filteredCookedRecipes.length === 0 ? <div className="empty">{cookedSearch ? 'No cooked recipes match your search.' : 'Recipes you mark as cooked will appear here.'}</div> : <div className="pastMeals">{filteredCookedRecipes.map(recipe => <RecipeCard key={recipe.recipe_key} meal={recipe} tags={recipeTags[recipeKey(recipe)] || EMPTY_TAGS} categories={categories} meals={meals} onTagsSaved={savePastTags} onUse={duplicateMeal} busy={busy} draggable onDragStart={startRecipeDrag} onDragEnd={() => { setDraggedRecipeKey(''); setDropTarget(null); }}/>)}</div>}</div>}
-    </section>
-    <section className="card">
-      <div className="rowBetween"><div><h2 className="sectionTitle">Past weeks</h2><div className="small">Tag saved recipes and reuse them on a matching day.</div></div><button className="btn ghost" aria-expanded={pastOpen} disabled={loadingWeek || !!loadError} onClick={() => setPastOpen(v => !v)}>{pastOpen ? 'Hide recipes' : 'Browse recipes'}</button></div>
-      {pastOpen && !loadingWeek && !loadError && <div style={{ marginTop: 14 }}><input className="input search" aria-label="Search past recipes" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by meal title or tag…"/>{pastByWeek.length === 0 ? <div className="empty">No matching past meals yet.</div> : pastByWeek.map(([wk, rows]) => <div className="pastWeek" key={wk}>
-        <button className="btn secondary" aria-expanded={!!expandedWeeks[wk]} onClick={() => setExpandedWeeks(p => ({ ...p, [wk]: !p[wk] }))}>{formatWeekLabel(wk)} · {rows.length} meals {expandedWeeks[wk] ? '−' : '+'}</button>
-        {expandedWeeks[wk] && <div className="pastMeals">{rows.map(r => <RecipeCard key={r.id} meal={r} tags={recipeTags[recipeKey(r)] || EMPTY_TAGS} categories={categories} meals={meals} onTagsSaved={savePastTags} onUse={duplicateMeal} busy={busy}/>)}</div>}
-      </div>)}</div>}
+    <section className="card" id="recipe-library">
+      <div className="rowBetween"><div><h2 className="sectionTitle">Recipe library</h2><div className="small">Every saved recipe in one searchable library. Drag a recipe onto a matching empty day.</div></div><button className="btn ghost" aria-expanded={libraryOpen} disabled={loadingWeek || !!loadError} onClick={() => setLibraryOpen(v => !v)}>{libraryOpen ? 'Hide library' : 'Browse library'}</button></div>
+      {libraryOpen && !loadingWeek && !loadError && <div className="recipeLibrary"><input className="input search" aria-label="Search recipe library" value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="Search by recipe, source or tag…"/>{filteredLibraryRecipes.length === 0 ? <div className="empty">{librarySearch ? 'No recipes match your search.' : 'Recipes you save or import will appear here.'}</div> : <div className="pastMeals">{filteredLibraryRecipes.map(recipe => <RecipeCard key={recipe.recipe_key} meal={recipe} tags={recipeTags[recipeKey(recipe)] || EMPTY_TAGS} categories={categories} meals={meals} onTagsSaved={savePastTags} onUse={duplicateMeal} busy={busy} draggable onDragStart={startRecipeDrag} onDragEnd={() => { setDraggedRecipeKey(''); setDropTarget(null); }}/>)}</div>}</div>}
     </section>
   </div></div>{(modalMeal || toast || queueOpen || switchDay !== null) && createPortal(<div className="meal-planner">
     {modalMeal && <ExtractionModal meal={modalMeal} tags={parseTags(modalMeal.tagsText)} category={categoryFor(modalMeal.meal_number)} onClose={() => setModalMeal(null)} onSaved={onIngredientSaved}/>}
     {queueOpen && <QueueManager queue={queueRows} categories={categories} tagMap={recipeTags} busy={busy} onClose={() => setQueueOpen(false)} onTagsSaved={savePastTags} onMove={moveQueueItem} onBump={bumpQueueItem}/>}
-    {switchDay !== null && <SwitchMealModal day={switchDay} library={cookedRecipes} tagMap={recipeTags} busy={busy} onClose={() => setSwitchDay(null)} onSave={switchMeal}/>}
+    {switchDay !== null && <SwitchMealModal day={switchDay} library={libraryRecipes} tagMap={recipeTags} busy={busy} onClose={() => setSwitchDay(null)} onSave={switchMeal}/>}
     {toast && <div className="toast" role="status">{toast}</div>}
   </div>, document.body)}</div>;
 }

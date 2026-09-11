@@ -10,8 +10,10 @@ jest.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (...arg
 let container, root, current, past, library, queue, tagRows, categories, writes, failure;
 const sample = (n, tags = []) => ({ id: `meal-${n}`, meal_number: n, title: `Recipe ${n}`, source_ref: `Book ${n}`, week_of: '2026-W36', ingredients: [{name: 'carrot', qty: 1, unit: 'item'}], extracted_at: null, tags });
 function setupQueries() {
+  let weeklyReadCount = 0;
   mockFrom.mockImplementation(table => {
-    let isPast = false, payload, action = '';
+    if (table === 'weekly_meals') weeklyReadCount += 1;
+    let isPast = table === 'weekly_meals' && weeklyReadCount === 2, payload, action = '';
     const query = {
       select: () => query,
       eq: (field, value) => { if (action) writes.push({ table, [action]: { field, value, payload } }); return query; },
@@ -74,8 +76,7 @@ test('grocery generation requires all saved recipes to match, including after ca
 
 test('past recipes offer only matching empty days; saving tags enables soup day and reuse preserves tags', async () => {
   past = [sample(1)];
-  await render(); await click(button('Browse recipes'));
-  await click(container.querySelector('.pastWeek > button'));
+  await render();
   let select = container.querySelector('select');
   expect([...select.options].map(o => o.value)).not.toContain('6');
   await change('Tags for Recipe 1', 'soup');
@@ -126,22 +127,37 @@ test('marking a saved meal cooked banks the recipe and clears its day', async ()
   expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1'});
   expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
   expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
-  expect(container.querySelector('#cooked-recipes').textContent).toContain('Recipe 1');
+  expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 1');
 });
 
-test('cooked recipes are searchable and can be dragged onto a matching empty day', async () => {
+test('library recipes are searchable and can be dragged onto a matching empty day', async () => {
   const cooked = {...sample(1), recipe_key: recipeKey(sample(1)), cooked_at: '2026-09-10T20:00:00Z'};
   library = [cooked];
   tagRows = [{recipe_key: cooked.recipe_key, tags: ['soup']}];
   await render();
-  await change('Search cooked recipes', 'soup');
-  const card = container.querySelector('#cooked-recipes .recipeCard');
+  await change('Search recipe library', 'soup');
+  const card = container.querySelector('#recipe-library .recipeCard');
   expect(card).not.toBeNull();
   const transfer = { values: {}, setData(type, value) { this.values[type] = value; }, getData(type) { return this.values[type] || ''; }, effectAllowed: '', dropEffect: '' };
   await act(async () => { Simulate.dragStart(card, {dataTransfer: transfer}); });
   await act(async () => { Simulate.dragOver(day(6), {dataTransfer: transfer}); Simulate.drop(day(6), {dataTransfer: transfer}); });
   expect(writes[writes.length - 1].value).toMatchObject({meal_number: 6, title: 'Recipe 1'});
   expect(container.querySelector('[aria-label="Day 6 recipe tags"]').value).toBe('soup');
+});
+
+test('recipe library combines current, past, queued, and cooked recipes without duplicates', async () => {
+  const duplicate = {...sample(1), recipe_key: recipeKey(sample(1)), cooked_at: '2026-09-10T20:00:00Z'};
+  current = [sample(1)];
+  past = [sample(2), sample(1)];
+  queue = [{...sample(3), id:'q3', day_number:3, position:1, created_at:'2026-09-11T08:00:00Z'}];
+  library = [duplicate, {...sample(4), recipe_key: recipeKey(sample(4)), cooked_at: '2026-09-09T20:00:00Z'}];
+  await render();
+  const recipeLibrary = container.querySelector('#recipe-library');
+  expect(recipeLibrary).not.toBeNull();
+  expect(recipeLibrary.querySelectorAll('.recipeCard')).toHaveLength(4);
+  expect([...recipeLibrary.querySelectorAll('.recipeCard')].filter(card => card.textContent.includes('Recipe 1'))).toHaveLength(1);
+  expect(container.textContent).not.toContain('Past weeks');
+  expect([...container.querySelectorAll('h2')].map(heading => heading.textContent)).not.toContain('Cooked recipes');
 });
 
 test('imports a URL with AI details, assigns a queue, and fills its blank day', async () => {
