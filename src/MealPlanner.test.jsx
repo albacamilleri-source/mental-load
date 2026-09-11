@@ -44,6 +44,7 @@ function day(n) { return [...container.querySelectorAll('.meal')].find(el => el.
 async function click(el) { await act(async () => { el.click(); }); }
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
+  window.confirm = jest.fn(() => true);
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
   current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; mockInvoke.mockReset(); setupQueries();
 });
@@ -124,14 +125,14 @@ test('marking a saved meal cooked banks the recipe and clears its day', async ()
   tagRows = [{recipe_key: recipeKey(current[0]), tags: ['pasta']}];
   await render();
   await click(button('Mark cooked', day(1)));
-  expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1'});
+  expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1', has_been_cooked: true, is_deleted: false});
   expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
   expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 1');
 });
 
 test('library recipes are searchable and can be dragged onto a matching empty day', async () => {
-  const cooked = {...sample(1), recipe_key: recipeKey(sample(1)), cooked_at: '2026-09-10T20:00:00Z'};
+  const cooked = {...sample(1), recipe_key: recipeKey(sample(1)), cooked_at: '2026-09-10T20:00:00Z', has_been_cooked: true, is_deleted: false};
   library = [cooked];
   tagRows = [{recipe_key: cooked.recipe_key, tags: ['soup']}];
   await render();
@@ -170,6 +171,32 @@ test('imports a URL with AI details, assigns a queue, and fills its blank day', 
   expect([1, 2, 3, 5]).toContain(queueWrite.insert.day_number);
   expect(queueWrite.insert).toMatchObject({title:'Lemony Pasta', ingredients:[{name:'lemon', qty:1, unit:'item'}]});
   expect(container.querySelector(`[aria-label="Day ${queueWrite.insert.day_number} meal title"]`).value).toBe('Lemony Pasta');
+});
+
+test('imports a URL directly to the library without scheduling it', async () => {
+  mockInvoke.mockResolvedValue({data: {title: 'Library Pasta', source_ref: 'https://example.com/library-pasta', ingredients: [{name:'lemon', qty:1, unit:'item'}], tags:['pasta']}, error: null});
+  await render();
+  await change('Recipe URL to import', 'https://example.com/library-pasta');
+  await click(button('Save to library'));
+  const libraryWrite = writes.find(write => write.table === 'meal_recipe_library');
+  expect(libraryWrite.value).toMatchObject({title:'Library Pasta', has_been_cooked:false, is_deleted:false});
+  expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
+  expect(container.querySelector('#recipe-library').textContent).toContain('Library Pasta');
+  expect(container.querySelector('#recipe-library').textContent).toContain('Not cooked yet');
+});
+
+test('library cards show ingredients and can be removed without changing a schedule', async () => {
+  library = [{...sample(1), recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:true, is_deleted:false}];
+  await render();
+  const recipeLibrary = container.querySelector('#recipe-library');
+  expect(recipeLibrary.textContent).toContain('✓ Cooked');
+  expect(recipeLibrary.textContent).toContain('View ingredients · 1');
+  expect(recipeLibrary.textContent).toContain('carrot · 1');
+  await click(button('Delete', recipeLibrary));
+  expect(window.confirm).toHaveBeenCalled();
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.is_deleted)).toBeTruthy();
+  expect(recipeLibrary.textContent).not.toContain('Recipe 1');
+  expect(writes.find(write => write.table === 'weekly_meals' && write.delete)).toBeUndefined();
 });
 
 test('queue tags can be edited from queue management', async () => {
