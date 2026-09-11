@@ -87,22 +87,39 @@ test('day categories are edited in a modal instead of taking space on the planne
   expect(document.body.querySelector('[aria-label="Edit day categories"]')).toBeNull();
 });
 
-test('past recipes offer only matching empty days; saving tags enables soup day and reuse preserves tags', async () => {
+test('Use recipe automatically selects a matching empty category without queueing it', async () => {
   past = [sample(1)];
   await render();
-  let select = container.querySelector('select');
-  expect([...select.options].map(o => o.value)).not.toContain('6');
   await change('Tags for Recipe 1', 'soup');
   expect(button('Use recipe').disabled).toBe(true);
   expect(button('Save tags')).toBeUndefined();
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 700)); });
-  select = container.querySelector('select');
-  expect([...select.options].map(o => o.value)).toContain('6');
-  expect([...select.options].map(o => o.value)).not.toContain('4');
   expect(container.querySelector('#recipe-library').textContent).toContain('Tags saved');
-  await change('Destination for Recipe 1', '6'); await click(button('Use recipe'));
+  expect(container.querySelector('[aria-label="Destination for Recipe 1"]')).toBeNull();
+  await click(button('Use recipe'));
   expect(writes[writes.length - 1].value).toMatchObject({meal_number: 6, title: 'Recipe 1'});
   expect(container.querySelector('[aria-label="Day 6 recipe tags"]').value).toBe('soup');
+  expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
+});
+
+test('Use recipe falls back to a random empty day when no category matches', async () => {
+  const random = jest.spyOn(Math, 'random').mockReturnValue(0);
+  library = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false}];
+  tagRows = [{recipe_key:recipeKey(sample(1)), tags:['fish']}];
+  await render();
+  await click(button('Use recipe', container.querySelector('#recipe-library')));
+  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 1');
+  expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
+  random.mockRestore();
+});
+
+test('Use recipe shows an error popup when every day already has a meal', async () => {
+  current = Array.from({length:6}, (_, index) => sample(index + 1));
+  library = [{...sample(7), recipe_key:recipeKey(sample(7)), has_been_cooked:false, is_deleted:false}];
+  await render();
+  await click(button('Use recipe', [...container.querySelectorAll('#recipe-library .recipeCard')].find(card => card.textContent.includes('Recipe 7'))));
+  expect(document.body.textContent).toContain('All days already have an assigned meal. Clear a day if you want to use this recipe.');
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.title === 'Recipe 7')).toBeUndefined();
 });
 
 test('week days are collapsed summaries with the recipe name visible', async () => {
