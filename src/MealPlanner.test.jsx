@@ -285,6 +285,8 @@ test('library cards expand to show ingredients and an editable method, and can b
   await change('Method for Recipe 1', '1. Roast the carrots.');
   await click(button('Save method', recipeLibrary));
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.method === '1. Roast the carrots.')).toBeTruthy();
+  expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'source_ref', value:'Book 1', payload:{method:'1. Roast the carrots.'}}});
+  expect(writes).toContainEqual({table:'weekly_meals', update:{field:'source_ref', value:'Book 1', payload:{method:'1. Roast the carrots.'}}});
   await click(button('Delete', recipeLibrary));
   expect(window.confirm).toHaveBeenCalled();
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.is_deleted)).toBeTruthy();
