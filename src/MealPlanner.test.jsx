@@ -7,23 +7,26 @@ import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
 const mockFrom = jest.fn();
 const mockInvoke = jest.fn();
 jest.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (...args) => mockFrom(...args), functions: { invoke: (...args) => mockInvoke(...args) } }) }));
-let container, root, current, past, library, tagRows, categories, writes, failure;
+let container, root, current, past, library, queue, tagRows, categories, writes, failure;
 const sample = (n, tags = []) => ({ id: `meal-${n}`, meal_number: n, title: `Recipe ${n}`, source_ref: `Book ${n}`, week_of: '2026-W36', ingredients: [{name: 'carrot', qty: 1, unit: 'item'}], extracted_at: null, tags });
 function setupQueries() {
   mockFrom.mockImplementation(table => {
-    let isPast = false, payload, deleting = false;
+    let isPast = false, payload, action = '';
     const query = {
       select: () => query,
-      eq: (field, value) => { if (deleting) writes.push({ table, delete: { field, value } }); return query; },
+      eq: (field, value) => { if (action) writes.push({ table, [action]: { field, value, payload } }); return query; },
       lt: () => { isPast = true; return query; }, order: () => query,
       upsert: value => { payload = value; writes.push({ table, value }); return query; },
-      delete: () => { deleting = true; return query; },
+      insert: value => { payload = value; action = 'insert'; writes.push({ table, insert: value }); return query; },
+      update: value => { payload = value; action = 'update'; return query; },
+      delete: () => { action = 'delete'; return query; },
       single: () => query,
       then: (resolve, reject) => {
         if (failure) return Promise.resolve({ error: {message: failure} }).then(resolve, reject);
-        let data = table === 'weekly_meals' ? (isPast ? past : current) : table === 'meal_recipe_tags' ? tagRows : table === 'meal_day_categories' ? categories : library;
+        let data = table === 'weekly_meals' ? (isPast ? past : current) : table === 'meal_recipe_tags' ? tagRows : table === 'meal_day_categories' ? categories : table === 'meal_recipe_library' ? library : queue;
         if (payload && table === 'weekly_meals') data = { id: 'saved', ...payload };
         if (payload && table === 'meal_recipe_library') data = payload;
+        if (payload && table === 'meal_recipe_queue' && action === 'insert') data = { id: `queue-${writes.length}`, created_at: '2026-09-11T08:00:00Z', ...payload };
         return Promise.resolve({ data, error: null }).then(resolve, reject);
       },
     };
@@ -40,7 +43,7 @@ async function click(el) { await act(async () => { el.click(); }); }
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-  current = []; past = []; library = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; setupQueries();
+  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; mockInvoke.mockReset(); setupQueries();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
 
@@ -121,7 +124,7 @@ test('marking a saved meal cooked banks the recipe and clears its day', async ()
   await render();
   await click(button('Mark cooked', day(1)));
   expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1'});
-  expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1'}});
+  expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
   expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
   expect(container.querySelector('#cooked-recipes').textContent).toContain('Recipe 1');
 });
@@ -139,4 +142,45 @@ test('cooked recipes are searchable and can be dragged onto a matching empty day
   await act(async () => { Simulate.dragOver(day(6), {dataTransfer: transfer}); Simulate.drop(day(6), {dataTransfer: transfer}); });
   expect(writes[writes.length - 1].value).toMatchObject({meal_number: 6, title: 'Recipe 1'});
   expect(container.querySelector('[aria-label="Day 6 recipe tags"]').value).toBe('soup');
+});
+
+test('imports a URL with AI details, assigns a queue, and fills its blank day', async () => {
+  mockInvoke.mockResolvedValue({data: {title: 'Lemony Pasta', source_ref: 'https://example.com/pasta', ingredients: [{name:'lemon', qty:1, unit:'item'}], tags:['pasta','quick']}, error: null});
+  await render();
+  await change('Recipe URL to import', 'https://example.com/pasta');
+  await click(button('Import & queue'));
+  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-import', {body: expect.objectContaining({url:'https://example.com/pasta'})});
+  const queueWrite = writes.find(write => write.table === 'meal_recipe_queue' && write.insert);
+  expect([1, 2, 3, 5]).toContain(queueWrite.insert.day_number);
+  expect(queueWrite.insert).toMatchObject({title:'Lemony Pasta', ingredients:[{name:'lemon', qty:1, unit:'item'}]});
+  expect(container.querySelector(`[aria-label="Day ${queueWrite.insert.day_number} meal title"]`).value).toBe('Lemony Pasta');
+});
+
+test('queue tags can be edited from queue management', async () => {
+  queue = [{...sample(2), id:'q1', day_number:2, position:1, created_at:'2026-09-11T08:00:00Z'}];
+  tagRows = [{recipe_key:recipeKey(queue[0]), tags:['quick']}];
+  await render(); await click([...container.querySelectorAll('button')].find(b => b.textContent.startsWith('Manage queues')));
+  const manager = document.body.querySelector('[aria-label="Manage recipe queues"]');
+  await act(async () => { Simulate.change(manager.querySelector('[aria-label="Queue tags for Recipe 2"]'), {target:{value:'quick, pasta'}}); });
+  await click(button('Save tags', manager));
+  expect(writes.find(write => write.table === 'meal_recipe_tags' && write.value.tags?.includes('pasta'))).toBeTruthy();
+});
+
+test('a temporary switch keeps the queued recipe at the front and restores it after cooking', async () => {
+  const first = {...sample(2), id:'q1', day_number:2, position:1, created_at:'2026-09-11T08:00:00Z'};
+  const second = {...sample(3), id:'q2', day_number:2, position:2, created_at:'2026-09-11T09:00:00Z'};
+  queue = [first, second];
+  current = [{...first, id:'meal-2', meal_number:2, queue_item_id:'q1', is_override:false, override_type:null}];
+  tagRows = [{recipe_key:recipeKey(first), tags:['quick']}, {recipe_key:recipeKey(second), tags:['quick']}];
+  await render(); await click(button('Switch', day(2)));
+  await act(async () => {
+    Simulate.change(document.body.querySelector('[aria-label="Switch recipe title"]'), {target:{value:'Cookbook Risotto'}});
+    Simulate.change(document.body.querySelector('[aria-label="Switch recipe source"]'), {target:{value:'Cookbook p.40'}});
+  });
+  await click(button('Switch meal', document.body));
+  expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
+  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Cookbook Risotto');
+  await click(button('Mark cooked', day(2)));
+  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Recipe 2');
+  expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
 });
