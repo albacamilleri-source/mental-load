@@ -37,9 +37,9 @@ function setupQueries() {
 }
 async function render() { await act(async () => { root.render(<MealPlanner/>); }); }
 async function change(label, value) {
-  await act(async () => { Simulate.change(container.querySelector(`[aria-label="${label}"]`), { target: { value } }); });
+  await act(async () => { Simulate.change(document.body.querySelector(`[aria-label="${label}"]`), { target: { value } }); });
 }
-function button(text, parent = container) { return [...parent.querySelectorAll('button')].find(b => b.textContent === text); }
+function button(text, parent = document.body) { return [...parent.querySelectorAll('button')].find(b => b.textContent === text); }
 function day(n) { return [...container.querySelectorAll('.meal')].find(el => el.querySelector('h3').textContent === `Day ${n}`); }
 async function click(el) { await act(async () => { el.click(); }); }
 beforeEach(() => {
@@ -73,6 +73,18 @@ test('grocery generation requires all saved recipes to match, including after ca
   await click(button('Save day categories'));
   expect(button('Generate grocery list').disabled).toBe(true);
   expect(day(1).textContent).toContain('Add a recipe tagged soup');
+});
+
+test('day categories are edited in a modal instead of taking space on the planner', async () => {
+  await render();
+  expect(container.querySelector('#day-categories')).toBeNull();
+  expect(container.textContent).not.toContain('Day 1 · Pasta Thursday');
+  await click(button('Edit categories'));
+  const modal = document.body.querySelector('[aria-label="Edit day categories"]');
+  expect(modal).not.toBeNull();
+  expect(modal.querySelectorAll('.categoryCard')).toHaveLength(6);
+  await click(modal.querySelector('[aria-label="Close categories"]'));
+  expect(document.body.querySelector('[aria-label="Edit day categories"]')).toBeNull();
 });
 
 test('past recipes offer only matching empty days; saving tags enables soup day and reuse preserves tags', async () => {
