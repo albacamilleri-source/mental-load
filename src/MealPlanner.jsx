@@ -33,6 +33,11 @@ function queueMealPayload(item, week, day) {
   };
 }
 
+function recipeDays(rows, recipe, dayField) {
+  const key = recipeKey(recipe);
+  return [...new Set(rows.filter(row => row?.title?.trim() && row?.source_ref?.trim() && recipeKey(row) === key).map(row => row[dayField]).filter(Boolean))].sort((a, b) => a - b);
+}
+
 
 function isoWeek(date) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -359,7 +364,7 @@ function SwitchMealModal({ day, library, tagMap, busy, onClose, onSave }) {
   </form></div>;
 }
 
-function RecipeCard({ meal, tags, categories, meals, onTagsSaved, onUse, onDelete, busy, draggable = false, onDragStart, onDragEnd }) {
+function RecipeCard({ meal, tags, categories, meals, scheduledDays = [], queuedDays = [], onTagsSaved, onUse, onDelete, busy, draggable = false, onDragStart, onDragEnd }) {
   const [draft, setDraft] = useState(tags.join(', '));
   const [target, setTarget] = useState('');
   const [error, setError] = useState('');
@@ -368,7 +373,7 @@ function RecipeCard({ meal, tags, categories, meals, onTagsSaved, onUse, onDelet
   const selected = available.some(c => String(c.day_number) === target) ? target : String(available[0]?.day_number || '');
   const changed = JSON.stringify(parseTags(draft)) !== JSON.stringify(parseTags(tags));
   return <div className={`recipeCard${draggable ? ' draggableRecipe' : ''}`} draggable={draggable && !busy && !changed} onDragStart={e => onDragStart?.(e, meal)} onDragEnd={onDragEnd}>
-    <div className="recipeCardHead"><div><h4>{meal.title}</h4><div className="small">{meal.source_ref}</div></div><div className="recipeCardMeta"><span className={`recipeStatus ${meal.has_been_cooked ? 'isCooked' : ''}`}>{meal.has_been_cooked ? '✓ Cooked' : 'Not cooked yet'}</span>{draggable && <span className="dragHint" aria-hidden="true">Drag to a day</span>}</div></div>
+    <div className="recipeCardHead"><div><h4>{meal.title}</h4><div className="small">{meal.source_ref}</div></div><div className="recipeCardMeta"><span className={`recipeStatus ${meal.has_been_cooked ? 'isCooked' : ''}`}>{meal.has_been_cooked ? '✓ Cooked' : 'Not cooked yet'}</span>{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}{draggable && <span className="dragHint" aria-hidden="true">Drag to a day</span>}</div></div>
     <label className="tagField">Recipe tags<input className="input" aria-label={`Tags for ${meal.title}`} value={draft} disabled={busy} onChange={e => setDraft(e.target.value)} placeholder="e.g. soup, vegetarian"/></label>
     {meal.ingredients?.length > 0 && <details className="libraryIngredients"><summary>View ingredients · {meal.ingredients.length}</summary><ul>{meal.ingredients.map((ingredient, index) => <li key={`${ingredient.name}-${index}`}>{ingredient.name}{(ingredient.qty != null || ingredient.unit) ? ` · ${displayQty(ingredient.qty, ingredient.unit)}` : ''}</li>)}</ul></details>}
     <div className="dayActions">
@@ -842,7 +847,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
     </section>}
     <section className="card" id="recipe-library">
       <div className="rowBetween"><div><h2 className="sectionTitle">Recipe library</h2><div className="small">Every saved recipe in one searchable library. Drag a recipe onto a matching empty day.</div></div><button className="btn ghost" aria-expanded={libraryOpen} disabled={loadingWeek || !!loadError} onClick={() => setLibraryOpen(v => !v)}>{libraryOpen ? 'Hide library' : 'Browse library'}</button></div>
-      {libraryOpen && !loadingWeek && !loadError && <div className="recipeLibrary"><input className="input search" aria-label="Search recipe library" value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="Search by recipe, source or tag…"/>{filteredLibraryRecipes.length === 0 ? <div className="empty">{librarySearch ? 'No recipes match your search.' : 'Recipes you save or import will appear here.'}</div> : <div className="pastMeals">{filteredLibraryRecipes.map(recipe => <RecipeCard key={recipe.recipe_key} meal={recipe} tags={recipeTags[recipeKey(recipe)] || EMPTY_TAGS} categories={categories} meals={meals} onTagsSaved={savePastTags} onUse={duplicateMeal} onDelete={deleteLibraryRecipe} busy={busy} draggable onDragStart={startRecipeDrag} onDragEnd={() => { setDraggedRecipeKey(''); setDropTarget(null); }}/>)}</div>}</div>}
+      {libraryOpen && !loadingWeek && !loadError && <div className="recipeLibrary"><input className="input search" aria-label="Search recipe library" value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="Search by recipe, source or tag…"/>{filteredLibraryRecipes.length === 0 ? <div className="empty">{librarySearch ? 'No recipes match your search.' : 'Recipes you save or import will appear here.'}</div> : <div className="pastMeals">{filteredLibraryRecipes.map(recipe => <RecipeCard key={recipe.recipe_key} meal={recipe} tags={recipeTags[recipeKey(recipe)] || EMPTY_TAGS} categories={categories} meals={meals} scheduledDays={recipeDays(meals, recipe, 'meal_number')} queuedDays={recipeDays(queueRows, recipe, 'day_number')} onTagsSaved={savePastTags} onUse={duplicateMeal} onDelete={deleteLibraryRecipe} busy={busy} draggable onDragStart={startRecipeDrag} onDragEnd={() => { setDraggedRecipeKey(''); setDropTarget(null); }}/>)}</div>}</div>}
     </section>
   </div></div>{(modalMeal || toast || queueOpen || switchDay !== null) && createPortal(<div className="meal-planner">
     {modalMeal && <ExtractionModal meal={modalMeal} tags={parseTags(modalMeal.tagsText)} category={categoryFor(modalMeal.meal_number)} onClose={() => setModalMeal(null)} onSaved={onIngredientSaved}/>}

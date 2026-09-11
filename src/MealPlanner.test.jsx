@@ -161,6 +161,19 @@ test('recipe library combines current, past, queued, and cooked recipes without 
   expect([...container.querySelectorAll('h2')].map(heading => heading.textContent)).not.toContain('Cooked recipes');
 });
 
+test('library cards show scheduled and queued day indicators', async () => {
+  current = [sample(1)];
+  queue = [{...sample(2), id:'q2', day_number:1, position:1, created_at:'2026-09-11T08:00:00Z'}];
+  await render();
+  const cards = [...container.querySelectorAll('#recipe-library .recipeCard')];
+  const scheduled = cards.find(card => card.textContent.includes('Recipe 1'));
+  const queued = cards.find(card => card.textContent.includes('Recipe 2'));
+  expect(scheduled.textContent).toContain('Scheduled · Day 1');
+  expect(scheduled.textContent).not.toContain('Queued ·');
+  expect(queued.textContent).toContain('Queued · Day 1');
+  expect(queued.textContent).not.toContain('Scheduled ·');
+});
+
 test('imports a URL with AI details, assigns a queue, and fills its blank day', async () => {
   mockInvoke.mockResolvedValue({data: {title: 'Lemony Pasta', source_ref: 'https://example.com/pasta', ingredients: [{name:'lemon', qty:1, unit:'item'}], tags:['pasta','quick']}, error: null});
   await render();
