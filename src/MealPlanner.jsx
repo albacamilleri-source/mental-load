@@ -404,7 +404,6 @@ function RecipeCard({ meal, tags, categories, meals, scheduledDays = [], queuedD
       <button className="btn secondary" disabled={busy || tagsSaving || queuedDays.length > 0} onClick={async () => setError(await onQueue(meal) || '')}>{queuedDays.length > 0 ? 'Queued' : 'Send to queue'}</button>
       {onDelete && <button className="btn dangerOutline" disabled={busy || tagsSaving} onClick={() => onDelete(meal)}>Delete</button>}
     </div>
-    <div className="hint">{tagsSaving ? 'Your tag changes will save automatically.' : 'Use recipe schedules it now. Send to queue places it using your day-category rules.'}</div>
     {error && <div className="saveError" role="alert">{error}</div>}
   </div>;
 }
@@ -892,16 +891,11 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       <div className="plannerMonth">{new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</div>
       <div className="plannerTitleRow">
         <h1 className="brand">Meal Planner<span className="brandDot">.</span></h1>
-        <div className="plannerHeaderActions"><button className="categoryToggle" disabled={busy || loadingWeek || !!loadError} aria-expanded={queueOpen} onClick={() => setQueueOpen(true)}>Manage queues{queueRows.length ? ` · ${queueRows.length}` : ''}</button><button className="categoryToggle" disabled={busy || loadingWeek || !!loadError} aria-expanded={settingsOpen} aria-controls="day-categories" onClick={() => setSettingsOpen(v => !v)}>{settingsOpen ? 'Close categories' : 'Edit categories'}</button></div>
+        <div className="plannerHeaderActions"><button className="categoryToggle" disabled={busy || loadingWeek || !!loadError} aria-expanded={queueOpen} onClick={() => setQueueOpen(true)}>Manage queues{queueRows.length ? ` · ${queueRows.length}` : ''}</button><button className="categoryToggle" disabled={busy || loadingWeek || !!loadError} aria-expanded={settingsOpen} aria-controls="category-editor" onClick={() => setSettingsOpen(true)}>Edit categories</button></div>
       </div>
       <div className="sub">Six meals, your day categories, one grocery list.</div>
     </header>
     {loadError && <div className="plannerNotice" role="alert">{loadError} <button className="btn secondary" onClick={() => setReload(n => n + 1)}>Retry</button></div>}
-    <section className="card" id="day-categories">
-      <h2 className="sectionTitle">Day categories</h2>
-      {!settingsOpen && <div className="tagChips">{categories.map(c => <span className="tagChip" key={c.day_number}>Day {c.day_number} · {c.name || (c.accepted_tags.length ? c.accepted_tags.join(' or ') : 'Any recipe')}</span>)}</div>}
-      {settingsOpen && <CategoryEditor categories={categories} onSave={saveCategories} busy={busy}/>}
-    </section>
     <section className="card"><RecipeImporter categories={categories} onImport={importRecipe} busy={busy}/></section>
     <section className="card">
       <div className="sectionHead"><h2 className="sectionTitle">This week's meals</h2><div className="weekNav"><button className="iconBtn" aria-label="Previous week" disabled={busy || loadingWeek} onClick={() => changeWeek(-1)}>‹</button><div className="weekLabel">{formatWeekLabel(week)}</div><button className="iconBtn" aria-label="Next week" disabled={busy || loadingWeek} onClick={() => changeWeek(1)}>›</button></div></div>
@@ -946,12 +940,13 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       <div className="groceryBox">{groceryText}</div>
     </section>}
     <section className={`card${draggedMealNumber ? ' libraryDropReady' : ''}${libraryDropActive ? ' libraryDropActive' : ''}`} id="recipe-library" onDragOver={event => { if (draggedMealNumber) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setLibraryDropActive(true); } }} onDragLeave={() => setLibraryDropActive(false)} onDrop={event => draggedMealNumber && dropScheduledMeal(event)}>
-      <div className="rowBetween"><div><h2 className="sectionTitle">Recipe library</h2><div className="small">Every saved recipe in one searchable library. Drag a recipe onto a matching empty day, or drag a scheduled meal back here to unschedule it.</div></div><button className="btn ghost" aria-expanded={libraryOpen} disabled={loadingWeek || !!loadError} onClick={() => setLibraryOpen(v => !v)}>{libraryOpen ? 'Hide library' : 'Browse library'}</button></div>
+      <div className="rowBetween"><h2 className="sectionTitle">Recipe library</h2><button className="btn ghost" aria-expanded={libraryOpen} disabled={loadingWeek || !!loadError} onClick={() => setLibraryOpen(v => !v)}>{libraryOpen ? 'Hide library' : 'Browse library'}</button></div>
       {libraryOpen && !loadingWeek && !loadError && <div className="recipeLibrary"><input className="input search" aria-label="Search recipe library" value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="Search by recipe, source or tag…"/>{filteredLibraryRecipes.length === 0 ? <div className="empty">{librarySearch ? 'No recipes match your search.' : 'Recipes you save or import will appear here.'}</div> : <div className="pastMeals">{filteredLibraryRecipes.map(recipe => <RecipeCard key={recipe.recipe_key} meal={recipe} tags={recipeTags[recipeKey(recipe)] || EMPTY_TAGS} categories={categories} meals={meals} scheduledDays={recipeDays(meals, recipe, 'meal_number')} queuedDays={recipeDays(queueRows, recipe, 'day_number')} onTagsSaved={savePastTags} onUse={duplicateMeal} onQueue={queueLibraryRecipe} onDelete={deleteLibraryRecipe} busy={busy} draggable onDragStart={startRecipeDrag} onDragEnd={() => { setDraggedRecipeKey(''); setDropTarget(null); }}/>)}</div>}</div>}
     </section>
-  </div></div>{(modalMeal || toast || queueOpen || switchDay !== null) && createPortal(<div className="meal-planner">
+  </div></div>{(modalMeal || toast || queueOpen || settingsOpen || switchDay !== null) && createPortal(<div className="meal-planner">
     {modalMeal && <ExtractionModal meal={modalMeal} tags={parseTags(modalMeal.tagsText)} category={categoryFor(modalMeal.meal_number)} onClose={() => setModalMeal(null)} onSaved={onIngredientSaved}/>}
     {queueOpen && <QueueManager queue={queueRows} categories={categories} tagMap={recipeTags} busy={busy} onClose={() => setQueueOpen(false)} onTagsSaved={savePastTags} onMove={moveQueueItem} onBump={bumpQueueItem}/>}
+    {settingsOpen && <div className="modalBack" role="dialog" aria-modal="true" aria-label="Edit day categories"><div className="modal categoryModal" id="category-editor"><div className="modalHead"><h2 className="sectionTitle">Day categories</h2><button type="button" className="iconBtn" aria-label="Close categories" onClick={() => setSettingsOpen(false)}>×</button></div><CategoryEditor categories={categories} onSave={saveCategories} busy={busy}/></div></div>}
     {switchDay !== null && <SwitchMealModal day={switchDay} library={libraryRecipes} tagMap={recipeTags} busy={busy} onClose={() => setSwitchDay(null)} onSave={switchMeal}/>}
     {toast && <div className="toast" role="status">{toast}</div>}
   </div>, document.body)}</div>;
