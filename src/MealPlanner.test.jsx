@@ -82,13 +82,26 @@ test('past recipes offer only matching empty days; saving tags enables soup day 
   expect([...select.options].map(o => o.value)).not.toContain('6');
   await change('Tags for Recipe 1', 'soup');
   expect(button('Use recipe').disabled).toBe(true);
-  await click(button('Save tags'));
+  expect(button('Save tags')).toBeUndefined();
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 700)); });
   select = container.querySelector('select');
   expect([...select.options].map(o => o.value)).toContain('6');
   expect([...select.options].map(o => o.value)).not.toContain('4');
+  expect(container.querySelector('#recipe-library').textContent).toContain('Tags saved');
   await change('Destination for Recipe 1', '6'); await click(button('Use recipe'));
   expect(writes[writes.length - 1].value).toMatchObject({meal_number: 6, title: 'Recipe 1'});
   expect(container.querySelector('[aria-label="Day 6 recipe tags"]').value).toBe('soup');
+});
+
+test('week days are collapsed summaries with the recipe name visible', async () => {
+  current = [sample(1)];
+  await render();
+  expect(day(1).tagName).toBe('DETAILS');
+  expect(day(1).open).toBe(false);
+  expect(day(1).querySelector('summary').textContent).toContain('Recipe 1');
+  expect(day(2).querySelector('summary').textContent).toContain('Empty');
+  await click(day(1).querySelector('summary'));
+  expect(day(1).open).toBe(true);
 });
 
 test('failed saves retain edits and display a retryable error', async () => {
@@ -172,6 +185,20 @@ test('library cards show scheduled and queued day indicators', async () => {
   expect(scheduled.textContent).not.toContain('Queued ·');
   expect(queued.textContent).toContain('Queued · Day 1');
   expect(queued.textContent).not.toContain('Scheduled ·');
+});
+
+test('a library recipe can be sent to its matching queue and fills a blank day', async () => {
+  const soup = {...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false};
+  library = [soup];
+  tagRows = [{recipe_key:soup.recipe_key, tags:['soup']}];
+  await render();
+  const card = container.querySelector('#recipe-library .recipeCard');
+  await click(button('Send to queue', card));
+  const queueWrite = writes.find(write => write.table === 'meal_recipe_queue' && write.insert);
+  expect(queueWrite.insert).toMatchObject({day_number:6, position:1, title:'Recipe 1'});
+  expect(container.querySelector('[aria-label="Day 6 meal title"]').value).toBe('Recipe 1');
+  expect(card.textContent).toContain('Queued · Day 6');
+  expect(button('Queued', card).disabled).toBe(true);
 });
 
 test('a saved meal can be unscheduled and remains in the recipe library', async () => {
