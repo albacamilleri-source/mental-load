@@ -65,12 +65,13 @@ Deno.serve(async (req: Request) => {
 
     const title = String(extraction?.title || "").trim();
     const ingredients = Array.isArray(extraction?.ingredients) ? extraction.ingredients : [];
+    const method = String(extraction?.method || existingLibraryResult.data?.method || "").trim();
     const tags = body?.tags === undefined ? parseTags(extraction?.tags) : parseTags(body.tags);
     if (!title || !ingredients.length) return json({ error: "The importer could not find a complete recipe on that page.", code: "INCOMPLETE_RECIPE" }, 422);
     const now = new Date().toISOString();
     const existingLibrary = existingLibraryResult.data;
     const key = existingLibrary?.recipe_key || recipeKey({ title, source_ref: sourceUrl });
-    const recipe = { recipe_key: key, title, source_ref: sourceUrl, ingredients, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "", tags };
+    const recipe = { recipe_key: key, title, source_ref: sourceUrl, ingredients, method, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "", tags };
 
     let dayNumber: number | null = null;
     const queueRows = queueResult.data || [];
@@ -81,7 +82,7 @@ Deno.serve(async (req: Request) => {
     const { error: tagError } = await client.from("meal_recipe_tags").upsert({ recipe_key: key, tags });
     if (tagError) throw tagError;
     const libraryPayload = {
-      recipe_key: key, title, source_ref: sourceUrl, ingredients, extracted_at: now,
+      recipe_key: key, title, source_ref: sourceUrl, ingredients, method, extracted_at: now,
       rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "",
       cooked_at: existingLibrary?.cooked_at || now,
       has_been_cooked: existingLibrary?.has_been_cooked === true,
@@ -98,7 +99,7 @@ Deno.serve(async (req: Request) => {
 
     if (destination === "library") return json({ ok: true, destination, recipe, updatedExisting: !!existingLibrary, alreadyQueued: false });
     if (existingQueue) {
-      const refreshed = { title, source_ref: sourceUrl, ingredients, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "" };
+      const refreshed = { title, source_ref: sourceUrl, ingredients, method, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "" };
       const queueUpdate = await client.from("meal_recipe_queue").update(refreshed).eq("id", existingQueue.id);
       if (queueUpdate.error) throw queueUpdate.error;
       const scheduleUpdate = await client.from("weekly_meals").update(refreshed).eq("queue_item_id", existingQueue.id);
@@ -108,7 +109,7 @@ Deno.serve(async (req: Request) => {
 
     const queuePayload = {
       day_number: dayNumber, position: nextQueuePosition(queueRows, dayNumber), title, source_ref: sourceUrl,
-      ingredients, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "",
+      ingredients, method, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "",
     };
     const queueWrite = await client.from("meal_recipe_queue").insert(queuePayload).select().single();
     if (queueWrite.error) {

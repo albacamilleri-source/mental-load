@@ -1,4 +1,4 @@
-import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags } from '../supabase/functions/meal-recipe-intake/intake-core';
+import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queueMealPayload } from '../supabase/functions/meal-recipe-intake/intake-core';
 
 const categories = [
   {day_number:1, accepted_tags:['pasta']},
@@ -28,4 +28,9 @@ test('unmatched recipes prefer blank no-rule days', () => {
 test('recipe URLs are normalized to prevent tracking duplicates', () => {
   expect(normalizeRecipeUrl('https://Example.com/recipe/?utm_source=newsletter#method')).toBe('https://example.com/recipe');
   expect(parseTags([' Soup ', 'soup', 'Quick'])).toEqual(['soup','quick']);
+});
+
+test('queued recipes carry their cooking method into the scheduled day', () => {
+  const payload = queueMealPayload({id:'q1', title:'Soup', source_ref:'Book', ingredients:[], method:'1. Simmer.', notes:''}, '2026-W37', 6);
+  expect(payload).toMatchObject({meal_number:6, method:'1. Simmer.', queue_item_id:'q1'});
 });
