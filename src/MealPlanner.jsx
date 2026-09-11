@@ -585,41 +585,17 @@ export default function MealPlanner({ onDirtyChange } = {}) {
     if (busy) return 'Please wait for the current save.';
     setBusy(true);
     try {
-      const categoryTags = [...new Set(categories.flatMap(category => parseTags(category.accepted_tags)))];
-      const { data, error: importError } = await sb.functions.invoke('meal-recipe-import', { body: { url, categoryTags } });
+      const { data, error: importError } = await sb.functions.invoke('meal-recipe-intake', { body: { url, destination, weekOf: week } });
       if (importError) throw new Error(await extractionErrorMessage(importError));
-      const title = String(data?.title || '').trim();
-      const source_ref = String(data?.source_ref || url).trim();
-      const ingredients = Array.isArray(data?.ingredients) ? data.ingredients : [];
-      const tags = parseTags(data?.tags);
-      if (!title || !source_ref || !ingredients.length) throw new Error('The importer could not find a complete recipe on that page.');
-      const recipe = { title, source_ref, ingredients, extracted_at: new Date().toISOString(), rating: null, notes: '' };
-      const key = recipeKey(recipe);
-      const { error: tagError } = await sb.from('meal_recipe_tags').upsert({ recipe_key: key, tags });
-      if (tagError) throw tagError;
-      const existing = libraryRecords.find(row => row.recipe_key === key);
-      const libraryPayload = { recipe_key: key, ...recipe, cooked_at: existing?.cooked_at || new Date().toISOString(), has_been_cooked: !!existing?.has_been_cooked, is_deleted: false };
-      const { data: savedToLibrary, error: libraryError } = await sb.from('meal_recipe_library').upsert(libraryPayload, { onConflict: 'recipe_key' }).select().single();
-      if (libraryError) throw libraryError;
-      setLibraryRecords(prev => [savedToLibrary, ...prev.filter(row => row.recipe_key !== key)]);
-      const nextTags = { ...recipeTags, [key]: tags };
-      setRecipeTags(nextTags);
+      if (!data?.ok || !data?.recipe?.title) throw new Error(data?.error || 'The importer returned an incomplete response.');
+      const title = data.recipe.title;
+      setReload(value => value + 1);
+      setGroceryGenerated(false);
       if (destination === 'library') {
-        setToast(`${title} saved to your library`);
+        setToast(data.updatedExisting ? `${title} updated in your library` : `${title} saved to your library`);
         return '';
       }
-      const day = chooseQueueDay(tags, categories, meals);
-      const payload = { ...recipe, day_number: day, position: nextQueuePosition(queueRows, day) };
-      const { data: queued, error: queueError } = await sb.from('meal_recipe_queue').insert(payload).select().single();
-      if (queueError) throw queueError;
-      const nextQueue = [...queueRows, queued];
-      const slot = meals[day - 1];
-      if (!slot.title.trim() && !slot.source_ref.trim() && queueForDay(nextQueue, day)[0]?.id === queued.id) {
-        const { data: saved, error } = await sb.from('weekly_meals').upsert(queueMealPayload(queued, week, day), { onConflict: 'week_of,meal_number' }).select().single();
-        if (error) throw error;
-        setMeals(prev => prev.map((meal, index) => index === day - 1 ? { ...saved, tagsText: tags.join(', '), dirty: false } : meal));
-      }
-      setQueueRows(nextQueue); setGroceryGenerated(false); setToast(`${title} added to Day ${day} queue`);
+      setToast(data.alreadyQueued ? `${title} is already in the Day ${data.dayNumber} queue` : `${title} added to Day ${data.dayNumber} queue`);
       return '';
     } catch (e) { return e.message || 'Could not import this recipe. Please retry.'; }
     finally { setBusy(false); }

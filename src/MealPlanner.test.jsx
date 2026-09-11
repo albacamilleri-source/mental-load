@@ -252,27 +252,24 @@ test('unscheduling a queued meal removes it from the queue and fills the day wit
 });
 
 test('imports a URL with AI details, assigns a queue, and fills its blank day', async () => {
-  mockInvoke.mockResolvedValue({data: {title: 'Lemony Pasta', source_ref: 'https://example.com/pasta', ingredients: [{name:'lemon', qty:1, unit:'item'}], tags:['pasta','quick']}, error: null});
+  mockInvoke.mockResolvedValue({data: {ok:true, destination:'queue', dayNumber:1, alreadyQueued:false, updatedExisting:false, recipe:{title:'Lemony Pasta'}}, error: null});
   await render();
   await change('Recipe URL to import', 'https://example.com/pasta');
   await click(button('Import & queue'));
-  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-import', {body: expect.objectContaining({url:'https://example.com/pasta'})});
-  const queueWrite = writes.find(write => write.table === 'meal_recipe_queue' && write.insert);
-  expect([1, 2, 3, 5]).toContain(queueWrite.insert.day_number);
-  expect(queueWrite.insert).toMatchObject({title:'Lemony Pasta', ingredients:[{name:'lemon', qty:1, unit:'item'}]});
-  expect(container.querySelector(`[aria-label="Day ${queueWrite.insert.day_number} meal title"]`).value).toBe('Lemony Pasta');
+  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/pasta', destination:'queue', weekOf:expect.stringMatching(/^\d{4}-W\d{2}$/)}});
+  expect(document.body.textContent).toContain('Lemony Pasta added to Day 1 queue');
+  expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
 });
 
 test('imports a URL directly to the library without scheduling it', async () => {
-  mockInvoke.mockResolvedValue({data: {title: 'Library Pasta', source_ref: 'https://example.com/library-pasta', ingredients: [{name:'lemon', qty:1, unit:'item'}], tags:['pasta']}, error: null});
+  mockInvoke.mockResolvedValue({data: {ok:true, destination:'library', updatedExisting:false, alreadyQueued:false, recipe:{title:'Library Pasta'}}, error: null});
   await render();
   await change('Recipe URL to import', 'https://example.com/library-pasta');
   await click(button('Save to library'));
-  const libraryWrite = writes.find(write => write.table === 'meal_recipe_library');
-  expect(libraryWrite.value).toMatchObject({title:'Library Pasta', has_been_cooked:false, is_deleted:false});
+  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/library-pasta', destination:'library', weekOf:expect.any(String)}});
+  expect(document.body.textContent).toContain('Library Pasta saved to your library');
+  expect(writes.find(write => write.table === 'meal_recipe_library')).toBeUndefined();
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
-  expect(container.querySelector('#recipe-library').textContent).toContain('Library Pasta');
-  expect(container.querySelector('#recipe-library').textContent).toContain('Not cooked yet');
 });
 
 test('library cards show ingredients and can be removed without changing a schedule', async () => {

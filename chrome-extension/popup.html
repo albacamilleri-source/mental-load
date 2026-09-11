@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Send to Mental Load</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Meal Planner</div>
+      <h1>Send to Mental Load<span>.</span></h1>
+      <section class="page" aria-label="Current recipe page">
+        <div id="page-title" class="title">Reading this page…</div>
+        <div id="page-url" class="url"></div>
+      </section>
+      <div class="actions">
+        <button id="import-queue" type="button">Import &amp; queue</button>
+        <button id="import-only" class="secondary" type="button">Import only</button>
+      </div>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
