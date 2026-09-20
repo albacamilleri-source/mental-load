@@ -7,7 +7,7 @@ import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
 const mockFrom = jest.fn();
 const mockInvoke = jest.fn();
 jest.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (...args) => mockFrom(...args), functions: { invoke: (...args) => mockInvoke(...args) } }) }));
-let container, root, current, past, library, queue, tagRows, categories, writes, failure;
+let container, root, current, past, library, queue, tagRows, categories, writes, failure, deferWeeklyWrite, resolveWeeklyWrite;
 const sample = (n, tags = []) => ({ id: `meal-${n}`, meal_number: n, title: `Recipe ${n}`, source_ref: `Book ${n}`, week_of: '2026-W36', ingredients: [{name: 'carrot', qty: 1, unit: 'item'}], extracted_at: null, tags });
 function setupQueries() {
   let weeklyReadCount = 0;
@@ -29,6 +29,7 @@ function setupQueries() {
         if (payload && table === 'weekly_meals') data = { id: 'saved', ...payload };
         if (payload && table === 'meal_recipe_library') data = payload;
         if (payload && table === 'meal_recipe_queue' && action === 'insert') data = { id: `queue-${writes.length}`, created_at: '2026-09-11T08:00:00Z', ...payload };
+        if (payload && table === 'weekly_meals' && deferWeeklyWrite) return new Promise(done => { resolveWeeklyWrite = () => done({ data, error: null }); }).then(resolve, reject);
         return Promise.resolve({ data, error: null }).then(resolve, reject);
       },
     };
@@ -46,7 +47,7 @@ beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   window.confirm = jest.fn(() => true);
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; mockInvoke.mockReset(); setupQueries();
+  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; deferWeeklyWrite = false; resolveWeeklyWrite = null; mockInvoke.mockReset(); setupQueries();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
 
@@ -111,6 +112,19 @@ test('Use recipe falls back to a random empty day when no category matches', asy
   expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 1');
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
   random.mockRestore();
+});
+
+test('using one recipe leaves other library cards interactive while its save is pending', async () => {
+  library = [1, 2].map(n => ({...sample(n), recipe_key:recipeKey(sample(n)), has_been_cooked:false, is_deleted:false}));
+  await render();
+  deferWeeklyWrite = true;
+  const cards = [...container.querySelectorAll('#recipe-library .recipeCard')];
+  await act(async () => { button('Use recipe', cards[0]).click(); await Promise.resolve(); });
+  expect(button('Adding…', cards[0]).disabled).toBe(true);
+  expect(button('Use recipe', cards[1]).disabled).toBe(false);
+  expect(button('View recipe', cards[1]).disabled).toBe(false);
+  await act(async () => resolveWeeklyWrite());
+  expect(button('Use recipe', cards[0]).disabled).toBe(false);
 });
 
 test('Use recipe shows an error popup when every day already has a meal', async () => {
@@ -344,6 +358,30 @@ test('library cards open a modal with ingredients, editable source and method, a
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.is_deleted)).toBeTruthy();
   expect(recipeLibrary.textContent).not.toContain('Recipe 1');
   expect(writes.find(write => write.table === 'weekly_meals' && write.delete)).toBeUndefined();
+});
+
+test('cooked badge toggles both ways and modal shows recipe tags and queue status', async () => {
+  const recipe = {...sample(1), recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:false, is_deleted:false};
+  library = [recipe];
+  current = [sample(1)];
+  queue = [{...recipe, id:'q1', day_number:2, position:1, created_at:'2026-09-11T08:00:00Z'}];
+  tagRows = [{recipe_key:recipe.recipe_key, tags:['pasta', 'vegetarian']}];
+  await render();
+  const card = container.querySelector('#recipe-library .recipeCard');
+  expect(card.textContent).not.toContain('Tags save automatically');
+  await click(card.querySelector('[aria-label="Mark as cooked: Recipe 1"]'));
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.has_been_cooked === true)).toBeTruthy();
+  await click(button('View recipe', card));
+  const modal = document.body.querySelector('[aria-label="Recipe details for Recipe 1"]');
+  expect(modal.textContent).toContain('✓ Cooked');
+  expect(modal.textContent).toContain('Scheduled · Days 1, 2');
+  expect(modal.textContent).toContain('Queued · Day 2');
+  expect(modal.textContent).toContain('pasta');
+  expect(modal.textContent).toContain('vegetarian');
+  await click(modal.querySelector('[aria-label="Mark as not cooked yet: Recipe 1"]'));
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.has_been_cooked === false)).toBeTruthy();
+  expect(modal.textContent).toContain('Not cooked yet');
+  expect(card.textContent).toContain('Not cooked yet');
 });
 
 test('queue tags can be edited from queue management', async () => {
