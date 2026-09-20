@@ -2,6 +2,11 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.105.4";
 import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queueMealPayload, recipeKey } from "./intake-core.js";
 
+const plannerTables = {
+  dinner: { categories: "meal_day_categories", meals: "weekly_meals", queue: "meal_recipe_queue", library: "meal_recipe_library", tags: "meal_recipe_tags" },
+  breakfast: { categories: "breakfast_day_categories", meals: "breakfast_weekly_meals", queue: "breakfast_recipe_queue", library: "breakfast_recipe_library", tags: "breakfast_recipe_tags" },
+} as const;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -24,10 +29,13 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const sourceUrl = normalizeRecipeUrl(body?.url);
     const destination = body?.destination === "library" ? "library" : body?.destination === "queue" ? "queue" : "";
+    const mealType = body?.mealType === undefined || body?.mealType === "dinner" ? "dinner" : body?.mealType === "breakfast" ? "breakfast" : "";
     const weekOf = String(body?.weekOf || "").trim();
     const dryRun = body?.dryRun === true;
     if (!destination) return json({ error: "Choose Import & queue or Import only." }, 400);
+    if (!mealType) return json({ error: "Choose Dinners or Breakfasts." }, 400);
     if (destination === "queue" && !/^\d{4}-W\d{2}$/.test(weekOf)) return json({ error: "The current planning week is missing." }, 400);
+    const tables = plannerTables[mealType];
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -37,10 +45,10 @@ Deno.serve(async (req: Request) => {
     const client = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authorization } } });
 
     const [categoriesResult, mealsResult, queueResult, existingLibraryResult] = await Promise.all([
-      client.from("meal_day_categories").select("*").order("day_number"),
-      destination === "queue" ? client.from("weekly_meals").select("*").eq("week_of", weekOf).order("meal_number") : Promise.resolve({ data: [], error: null }),
-      destination === "queue" ? client.from("meal_recipe_queue").select("*").order("day_number").order("position").order("created_at") : Promise.resolve({ data: [], error: null }),
-      client.from("meal_recipe_library").select("*").eq("source_ref", sourceUrl).maybeSingle(),
+      client.from(tables.categories).select("*").order("day_number"),
+      destination === "queue" ? client.from(tables.meals).select("*").eq("week_of", weekOf).order("meal_number") : Promise.resolve({ data: [], error: null }),
+      destination === "queue" ? client.from(tables.queue).select("*").order("day_number").order("position").order("created_at") : Promise.resolve({ data: [], error: null }),
+      client.from(tables.library).select("*").eq("source_ref", sourceUrl).maybeSingle(),
     ]);
     const loadError = [categoriesResult, mealsResult, queueResult, existingLibraryResult].find(result => result.error)?.error;
     if (loadError) throw loadError;
@@ -57,7 +65,7 @@ Deno.serve(async (req: Request) => {
       const extractionResponse = await fetch(`${supabaseUrl}/functions/v1/meal-recipe-import`, {
         method: "POST",
         headers: { Authorization: authorization, apikey, "Content-Type": "application/json" },
-        body: JSON.stringify({ url: sourceUrl, categoryTags }),
+        body: JSON.stringify({ url: sourceUrl, categoryTags, mealType }),
       });
       extraction = await extractionResponse.json().catch(() => ({}));
       if (!extractionResponse.ok) return json({ error: extraction?.error || "The recipe could not be extracted.", code: extraction?.code || "EXTRACTION_FAILED" }, extractionResponse.status);
@@ -79,7 +87,7 @@ Deno.serve(async (req: Request) => {
     if (destination === "queue") dayNumber = Number(existingQueue?.day_number || chooseQueueDay(tags, categories, mealsResult.data || []));
     if (dryRun) return json({ ok: true, dryRun: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: !!existingQueue });
 
-    const { error: tagError } = await client.from("meal_recipe_tags").upsert({ recipe_key: key, tags });
+    const { error: tagError } = await client.from(tables.tags).upsert({ recipe_key: key, tags });
     if (tagError) throw tagError;
     const libraryPayload = {
       recipe_key: key, title, source_ref: sourceUrl, ingredients, method, extracted_at: now,
@@ -89,20 +97,20 @@ Deno.serve(async (req: Request) => {
       is_deleted: false,
     };
     const libraryWrite = existingLibrary
-      ? await client.from("meal_recipe_library").update(libraryPayload).eq("recipe_key", key).select().single()
-      : await client.from("meal_recipe_library").insert(libraryPayload).select().single();
+      ? await client.from(tables.library).update(libraryPayload).eq("recipe_key", key).select().single()
+      : await client.from(tables.library).insert(libraryPayload).select().single();
     if (libraryWrite.error) {
       if (libraryWrite.error.code !== "23505") throw libraryWrite.error;
-      const recovered = await client.from("meal_recipe_library").select("*").eq("source_ref", sourceUrl).single();
+      const recovered = await client.from(tables.library).select("*").eq("source_ref", sourceUrl).single();
       if (recovered.error) throw recovered.error;
     }
 
     if (destination === "library") return json({ ok: true, destination, recipe, updatedExisting: !!existingLibrary, alreadyQueued: false });
     if (existingQueue) {
       const refreshed = { title, source_ref: sourceUrl, ingredients, method, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "" };
-      const queueUpdate = await client.from("meal_recipe_queue").update(refreshed).eq("id", existingQueue.id);
+      const queueUpdate = await client.from(tables.queue).update(refreshed).eq("id", existingQueue.id);
       if (queueUpdate.error) throw queueUpdate.error;
-      const scheduleUpdate = await client.from("weekly_meals").update(refreshed).eq("queue_item_id", existingQueue.id);
+      const scheduleUpdate = await client.from(tables.meals).update(refreshed).eq("queue_item_id", existingQueue.id);
       if (scheduleUpdate.error) throw scheduleUpdate.error;
       return json({ ok: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: true });
     }
@@ -111,7 +119,7 @@ Deno.serve(async (req: Request) => {
       day_number: dayNumber, position: nextQueuePosition(queueRows, dayNumber), title, source_ref: sourceUrl,
       ingredients, method, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "",
     };
-    const queueWrite = await client.from("meal_recipe_queue").insert(queuePayload).select().single();
+    const queueWrite = await client.from(tables.queue).insert(queuePayload).select().single();
     if (queueWrite.error) {
       if (queueWrite.error.code === "23505") return json({ ok: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: true });
       throw queueWrite.error;
@@ -121,7 +129,7 @@ Deno.serve(async (req: Request) => {
     const blank = !slot || (!String(slot.title || "").trim() && !String(slot.source_ref || "").trim());
     const isFront = !queueRows.some(row => Number(row.day_number) === dayNumber && Number(row.position) < Number(queued.position));
     if (blank && isFront) {
-      const scheduled = await client.from("weekly_meals").upsert(queueMealPayload(queued, weekOf, dayNumber), { onConflict: "week_of,meal_number" });
+      const scheduled = await client.from(tables.meals).upsert(queueMealPayload(queued, weekOf, dayNumber), { onConflict: "week_of,meal_number" });
       if (scheduled.error) throw scheduled.error;
     }
     return json({ ok: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: false });
