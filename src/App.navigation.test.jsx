@@ -40,3 +40,13 @@ test('declining to discard a recipe draft keeps the planner open', async () => {
   expect(container.querySelector('[data-testid="planner"]')).not.toBeNull();
   expect(window.location.hash).toBe('#meal-planner');
 });
+
+test('a Breakfasts deep link keeps the shared sidebar and returns to the planner menu', async () => {
+  window.history.replaceState({}, '', '/mental-load/#meal-planner/breakfasts');
+  await act(async () => root.render(<App/>));
+  expect(container.querySelector('[data-testid="planner"]')).not.toBeNull();
+  await act(async () => sidebarButton('Plan').click());
+  expect(window.location.hash).toBe('');
+  await act(async () => sidebarButton('Meal Planner').click());
+  expect(window.location.hash).toBe('#meal-planner');
+});

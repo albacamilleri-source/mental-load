@@ -1,8 +1,9 @@
 import { createPortal } from 'react-dom';
 import './MealPlanner.css';
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { DEFAULT_CATEGORIES, parseTags, recipeKey, matchesCategory, mealValidation } from "./mealPlanning";
+import { parseTags, recipeKey, matchesCategory, mealValidation } from "./mealPlanning";
+import { PLANNER_CONFIG } from './plannerConfig';
 import { extractionErrorMessage } from "./extractionError";
 import { chooseQueueDay, frontQueuePosition, nextQueuePosition, queueForDay, recipeTagsFor } from "./mealQueue";
 
@@ -160,7 +161,7 @@ function aggregateIngredients(ingredients, suggestions) {
   });
 }
 
-function ExtractionModal({ meal, onClose, onSaved, category, tags }) {
+function ExtractionModal({ meal, onClose, onSaved, category, tags, weeklyMealsTable }) {
   const [tab, setTab] = useState("photo");
   const [file, setFile] = useState(null);
   const [url, setUrl] = useState(meal.source_ref?.startsWith("http") ? meal.source_ref : "");
@@ -224,7 +225,7 @@ function ExtractionModal({ meal, onClose, onSaved, category, tags }) {
       ingredients: clean,
       extracted_at: new Date().toISOString(),
     };
-    const { data, error: dbError } = await sb.from("weekly_meals").upsert(payload, { onConflict:"week_of,meal_number" }).select().single();
+    const { data, error: dbError } = await sb.from(weeklyMealsTable).upsert(payload, { onConflict:"week_of,meal_number" }).select().single();
     if (dbError) { setError(dbError.message); return; }
     onSaved(data); onClose();
   }
@@ -476,12 +477,14 @@ function RecipeCard({ meal, tags, scheduledDays = [], queuedDays = [], onTagsSav
   </div>;
 }
 
-export default function MealPlanner({ onDirtyChange } = {}) {
+export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBack } = {}) {
+  const config = PLANNER_CONFIG[mealType] || PLANNER_CONFIG.dinner;
+  const from = table => sb.from(config.tables[table]);
   const [week, setWeek] = useState(isoWeek(new Date()));
   const [meals, setMeals] = useState([]);
   const [loadingWeek, setLoadingWeek] = useState(true);
   const [reload, setReload] = useState(0);
-  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [categories, setCategories] = useState(config.defaultCategories);
   const [recipeTags, setRecipeTags] = useState({});
   const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -518,12 +521,12 @@ export default function MealPlanner({ onDirtyChange } = {}) {
     async function load() {
       try {
         const responses = await Promise.all([
-          sb.from('weekly_meals').select('*').eq('week_of', week).order('meal_number'),
-          sb.from('weekly_meals').select('*').order('week_of', { ascending: false }).order('meal_number'),
-          sb.from('meal_recipe_tags').select('*'),
-          sb.from('meal_day_categories').select('*').order('day_number'),
-          sb.from('meal_recipe_library').select('*').order('cooked_at', { ascending: false }),
-          sb.from('meal_recipe_queue').select('*').order('day_number').order('position').order('created_at'),
+          from('weekly_meals').select('*').eq('week_of', week).order('meal_number'),
+          from('weekly_meals').select('*').order('week_of', { ascending: false }).order('meal_number'),
+          from('meal_recipe_tags').select('*'),
+          from('meal_day_categories').select('*').order('day_number'),
+          from('meal_recipe_library').select('*').order('cooked_at', { ascending: false }),
+          from('meal_recipe_queue').select('*').order('day_number').order('position').order('created_at'),
         ]);
         if (cancelled) return;
         const failed = responses.find(r => r.error);
@@ -540,7 +543,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
             const slot = next[day - 1];
             const front = queueForDay(queuedRows, day)[0];
             if ((!slot.title.trim() && !slot.source_ref.trim()) && front) {
-              const { data: saved, error } = await sb.from('weekly_meals').upsert(queueMealPayload(front, week, day), { onConflict: 'week_of,meal_number' }).select().single();
+              const { data: saved, error } = await from('weekly_meals').upsert(queueMealPayload(front, week, day), { onConflict: 'week_of,meal_number' }).select().single();
               if (error) throw error;
               next[day - 1] = { ...saved, tagsText: recipeTagsFor(front, tags).join(', '), dirty: false };
             }
@@ -586,7 +589,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       : mealValidation(meal, tags, categoryFor(meal.meal_number));
     if (validation) throw new Error(validation);
     const key = recipeKey(meal);
-    const { error: tagError } = await sb.from('meal_recipe_tags').upsert({ recipe_key: key, tags });
+    const { error: tagError } = await from('meal_recipe_tags').upsert({ recipe_key: key, tags });
     if (tagError) throw tagError;
     applyTags(key, tags, meal.meal_number - 1);
     const payload = {
@@ -594,7 +597,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       ingredients: meal.ingredients, method: meal.method || '', extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '',
       queue_item_id: meal.queue_item_id || null, is_override: !!meal.is_override, override_type: meal.override_type || null,
     };
-    const { data, error } = await sb.from('weekly_meals').upsert(payload, { onConflict: 'week_of,meal_number' }).select().single();
+    const { data, error } = await from('weekly_meals').upsert(payload, { onConflict: 'week_of,meal_number' }).select().single();
     if (error) throw error;
     const saved = { ...data, tagsText: tags.join(', '), dirty: false };
     setMeals(prev => prev.map(m => m.meal_number === saved.meal_number ? saved : m));
@@ -613,7 +616,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
   async function saveCategories(next) {
     setBusy(true);
     try {
-      const { error } = await sb.from('meal_day_categories').upsert(next);
+      const { error } = await from('meal_day_categories').upsert(next);
       if (error) throw error;
       setCategories(next); setSettingsOpen(false); setGroceryGenerated(false); setToast('Day categories saved');
       return '';
@@ -624,7 +627,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
     if (!quiet) setBusy(true);
     try {
       const key = recipeKey(meal);
-      const { error } = await sb.from('meal_recipe_tags').upsert({ recipe_key: key, tags });
+      const { error } = await from('meal_recipe_tags').upsert({ recipe_key: key, tags });
       if (error) throw error;
       applyTags(key, tags);
       if (!quiet) setToast('Recipe tags saved');
@@ -650,18 +653,18 @@ export default function MealPlanner({ onDirtyChange } = {}) {
         has_been_cooked: !!(existing?.has_been_cooked || recipe.has_been_cooked), is_deleted: false,
       };
       if (key !== oldKey) {
-        const { error: tagError } = await sb.from('meal_recipe_tags').upsert({ recipe_key: key, tags });
+        const { error: tagError } = await from('meal_recipe_tags').upsert({ recipe_key: key, tags });
         if (tagError) throw tagError;
       }
-      const { data: saved, error } = await sb.from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
+      const { data: saved, error } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (error) throw error;
       if (key !== oldKey && existing) {
-        const { error: oldRecordError } = await sb.from('meal_recipe_library').update({ is_deleted: true }).eq('recipe_key', oldKey);
+        const { error: oldRecordError } = await from('meal_recipe_library').update({ is_deleted: true }).eq('recipe_key', oldKey);
         if (oldRecordError) throw oldRecordError;
       }
-      const { error: queueError } = await sb.from('meal_recipe_queue').update({ source_ref: source, method: payload.method }).eq('source_ref', recipe.source_ref);
+      const { error: queueError } = await from('meal_recipe_queue').update({ source_ref: source, method: payload.method }).eq('source_ref', recipe.source_ref);
       if (queueError) throw queueError;
-      const { error: scheduleError } = await sb.from('weekly_meals').update({ source_ref: source, method: payload.method }).eq('source_ref', recipe.source_ref);
+      const { error: scheduleError } = await from('weekly_meals').update({ source_ref: source, method: payload.method }).eq('source_ref', recipe.source_ref);
       if (scheduleError) throw scheduleError;
       if (key !== oldKey) setRecipeTags(prev => ({ ...prev, [key]: tags }));
       setLibraryRecords(prev => [saved, ...prev.filter(row => row.recipe_key !== oldKey && row.recipe_key !== key)]);
@@ -687,7 +690,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
         cooked_at: cooked ? new Date().toISOString() : existing?.cooked_at || recipe.cooked_at || new Date().toISOString(),
         has_been_cooked: cooked, is_deleted: false,
       };
-      const { data: saved, error } = await sb.from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
+      const { data: saved, error } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (error) throw error;
       setLibraryRecords(prev => [saved, ...prev.filter(row => row.recipe_key !== key)]);
       return '';
@@ -704,11 +707,11 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       if (!current.queue_item_id && !empty) continue;
       if (current.queue_item_id && current.queue_item_id === front?.id) continue;
       if (front) {
-        const { data: saved, error } = await sb.from('weekly_meals').upsert(queueMealPayload(front, week, day), { onConflict: 'week_of,meal_number' }).select().single();
+        const { data: saved, error } = await from('weekly_meals').upsert(queueMealPayload(front, week, day), { onConflict: 'week_of,meal_number' }).select().single();
         if (error) throw error;
         nextMeals[day - 1] = { ...saved, tagsText: recipeTagsFor(front, recipeTags).join(', '), dirty: false };
       } else if (current.id && current.queue_item_id) {
-        const { error } = await sb.from('weekly_meals').delete().eq('id', current.id);
+        const { error } = await from('weekly_meals').delete().eq('id', current.id);
         if (error) throw error;
         nextMeals[day - 1] = { ...emptyMeal(day), week_of: week, tagsText: '', dirty: false };
       }
@@ -719,7 +722,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
     if (busy) return 'Please wait for the current save.';
     setBusy(true);
     try {
-      const { data, error: importError } = await sb.functions.invoke('meal-recipe-intake', { body: { url, destination, weekOf: week } });
+      const { data, error: importError } = await sb.functions.invoke('meal-recipe-intake', { body: { url, destination, weekOf: week, mealType } });
       if (importError) throw new Error(await extractionErrorMessage(importError));
       if (!data?.ok || !data?.recipe?.title) throw new Error(data?.error || 'The importer returned an incomplete response.');
       const title = data.recipe.title;
@@ -748,9 +751,9 @@ export default function MealPlanner({ onDirtyChange } = {}) {
         extracted_at: existing?.extracted_at || null, rating: existing?.rating ?? null, notes: existing?.notes || '',
         cooked_at: existing?.cooked_at || now, has_been_cooked: !!existing?.has_been_cooked, is_deleted: false,
       };
-      const { error: tagError } = await sb.from('meal_recipe_tags').upsert({ recipe_key: key, tags: recipe.tags });
+      const { error: tagError } = await from('meal_recipe_tags').upsert({ recipe_key: key, tags: recipe.tags });
       if (tagError) throw tagError;
-      const { data: saved, error: libraryError } = await sb.from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
+      const { data: saved, error: libraryError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (libraryError) throw libraryError;
       setRecipeTags(prev => ({ ...prev, [key]: recipe.tags }));
       setLibraryRecords(prev => [saved, ...prev.filter(row => row.recipe_key !== key)]);
@@ -762,12 +765,12 @@ export default function MealPlanner({ onDirtyChange } = {}) {
             day_number: day, position: nextQueuePosition(queueRows, day), title: recipe.title, source_ref: recipe.source_ref,
             ingredients: recipe.ingredients, method: recipe.method || '', extracted_at: null, rating: null, notes: '',
           };
-          const { data: queued, error: queueError } = await sb.from('meal_recipe_queue').insert(queuePayload).select().single();
+          const { data: queued, error: queueError } = await from('meal_recipe_queue').insert(queuePayload).select().single();
           if (queueError) throw queueError;
           const nextQueue = [...queueRows, queued];
           const slot = meals[day - 1];
           if (!slot.title.trim() && !slot.source_ref.trim() && queueForDay(nextQueue, day)[0]?.id === queued.id) {
-            const { data: scheduled, error: scheduleError } = await sb.from('weekly_meals').upsert(queueMealPayload(queued, week, day), { onConflict: 'week_of,meal_number' }).select().single();
+            const { data: scheduled, error: scheduleError } = await from('weekly_meals').upsert(queueMealPayload(queued, week, day), { onConflict: 'week_of,meal_number' }).select().single();
             if (scheduleError) throw scheduleError;
             setMeals(prev => prev.map((row, index) => index === day - 1 ? { ...scheduled, tagsText: recipe.tags.join(', '), dirty: false } : row));
           }
@@ -792,12 +795,12 @@ export default function MealPlanner({ onDirtyChange } = {}) {
         day_number: day, position: nextQueuePosition(queueRows, day), title: recipe.title.trim(), source_ref: recipe.source_ref.trim(),
         ingredients: recipe.ingredients, method: recipe.method || '', extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '',
       };
-      const { data: queued, error: queueError } = await sb.from('meal_recipe_queue').insert(payload).select().single();
+      const { data: queued, error: queueError } = await from('meal_recipe_queue').insert(payload).select().single();
       if (queueError) throw queueError;
       const nextQueue = [...queueRows, queued];
       const slot = meals[day - 1];
       if (!slot.title.trim() && !slot.source_ref.trim() && queueForDay(nextQueue, day)[0]?.id === queued.id) {
-        const { data: saved, error } = await sb.from('weekly_meals').upsert(queueMealPayload(queued, week, day), { onConflict: 'week_of,meal_number' }).select().single();
+        const { data: saved, error } = await from('weekly_meals').upsert(queueMealPayload(queued, week, day), { onConflict: 'week_of,meal_number' }).select().single();
         if (error) throw error;
         setMeals(prev => prev.map((meal, index) => index === day - 1 ? { ...saved, tagsText: tags.join(', '), dirty: false } : meal));
       }
@@ -813,7 +816,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
     setBusy(true);
     try {
       const moved = { ...item, day_number: day, position: nextQueuePosition(queueRows, day) };
-      const { error } = await sb.from('meal_recipe_queue').update({ day_number: day, position: moved.position }).eq('id', id);
+      const { error } = await from('meal_recipe_queue').update({ day_number: day, position: moved.position }).eq('id', id);
       if (error) throw error;
       await reconcileQueues(queueRows.map(row => row.id === id ? moved : row));
       setToast(`${item.title} moved to Day ${day}`);
@@ -830,9 +833,9 @@ export default function MealPlanner({ onDirtyChange } = {}) {
     if (!other) return;
     setBusy(true);
     try {
-      const { error: firstError } = await sb.from('meal_recipe_queue').update({ position: other.position }).eq('id', item.id);
+      const { error: firstError } = await from('meal_recipe_queue').update({ position: other.position }).eq('id', item.id);
       if (firstError) throw firstError;
-      const { error: secondError } = await sb.from('meal_recipe_queue').update({ position: item.position }).eq('id', other.id);
+      const { error: secondError } = await from('meal_recipe_queue').update({ position: item.position }).eq('id', other.id);
       if (secondError) throw secondError;
       await reconcileQueues(queueRows.map(row => row.id === item.id ? { ...row, position: other.position } : row.id === other.id ? { ...row, position: item.position } : row));
     } catch (e) { setToast(e.message || 'Could not reorder that queue.'); }
@@ -848,13 +851,13 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       if (current.id && !current.queue_item_id) {
         const currentTags = parseTags(current.tagsText);
         const key = recipeKey(current);
-        const { error: tagError } = await sb.from('meal_recipe_tags').upsert({ recipe_key: key, tags: currentTags });
+        const { error: tagError } = await from('meal_recipe_tags').upsert({ recipe_key: key, tags: currentTags });
         if (tagError) throw tagError;
         const payload = {
           day_number: day, position: frontQueuePosition(queueRows, day), title: current.title.trim(), source_ref: current.source_ref.trim(),
           ingredients: current.ingredients, method: current.method || '', extracted_at: current.extracted_at, rating: current.rating, notes: current.notes || '',
         };
-        const { data: preserved, error } = await sb.from('meal_recipe_queue').insert(payload).select().single();
+        const { data: preserved, error } = await from('meal_recipe_queue').insert(payload).select().single();
         if (error) throw error;
         nextQueue = [...queueRows, preserved];
       }
@@ -908,20 +911,20 @@ export default function MealPlanner({ onDirtyChange } = {}) {
         extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '', cooked_at: existing?.cooked_at || new Date().toISOString(),
         has_been_cooked: !!existing?.has_been_cooked, is_deleted: false,
       };
-      const { data: savedToLibrary, error: libraryError } = await sb.from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
+      const { data: savedToLibrary, error: libraryError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (libraryError) throw libraryError;
-      const { error: deleteError } = await sb.from('weekly_meals').delete().eq('id', meal.id);
+      const { error: deleteError } = await from('weekly_meals').delete().eq('id', meal.id);
       if (deleteError) throw deleteError;
       let nextQueue = queueRows;
       if (meal.queue_item_id) {
-        const { error: queueError } = await sb.from('meal_recipe_queue').delete().eq('id', meal.queue_item_id);
+        const { error: queueError } = await from('meal_recipe_queue').delete().eq('id', meal.queue_item_id);
         if (queueError) throw queueError;
         nextQueue = queueRows.filter(row => row.id !== meal.queue_item_id);
       }
       const front = queueForDay(nextQueue, meal.meal_number)[0];
       let nextMeal = { ...emptyMeal(meal.meal_number), week_of: week, tagsText: '', dirty: false };
       if (front) {
-        const { data: saved, error } = await sb.from('weekly_meals').upsert(queueMealPayload(front, week, meal.meal_number), { onConflict: 'week_of,meal_number' }).select().single();
+        const { data: saved, error } = await from('weekly_meals').upsert(queueMealPayload(front, week, meal.meal_number), { onConflict: 'week_of,meal_number' }).select().single();
         if (error) throw error;
         nextMeal = { ...saved, tagsText: recipeTagsFor(front, recipeTags).join(', '), dirty: false };
       }
@@ -943,20 +946,20 @@ export default function MealPlanner({ onDirtyChange } = {}) {
         recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '',
         extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '', cooked_at: new Date().toISOString(), has_been_cooked: true, is_deleted: false,
       };
-      const { data: banked, error: bankError } = await sb.from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
+      const { data: banked, error: bankError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (bankError) throw bankError;
-      const { error: deleteError } = await sb.from('weekly_meals').delete().eq('id', meal.id);
+      const { error: deleteError } = await from('weekly_meals').delete().eq('id', meal.id);
       if (deleteError) throw deleteError;
       let nextQueue = queueRows;
       if (meal.queue_item_id) {
-        const { error: queueError } = await sb.from('meal_recipe_queue').delete().eq('id', meal.queue_item_id);
+        const { error: queueError } = await from('meal_recipe_queue').delete().eq('id', meal.queue_item_id);
         if (queueError) throw queueError;
         nextQueue = queueRows.filter(row => row.id !== meal.queue_item_id);
       }
       const front = queueForDay(nextQueue, meal.meal_number)[0];
       let nextMeal = { ...emptyMeal(meal.meal_number), week_of: week, tagsText: '', dirty: false };
       if (front) {
-        const { data: saved, error } = await sb.from('weekly_meals').upsert(queueMealPayload(front, week, meal.meal_number), { onConflict: 'week_of,meal_number' }).select().single();
+        const { data: saved, error } = await from('weekly_meals').upsert(queueMealPayload(front, week, meal.meal_number), { onConflict: 'week_of,meal_number' }).select().single();
         if (error) throw error;
         nextMeal = { ...saved, tagsText: recipeTagsFor(front, recipeTags).join(', '), dirty: false };
       }
@@ -1006,7 +1009,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
         recipe_key: key, title: recipe.title.trim(), source_ref: recipe.source_ref.trim(), ingredients: recipe.ingredients, method: recipe.method || '',
         extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '', cooked_at: recipe.cooked_at || new Date().toISOString(), has_been_cooked: !!recipe.has_been_cooked, is_deleted: true,
       };
-      const { data: deleted, error } = await sb.from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
+      const { data: deleted, error } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (error) throw error;
       setLibraryRecords(prev => [deleted, ...prev.filter(row => row.recipe_key !== key)]);
       setToast(`${recipe.title} removed from your library`);
@@ -1065,12 +1068,13 @@ export default function MealPlanner({ onDirtyChange } = {}) {
 
   return <div className="meal-planner"><div className="app"><div className="shell">
     <header className="plannerHeader">
+      {onBack && <button type="button" className="plannerBack" onClick={onBack} aria-label="Back to Meal Planner">‹ Meal Planner</button>}
       <div className="plannerMonth">{new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</div>
       <div className="plannerTitleRow">
-        <h1 className="brand">Meal Planner<span className="brandDot">.</span></h1>
+        <h1 className="brand">{config.title}<span className="brandDot">.</span></h1>
         <div className="plannerHeaderActions"><button className="categoryToggle" disabled={busy || loadingWeek || !!loadError} aria-expanded={queueOpen} onClick={() => setQueueOpen(true)}>Manage queues{queueRows.length ? ` · ${queueRows.length}` : ''}</button><button className="categoryToggle" disabled={busy || loadingWeek || !!loadError} aria-expanded={settingsOpen} aria-controls="category-editor" onClick={() => setSettingsOpen(true)}>Edit categories</button></div>
       </div>
-      <div className="sub">Six meals, your day categories, one grocery list.</div>
+      <div className="sub">Six {config.title.toLowerCase()}, your day categories, one grocery list.</div>
     </header>
     {loadError && <div className="plannerNotice" role="alert">{loadError} <button className="btn secondary" onClick={() => setReload(n => n + 1)}>Retry</button></div>}
     <section className="card"><RecipeImporter categories={categories} onImport={importRecipe} onManual={() => setManualOpen(true)} busy={busy}/></section>
@@ -1121,7 +1125,7 @@ export default function MealPlanner({ onDirtyChange } = {}) {
       {libraryOpen && !loadingWeek && !loadError && <div className="recipeLibrary"><input className="input search" aria-label="Search recipe library" value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="Search by recipe, source or tag…"/>{filteredLibraryRecipes.length === 0 ? <div className="empty">{librarySearch ? 'No recipes match your search.' : 'Recipes you save or import will appear here.'}</div> : <div className="pastMeals">{filteredLibraryRecipes.map(recipe => <RecipeCard key={recipe.recipe_key} meal={recipe} tags={recipeTags[recipeKey(recipe)] || EMPTY_TAGS} scheduledDays={recipeDays(meals, recipe, 'meal_number')} queuedDays={recipeDays(queueRows, recipe, 'day_number')} onTagsSaved={savePastTags} onToggleCooked={toggleCookedStatus} cookedBusy={cookedUpdatingKey === recipeKey(recipe)} onOpenDetails={setDetailsRecipe} onUse={useLibraryRecipe} onQueue={queueLibraryRecipe} onDelete={deleteLibraryRecipe} busy={busy} draggable onDragStart={startRecipeDrag} onDragEnd={() => { setDraggedRecipeKey(''); setDropTarget(null); }}/>)}</div>}</div>}
     </section>
   </div></div>{(modalMeal || toast || queueOpen || settingsOpen || switchDay !== null || detailsRecipe || manualOpen) && createPortal(<div className="meal-planner">
-    {modalMeal && <ExtractionModal meal={modalMeal} tags={parseTags(modalMeal.tagsText)} category={categoryFor(modalMeal.meal_number)} onClose={() => setModalMeal(null)} onSaved={onIngredientSaved}/>}
+    {modalMeal && <ExtractionModal meal={modalMeal} tags={parseTags(modalMeal.tagsText)} category={categoryFor(modalMeal.meal_number)} weeklyMealsTable={config.tables.weekly_meals} onClose={() => setModalMeal(null)} onSaved={onIngredientSaved}/>}
     {queueOpen && <QueueManager queue={queueRows} categories={categories} tagMap={recipeTags} busy={busy} onClose={() => setQueueOpen(false)} onTagsSaved={savePastTags} onMove={moveQueueItem} onBump={bumpQueueItem}/>}
     {settingsOpen && <div className="modalBack" role="dialog" aria-modal="true" aria-label="Edit day categories"><div className="modal categoryModal" id="category-editor"><div className="modalHead"><h2 className="sectionTitle">Day categories</h2><button type="button" className="iconBtn" aria-label="Close categories" onClick={() => setSettingsOpen(false)}>×</button></div><CategoryEditor categories={categories} onSave={saveCategories} busy={busy}/></div></div>}
     {switchDay !== null && <SwitchMealModal day={switchDay} library={libraryRecipes} tagMap={recipeTags} busy={busy} onClose={() => setSwitchDay(null)} onSave={switchMeal}/>}
@@ -1131,3 +1135,49 @@ export default function MealPlanner({ onDirtyChange } = {}) {
   </div>, document.body)}</div>;
 }
 const EMPTY_TAGS = [];
+
+function viewFromHash() {
+  if (window.location.hash === '#meal-planner/breakfasts') return 'breakfast';
+  if (window.location.hash === '#meal-planner/dinners') return 'dinner';
+  return null;
+}
+
+export default function MealPlanner({ onDirtyChange, onPathChange } = {}) {
+  const [view, setView] = useState(viewFromHash);
+  const [dirty, setDirty] = useState(false);
+  const reportDirty = useCallback(value => { setDirty(value); onDirtyChange?.(value); }, [onDirtyChange]);
+  useEffect(() => {
+    const syncView = () => {
+      if (!window.location.hash.startsWith('#meal-planner')) return;
+      const next = viewFromHash();
+      if (next === view) return;
+      if (view && dirty && !window.confirm('Leave this plan? Any unsaved changes will be lost.')) {
+        const previousHash = `#meal-planner/${view === 'breakfast' ? 'breakfasts' : 'dinners'}`;
+        window.history.replaceState(window.history.state, '', previousHash);
+        onPathChange?.(previousHash);
+        return;
+      }
+      reportDirty(false); setView(next);
+    };
+    window.addEventListener('hashchange', syncView);
+    window.addEventListener('popstate', syncView);
+    return () => { window.removeEventListener('hashchange', syncView); window.removeEventListener('popstate', syncView); };
+  }, [view, dirty, onPathChange, reportDirty]);
+  function navigate(next) {
+    if (view && dirty && !window.confirm('Leave this plan? Any unsaved changes will be lost.')) return;
+    const url = new URL(window.location.href);
+    url.hash = next ? `meal-planner/${next === 'breakfast' ? 'breakfasts' : 'dinners'}` : 'meal-planner';
+    window.history.pushState(window.history.state, '', url);
+    onPathChange?.(url.hash);
+    setDirty(false); reportDirty(false); setView(next);
+    window.scrollTo(0, 0);
+  }
+  if (view) return <div className="plannerTransition" key={view}><MealPlannerWorkspace mealType={view} onDirtyChange={reportDirty} onBack={() => navigate(null)}/></div>;
+  return <div className="meal-planner plannerTransition"><div className="app"><div className="shell">
+    <header className="plannerHeader plannerHomeHeader"><div className="plannerMonth">Make space for what matters</div><h1 className="brand">Meal Planner<span className="brandDot">.</span></h1><p className="plannerHomeIntro">What would you like to plan?</p></header>
+    <div className="plannerChoices">
+      <button type="button" className="plannerChoice" onClick={() => navigate('dinner')} aria-label="Open Dinners planner"><span className="plannerChoiceNumber">01 / DINNERS</span><span className="plannerChoiceTitle">Dinners <span aria-hidden="true">↗</span></span><span className="plannerChoiceDescription">Your current six-day plan, recipe library and queues.</span></button>
+      <button type="button" className="plannerChoice" onClick={() => navigate('breakfast')} aria-label="Open Breakfasts planner"><span className="plannerChoiceNumber">02 / BREAKFASTS</span><span className="plannerChoiceTitle">Breakfasts <span aria-hidden="true">↗</span></span><span className="plannerChoiceDescription">A separate six-day plan with its own recipes and queues.</span></button>
+    </div>
+  </div></div></div>;
+}

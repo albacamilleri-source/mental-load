@@ -1,19 +1,22 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
-import MealPlanner from './MealPlanner';
+import MealPlanner, { MealPlannerWorkspace } from './MealPlanner';
 import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
+import { BREAKFAST_CATEGORIES } from './plannerConfig';
 
 const mockFrom = jest.fn();
 const mockInvoke = jest.fn();
 jest.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (...args) => mockFrom(...args), functions: { invoke: (...args) => mockInvoke(...args) } }) }));
-let container, root, current, past, library, queue, tagRows, categories, writes, failure, deferWeeklyWrite, resolveWeeklyWrite;
+let container, root, current, past, library, queue, tagRows, categories, breakfastCurrent, breakfastPast, breakfastLibrary, breakfastQueue, breakfastTagRows, breakfastCategories, writes, failure, deferWeeklyWrite, resolveWeeklyWrite;
 const sample = (n, tags = []) => ({ id: `meal-${n}`, meal_number: n, title: `Recipe ${n}`, source_ref: `Book ${n}`, week_of: '2026-W36', ingredients: [{name: 'carrot', qty: 1, unit: 'item'}], extracted_at: null, tags });
 function setupQueries() {
-  let weeklyReadCount = 0;
+  const weeklyReadCount = { dinner: 0, breakfast: 0 };
   mockFrom.mockImplementation(table => {
-    if (table === 'weekly_meals') weeklyReadCount += 1;
-    let isPast = table === 'weekly_meals' && weeklyReadCount === 2, payload, action = '';
+    const kind = table.startsWith('breakfast_') ? 'breakfast' : 'dinner';
+    const logicalTable = kind === 'breakfast' ? ({breakfast_weekly_meals:'weekly_meals',breakfast_recipe_tags:'meal_recipe_tags',breakfast_day_categories:'meal_day_categories',breakfast_recipe_library:'meal_recipe_library',breakfast_recipe_queue:'meal_recipe_queue'}[table] || table) : table;
+    if (logicalTable === 'weekly_meals') weeklyReadCount[kind] += 1;
+    let isPast = logicalTable === 'weekly_meals' && weeklyReadCount[kind] === 2, payload, action = '';
     const query = {
       select: () => query,
       eq: (field, value) => { if (action) writes.push({ table, [action]: { field, value, payload } }); return query; },
@@ -25,18 +28,19 @@ function setupQueries() {
       single: () => query,
       then: (resolve, reject) => {
         if (failure) return Promise.resolve({ error: {message: failure} }).then(resolve, reject);
-        let data = table === 'weekly_meals' ? (isPast ? past : current) : table === 'meal_recipe_tags' ? tagRows : table === 'meal_day_categories' ? categories : table === 'meal_recipe_library' ? library : queue;
-        if (payload && table === 'weekly_meals') data = { id: 'saved', ...payload };
-        if (payload && table === 'meal_recipe_library') data = payload;
-        if (payload && table === 'meal_recipe_queue' && action === 'insert') data = { id: `queue-${writes.length}`, created_at: '2026-09-11T08:00:00Z', ...payload };
-        if (payload && table === 'weekly_meals' && deferWeeklyWrite) return new Promise(done => { resolveWeeklyWrite = () => done({ data, error: null }); }).then(resolve, reject);
+        const source = kind === 'breakfast' ? {current:breakfastCurrent,past:breakfastPast,library:breakfastLibrary,queue:breakfastQueue,tagRows:breakfastTagRows,categories:breakfastCategories} : {current,past,library,queue,tagRows,categories};
+        let data = logicalTable === 'weekly_meals' ? (isPast ? source.past : source.current) : logicalTable === 'meal_recipe_tags' ? source.tagRows : logicalTable === 'meal_day_categories' ? source.categories : logicalTable === 'meal_recipe_library' ? source.library : source.queue;
+        if (payload && logicalTable === 'weekly_meals') data = { id: 'saved', ...payload };
+        if (payload && logicalTable === 'meal_recipe_library') data = payload;
+        if (payload && logicalTable === 'meal_recipe_queue' && action === 'insert') data = { id: `queue-${writes.length}`, created_at: '2026-09-11T08:00:00Z', ...payload };
+        if (payload && logicalTable === 'weekly_meals' && deferWeeklyWrite) return new Promise(done => { resolveWeeklyWrite = () => done({ data, error: null }); }).then(resolve, reject);
         return Promise.resolve({ data, error: null }).then(resolve, reject);
       },
     };
     return query;
   });
 }
-async function render() { await act(async () => { root.render(<MealPlanner/>); }); }
+async function render(mealType = 'dinner') { await act(async () => { root.render(<MealPlannerWorkspace mealType={mealType}/>); }); }
 async function change(label, value) {
   await act(async () => { Simulate.change(document.body.querySelector(`[aria-label="${label}"]`), { target: { value } }); });
 }
@@ -47,9 +51,74 @@ beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   window.confirm = jest.fn(() => true);
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; deferWeeklyWrite = false; resolveWeeklyWrite = null; mockInvoke.mockReset(); setupQueries();
+  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); breakfastCurrent = []; breakfastPast = []; breakfastLibrary = []; breakfastQueue = []; breakfastTagRows = []; breakfastCategories = BREAKFAST_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; deferWeeklyWrite = false; resolveWeeklyWrite = null; mockInvoke.mockReset(); setupQueries();
+  window.history.replaceState({}, '', '/mental-load/#meal-planner'); window.scrollTo = jest.fn();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
+
+test('Meal Planner opens a choice screen and returns from Breakfasts without leaving the app', async () => {
+  await act(async () => { root.render(<MealPlanner/>); });
+  expect(container.querySelector('[aria-label="Open Dinners planner"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Open Breakfasts planner"]')).not.toBeNull();
+  await click(container.querySelector('[aria-label="Open Breakfasts planner"]'));
+  expect(window.location.hash).toBe('#meal-planner/breakfasts');
+  expect(container.querySelector('.plannerHeader .brand').textContent).toContain('Breakfasts');
+  await click(container.querySelector('[aria-label="Back to Meal Planner"]'));
+  expect(window.location.hash).toBe('#meal-planner');
+  expect(container.querySelector('[aria-label="Open Dinners planner"]')).not.toBeNull();
+  await click(container.querySelector('[aria-label="Open Dinners planner"]'));
+  expect(window.location.hash).toBe('#meal-planner/dinners');
+  expect(container.querySelector('.plannerHeader .brand').textContent).toContain('Dinners');
+});
+
+test('browser navigation does not discard an unsaved Breakfasts draft', async () => {
+  await act(async () => { root.render(<MealPlanner/>); });
+  await click(container.querySelector('[aria-label="Open Breakfasts planner"]'));
+  await change('Day 1 meal title', 'Porridge draft');
+  window.confirm.mockReturnValue(false);
+  await act(async () => { window.history.pushState({}, '', '#meal-planner'); window.dispatchEvent(new Event('hashchange')); });
+  expect(window.location.hash).toBe('#meal-planner/breakfasts');
+  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Porridge draft');
+});
+
+test('Breakfasts uses its own recipes and tables with no category rules yet', async () => {
+  library = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false}];
+  breakfastLibrary = [{...sample(2), recipe_key:recipeKey(sample(2)), has_been_cooked:false, is_deleted:false}];
+  await render('breakfast');
+  expect(mockFrom).toHaveBeenCalledWith('breakfast_weekly_meals');
+  expect(mockFrom).toHaveBeenCalledWith('breakfast_recipe_library');
+  expect(mockFrom).toHaveBeenCalledWith('breakfast_recipe_queue');
+  expect(mockFrom).not.toHaveBeenCalledWith('meal_recipe_library');
+  expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 2');
+  expect(container.querySelector('#recipe-library').textContent).not.toContain('Recipe 1');
+  expect(day(4).textContent).not.toContain('Requires');
+  await change('Day 4 meal title', 'Porridge'); await change('Day 4 source', 'Family notebook');
+  await click(button('Save meal', day(4)));
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.title === 'Porridge')).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_recipe_tags')).toBeTruthy();
+  expect(writes.find(write => write.table === 'weekly_meals')).toBeUndefined();
+});
+
+test('Breakfast URL imports are scoped to Breakfasts', async () => {
+  mockInvoke.mockResolvedValue({data: {ok:true, destination:'library', updatedExisting:false, alreadyQueued:false, recipe:{title:'Oat Pancakes'}}, error: null});
+  await render('breakfast');
+  await change('Recipe URL to import', 'https://example.com/oat-pancakes');
+  await click(button('Save to library'));
+  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/oat-pancakes', destination:'library', weekOf:expect.any(String), mealType:'breakfast'}});
+});
+
+test('Breakfasts fills from its own queue and saves its own category changes', async () => {
+  breakfastQueue = [{...sample(3), id:'breakfast-q1', day_number:1, position:1, created_at:'2026-09-20T08:00:00Z'}];
+  await render('breakfast');
+  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 3');
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q1')).toBeTruthy();
+  expect(writes.find(write => write.table === 'weekly_meals')).toBeUndefined();
+  await click(button('Edit categories'));
+  await change('Day 1 accepted tags', 'oats');
+  await click(button('Save day categories'));
+  expect(writes.find(write => write.table === 'breakfast_day_categories' && write.value?.[0]?.accepted_tags?.includes('oats'))).toBeTruthy();
+  expect(writes.find(write => write.table === 'meal_day_categories')).toBeUndefined();
+});
 
 test('blocks a mismatched meal and saves normalized tags with a matching meal', async () => {
   await render();
@@ -287,7 +356,7 @@ test('imports a URL with AI details, assigns a queue, and fills its blank day', 
   await render();
   await change('Recipe URL to import', 'https://example.com/pasta');
   await click(button('Import & queue'));
-  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/pasta', destination:'queue', weekOf:expect.stringMatching(/^\d{4}-W\d{2}$/)}});
+  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/pasta', destination:'queue', weekOf:expect.stringMatching(/^\d{4}-W\d{2}$/), mealType:'dinner'}});
   expect(document.body.textContent).toContain('Lemony Pasta added to Day 1 queue');
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
 });
@@ -297,7 +366,7 @@ test('imports a URL directly to the library without scheduling it', async () => 
   await render();
   await change('Recipe URL to import', 'https://example.com/library-pasta');
   await click(button('Save to library'));
-  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/library-pasta', destination:'library', weekOf:expect.any(String)}});
+  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/library-pasta', destination:'library', weekOf:expect.any(String), mealType:'dinner'}});
   expect(document.body.textContent).toContain('Library Pasta saved to your library');
   expect(writes.find(write => write.table === 'meal_recipe_library')).toBeUndefined();
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();

@@ -3910,7 +3910,9 @@ export default function App() {
 
 function AppInner() {
   const [who, chooseWho] = useWho();
-  const [screen, setScreen] = useState(() => window.location.hash === "#meal-planner" ? "meal-planner" : "today");
+  const [screen, setScreen] = useState(() => window.location.hash.startsWith("#meal-planner") ? "meal-planner" : "today");
+  const plannerHash = useRef(window.location.hash.startsWith("#meal-planner") ? window.location.hash : "#meal-planner");
+  const updatePlannerHash = useCallback(hash => { plannerHash.current = hash; }, []);
   const [mealPlannerDirty, setMealPlannerDirty] = useState(false);
   const [slideDir, setSlideDir] = useState("left");
   const [editing, setEditing] = useState(false);
@@ -3927,19 +3929,20 @@ function AppInner() {
     setSlideDir(to >= from ? "left" : "right");
     setScreen(next);
     const url = new URL(window.location.href);
-    if (next === "meal-planner") url.hash = "meal-planner";
-    else if (url.hash === "#meal-planner") url.hash = "";
+    if (next === "meal-planner") { url.hash = "meal-planner"; plannerHash.current = "#meal-planner"; }
+    else if (url.hash.startsWith("#meal-planner")) url.hash = "";
     window.history.replaceState(window.history.state, "", url);
     window.scrollTo(0, 0);
   };
 
   useEffect(() => {
     const onHashChange = () => {
-      const next = window.location.hash === "#meal-planner" ? "meal-planner" : "today";
+      const next = window.location.hash.startsWith("#meal-planner") ? "meal-planner" : "today";
       if (screen === "meal-planner" && next !== screen && mealPlannerDirty && !window.confirm("Leave Meal Planner? Any unsaved changes will be lost.")) {
-        window.history.replaceState(window.history.state, "", "#meal-planner");
+        window.history.replaceState(window.history.state, "", plannerHash.current);
         return;
       }
+      if (next === "meal-planner") plannerHash.current = window.location.hash;
       setSlideDir(next === "meal-planner" ? "left" : "right");
       setScreen(next);
     };
@@ -4010,7 +4013,7 @@ function AppInner() {
   );
 
   const screens = {
-    "meal-planner": <MealPlanner onDirtyChange={setMealPlannerDirty} />,
+    "meal-planner": <MealPlanner onDirtyChange={setMealPlannerDirty} onPathChange={updatePlannerHash} />,
     today: <TodayScreen who={who} />,
     week: <WeekScreen who={who} />,
     month: <MonthScreen who={who} />,
