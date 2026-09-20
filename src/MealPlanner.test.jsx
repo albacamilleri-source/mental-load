@@ -335,6 +335,7 @@ test('adds a manual recipe to its matching queue', async () => {
 
 test('library cards open a modal with ingredients, editable source and method, and can be removed', async () => {
   library = [{...sample(1), method:'1. Boil the carrots.', recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:true, is_deleted:false}];
+  tagRows = [{recipe_key:recipeKey(sample(1)), tags:['quick']}];
   await render();
   const recipeLibrary = container.querySelector('#recipe-library');
   expect(recipeLibrary.textContent).toContain('✓ Cooked');
@@ -346,11 +347,14 @@ test('library cards open a modal with ingredients, editable source and method, a
   expect(details.textContent).toContain('carrot · 1');
   expect(details.querySelector('[aria-label="URL or source for Recipe 1"]').value).toBe('Book 1');
   expect(details.querySelector('[aria-label="Method for Recipe 1"]').value).toBe('1. Boil the carrots.');
+  await change('Tags for Recipe 1 in details', 'quick, soup');
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 700)); });
   await change('URL or source for Recipe 1', 'https://example.com/recipe-1');
   await change('Method for Recipe 1', '1. Roast the carrots.');
   await click(button('Save changes', details));
   expect(document.body.querySelector('[aria-label="Recipe details for Recipe 1"]')).toBeNull();
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.method === '1. Roast the carrots.' && write.value.source_ref === 'https://example.com/recipe-1')).toBeTruthy();
+  expect(writes).toContainEqual({table:'meal_recipe_tags', value:{recipe_key:recipeKey({...sample(1), source_ref:'https://example.com/recipe-1'}), tags:['quick', 'soup']}});
   expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'source_ref', value:'Book 1', payload:{source_ref:'https://example.com/recipe-1', method:'1. Roast the carrots.'}}});
   expect(writes).toContainEqual({table:'weekly_meals', update:{field:'source_ref', value:'Book 1', payload:{source_ref:'https://example.com/recipe-1', method:'1. Roast the carrots.'}}});
   await click(button('Delete', recipeLibrary));
@@ -360,7 +364,7 @@ test('library cards open a modal with ingredients, editable source and method, a
   expect(writes.find(write => write.table === 'weekly_meals' && write.delete)).toBeUndefined();
 });
 
-test('cooked badge toggles both ways and modal shows recipe tags and queue status', async () => {
+test('modal edits recipe tags while showing cooked and schedule status', async () => {
   const recipe = {...sample(1), recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:false, is_deleted:false};
   library = [recipe];
   current = [sample(1)];
@@ -376,8 +380,13 @@ test('cooked badge toggles both ways and modal shows recipe tags and queue statu
   expect(modal.textContent).toContain('✓ Cooked');
   expect(modal.textContent).toContain('Scheduled · Days 1, 2');
   expect(modal.textContent).toContain('Queued · Day 2');
-  expect(modal.textContent).toContain('pasta');
-  expect(modal.textContent).toContain('vegetarian');
+  expect(modal.querySelector('[aria-label="Tags for Recipe 1 in details"]').value).toBe('pasta, vegetarian');
+  await change('Tags for Recipe 1 in details', 'pasta, vegetarian, dinner');
+  expect(modal.querySelector('[aria-label="Close recipe details"]').disabled).toBe(true);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 700)); });
+  expect(writes.find(write => write.table === 'meal_recipe_tags' && write.value?.tags?.includes('dinner'))).toBeTruthy();
+  expect(modal.textContent).toContain('Tags saved');
+  expect(card.querySelector('[aria-label="Tags for Recipe 1"]').value).toBe('pasta, vegetarian, dinner');
   await click(modal.querySelector('[aria-label="Mark as not cooked yet: Recipe 1"]'));
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.has_been_cooked === false)).toBeTruthy();
   expect(modal.textContent).toContain('Not cooked yet');
