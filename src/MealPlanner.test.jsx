@@ -192,6 +192,8 @@ test('Use recipe automatically selects a matching empty category without queuein
   expect(button('Save tags')).toBeUndefined();
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 700)); });
   expect(container.querySelector('#recipe-library').textContent).toContain('Tags saved');
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 1700)); });
+  expect(container.querySelector('#recipe-library').textContent).not.toContain('Tags saved');
   expect(container.querySelector('[aria-label="Destination for Recipe 1"]')).toBeNull();
   await click(button('Use recipe'));
   expect(writes[writes.length - 1].value).toMatchObject({meal_number: 6, title: 'Recipe 1'});
@@ -483,6 +485,7 @@ test('modal edits recipe tags while showing cooked and schedule status', async (
   expect(writes.find(write => write.table === 'meal_recipe_tags' && write.value?.tags?.includes('dinner'))).toBeTruthy();
   expect(modal.textContent).toContain('Tags saved');
   expect(card.querySelector('[aria-label="Tags for Recipe 1"]').value).toBe('pasta, vegetarian, dinner');
+  expect(card.textContent).not.toContain('Saving soon');
   await click(modal.querySelector('[aria-label="Mark as not cooked yet: Recipe 1"]'));
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.has_been_cooked === false)).toBeTruthy();
   expect(modal.textContent).toContain('Not cooked yet');
