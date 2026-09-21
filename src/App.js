@@ -899,6 +899,72 @@ function SuggestedTasks({ who }) {
   );
 }
 
+export function EditableAgendaItem({ item, onComplete, onSave, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(item.text);
+  const [editNotes, setEditNotes] = useState(item.notes || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { setEditText(item.text); }, [item.text]);
+  useEffect(() => { setEditNotes(item.notes || ""); }, [item.notes]);
+
+  const cancel = () => {
+    setEditText(item.text);
+    setEditNotes(item.notes || "");
+    setEditing(false);
+  };
+
+  const save = async () => {
+    const text = editText.trim();
+    if (!text || saving) return;
+    setSaving(true);
+    const saved = await onSave(item, text, editNotes.trim());
+    setSaving(false);
+    if (saved !== false) setEditing(false);
+  };
+
+  if (editing) return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 14px", borderBottom: "1px solid var(--surface2)", background: "var(--surface)" }}>
+      <input
+        aria-label="Agenda item"
+        autoFocus
+        value={editText}
+        onChange={e => setEditText(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") cancel(); }}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none" }}
+      />
+      <textarea
+        aria-label="Agenda notes"
+        value={editNotes}
+        onChange={e => setEditNotes(e.target.value)}
+        placeholder="Notes — optional"
+        rows={3}
+        style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 11px", color: "var(--text)", fontSize: 16, outline: "none", resize: "vertical", lineHeight: 1.45 }}
+      />
+      <div style={{ display: "flex", gap: 6 }}>
+        <button onClick={save} disabled={saving || !editText.trim()} style={{ flex: 1, padding: "7px", background: "var(--josh)", border: "none", borderRadius: 10, color: "#fff", fontSize: 12, fontWeight: 500, cursor: "pointer", opacity: saving || !editText.trim() ? 0.55 : 1 }}>{saving ? "Saving…" : "Save"}</button>
+        <button onClick={cancel} style={{ padding: "7px 12px", background: "var(--surface2)", border: "none", borderRadius: 10, color: "var(--muted)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+        <button onClick={() => onDelete(item)} style={{ padding: "7px 12px", background: "none", border: "none", color: "var(--danger)", fontSize: 12, cursor: "pointer" }}>Delete</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: "1px solid var(--surface2)", userSelect: "none" }}>
+      <button
+        aria-label={`Complete ${item.text}`}
+        onClick={() => { haptic(8); onComplete(item); }}
+        style={{ width: 16, height: 16, borderRadius: 5, flexShrink: 0, border: "1.5px solid var(--border)", background: "transparent", cursor: "pointer", padding: 0 }}
+      />
+      <div onClick={() => setEditing(true)} style={{ flex: 1, minWidth: 0, cursor: "text" }}>
+        <div style={{ fontSize: 13, color: "var(--text)" }}>{item.text}</div>
+        {item.notes && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, whiteSpace: "pre-wrap" }}>{item.notes}</div>}
+      </div>
+      <button aria-label={`Edit ${item.text}`} onClick={() => setEditing(true)} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 12, padding: "0 2px", cursor: "pointer" }}>✎</button>
+    </div>
+  );
+}
+
 function TodayMeetingAgenda() {
   const [items, setItems] = useState([]);
   useEffect(() => {
@@ -907,9 +973,21 @@ function TodayMeetingAgenda() {
   }, []);
 
   const tick = async (item) => {
-    haptic(8);
     await sb.from("josh_meeting_items").update({ done: true }).eq("id", item.id);
     await sb.from("history_items").insert({ text: item.text, notes: item.notes || "", source: "josh_meeting" });
+    setItems(is => is.filter(i => i.id !== item.id));
+  };
+
+  const save = async (item, text, notes) => {
+    const { error } = await sb.from("josh_meeting_items").update({ text, notes }).eq("id", item.id);
+    if (error) { console.error("josh meeting save error:", error); return false; }
+    setItems(is => is.map(i => i.id === item.id ? { ...i, text, notes } : i));
+    return true;
+  };
+
+  const remove = async (item) => {
+    const { error } = await sb.from("josh_meeting_items").delete().eq("id", item.id);
+    if (error) { console.error("josh meeting delete error:", error); return; }
     setItems(is => is.filter(i => i.id !== item.id));
   };
 
@@ -921,14 +999,7 @@ function TodayMeetingAgenda() {
       </div>
       {items.length === 0
         ? <div style={{ padding: "10px 14px", fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>Nothing off—loaded yet.</div>
-        : items.map(item => (
-          <div key={item.id}
-            onClick={() => tick(item)}
-            style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: "1px solid var(--surface2)", cursor: "pointer", userSelect: "none" }}>
-            <div style={{ width: 16, height: 16, borderRadius: 5, flexShrink: 0, border: "1.5px solid var(--border)", background: "transparent", display: "flex", alignItems: "center", justifyContent: "center" }} />
-            <span style={{ fontSize: 13, color: "var(--text)", flex: 1 }}>{item.text}</span>
-          </div>
-        ))
+        : items.map(item => <EditableAgendaItem key={item.id} item={item} onComplete={tick} onSave={save} onDelete={remove} />)
       }
     </div>
   );
@@ -1253,8 +1324,16 @@ function JoshMeetingBlock({ isWed }) {
   };
 
   const deleteItem = async (id) => {
-    await sb.from("josh_meeting_items").delete().eq("id", id);
+    const { error } = await sb.from("josh_meeting_items").delete().eq("id", id);
+    if (error) { console.error("josh meeting delete error:", error); return; }
     setItems(is => is.filter(i => i.id !== id));
+  };
+
+  const saveItem = async (item, text, notes) => {
+    const { error } = await sb.from("josh_meeting_items").update({ text, notes }).eq("id", item.id);
+    if (error) { console.error("josh meeting save error:", error); return false; }
+    setItems(is => is.map(i => i.id === item.id ? { ...i, text, notes } : i));
+    return true;
   };
 
   const dateLabel = meetingDate
@@ -1283,21 +1362,13 @@ function JoshMeetingBlock({ isWed }) {
         {loading ? <SkeletonCard rows={3} /> : (
           <div>
             {items.map(item => (
-              <div key={item.id}
-                onClick={() => { haptic(8); tickItem(item); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--surface2)", cursor: "pointer", userSelect: "none" }}>
-                <div style={{
-                  width: 16, height: 16, borderRadius: 5, flexShrink: 0,
-                  border: "1.5px solid var(--border)",
-                  background: "transparent",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: 13, color: "var(--text)" }}>{item.text}</span>
-                  {item.notes && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{item.notes}</div>}
-                </div>
-              </div>
+              <EditableAgendaItem
+                key={item.id}
+                item={item}
+                onComplete={tickItem}
+                onSave={saveItem}
+                onDelete={itemToDelete => deleteItem(itemToDelete.id)}
+              />
             ))}
             {items.length === 0 && !adding && (
               <div style={{ padding: "12px 14px", fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.18em" }}>Nothing off—loaded yet.</div>
