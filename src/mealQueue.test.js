@@ -1,4 +1,4 @@
-import { chooseQueueDay, frontQueuePosition, nextQueuePosition, queueForDay } from './mealQueue';
+import { chooseQueueDay, frontQueuePosition, nextQueuePosition, queueForDay, queueInsertionBeforeTail } from './mealQueue';
 import { DEFAULT_CATEGORIES } from './mealPlanning';
 
 const blankMeals = Array.from({length: 6}, (_, i) => ({meal_number: i + 1, title: '', source_ref: ''}));
@@ -20,4 +20,5 @@ test('queue helpers preserve FIFO positions', () => {
   expect(queueForDay(items, 2).map(item => item.id)).toEqual(['a', 'b']);
   expect(nextQueuePosition(items, 2)).toBe(3);
   expect(frontQueuePosition(items, 2)).toBe(0);
+  expect(queueInsertionBeforeTail(items, 2)).toEqual({position:2, tail:items[0]});
 });

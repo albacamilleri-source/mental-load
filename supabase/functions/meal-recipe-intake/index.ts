@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.105.4";
-import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queueMealPayload, recipeKey } from "./intake-core.js";
+import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queueInsertionBeforeTail, queueMealPayload, recipeKey } from "./intake-core.js";
 
 const plannerTables = {
   dinner: { categories: "meal_day_categories", meals: "weekly_meals", queue: "meal_recipe_queue", library: "meal_recipe_library", tags: "meal_recipe_tags" },
@@ -53,7 +53,7 @@ Deno.serve(async (req: Request) => {
     const loadError = [categoriesResult, mealsResult, queueResult, existingLibraryResult].find(result => result.error)?.error;
     if (loadError) throw loadError;
     const categories = categoriesResult.data || [];
-    if (categories.length !== (mealType === "breakfast" ? 4 : 6)) throw new Error("Day categories could not be loaded.");
+    if (categories.length !== 6) throw new Error("Day categories could not be loaded.");
     const categoryTags = [...new Set(categories.flatMap(category => parseTags(category.accepted_tags)))];
 
     let extraction = body?.recipe;
@@ -123,8 +123,14 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: true });
     }
 
+    const insertion = mealType === "breakfast" ? queueInsertionBeforeTail(queueRows, dayNumber) : { position: nextQueuePosition(queueRows, dayNumber), tail: null };
+    if (insertion.tail) {
+      const shifted = await client.from(tables.queue).update({ position: Number(insertion.tail.position) + 1 }).eq("id", insertion.tail.id);
+      if (shifted.error) throw shifted.error;
+      insertion.tail.position = Number(insertion.tail.position) + 1;
+    }
     const queuePayload = {
-      day_number: dayNumber, position: nextQueuePosition(queueRows, dayNumber), title, source_ref: sourceUrl,
+      day_number: dayNumber, position: insertion.position, title, source_ref: sourceUrl,
       ingredients, method, servings, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "",
     };
     const queueWrite = await client.from(tables.queue).insert(queuePayload).select().single();

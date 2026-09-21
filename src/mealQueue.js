@@ -35,6 +35,13 @@ export function nextQueuePosition(items, day) {
   return positions.length ? Math.max(...positions) + 1 : 1;
 }
 
+export function queueInsertionBeforeTail(items, day) {
+  const rows = queueForDay(items, day);
+  if (!rows.length) return { position: 1, tail: null };
+  const tail = rows[rows.length - 1];
+  return { position: Number(tail.position), tail };
+}
+
 export function frontQueuePosition(items, day) {
   const positions = queueForDay(items, day).map(item => Number(item.position) || 0);
   return positions.length ? Math.min(...positions) - 1 : 1;
