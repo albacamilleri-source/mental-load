@@ -4058,7 +4058,8 @@ function AppInner() {
           <span>⚙</span><span>Edit Lists</span>
         </button>
         <div style={{ padding: "10px 20px 0", fontSize: 11, color: "var(--muted2)", fontFamily: "'DM Mono', monospace" }}>
-          {who === "alba" ? "Alba" : "Josh"} · <button onClick={() => { localStorage.removeItem("hb_who"); window.location.reload(); }} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", cursor: "pointer", padding: 0, textDecoration: "underline" }}>switch</button>
+          <div>{who === "alba" ? "Alba" : "Josh"} · <button onClick={() => { localStorage.removeItem("hb_who"); window.location.reload(); }} style={{ background: "none", border: "none", color: "var(--muted2)", fontSize: 11, fontFamily: "'DM Mono', monospace", cursor: "pointer", padding: 0, textDecoration: "underline" }}>switch</button></div>
+          <a href="https://mental-load.app/terms/" target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 8, color: "var(--muted2)", textDecoration: "underline", textUnderlineOffset: 2 }}>Privacy · Terms</a>
         </div>
       </div>
 

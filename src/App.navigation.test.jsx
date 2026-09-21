@@ -22,6 +22,9 @@ test('deep link renders inside the app sidebar and menu navigation keeps the sam
   const sidebar = container.querySelector('.app-sidebar');
   expect(container.querySelector('[data-testid="planner"]')).not.toBeNull();
   expect(sidebarButton('Meal Planner')).toBeDefined();
+  const legalLink = sidebar.querySelector('a');
+  expect(legalLink.textContent).toBe('Privacy · Terms');
+  expect(legalLink.href).toBe('https://mental-load.app/terms/');
   await act(async () => sidebarButton('Plan').click());
   expect(container.querySelector('.app-sidebar')).toBe(sidebar);
   expect(container.querySelector('[data-testid="planner"]')).toBeNull();
