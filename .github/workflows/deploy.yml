@@ -24,7 +24,6 @@ jobs:
       - run: npm run build
         env:
           CI: false
-          PUBLIC_URL: /mental-load
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build
