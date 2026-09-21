@@ -126,18 +126,19 @@ test('Breakfasts fills from its own queue and saves its own category changes', a
   expect(writes.find(write => write.table === 'meal_day_categories')).toBeUndefined();
 });
 
-test('cooking breakfast rotates it to the bottom and promotes the next queued recipe', async () => {
+test('marking breakfast made rotates it without setting the permanent cooked status', async () => {
   const first = {...sample(21), week_of:'breakfast-capsule', meal_number:1, queue_item_id:'breakfast-q1'};
   const second = {...sample(22), day_number:1, position:2, id:'breakfast-q2', created_at:'2026-09-20T09:00:00Z'};
   breakfastCurrent = [first];
   breakfastQueue = [{...first, id:'breakfast-q1', day_number:1, position:1, created_at:'2026-09-20T08:00:00Z'}, second];
   breakfastTagRows = [first, second].map(row => ({recipe_key:recipeKey(row), tags:['pancake']}));
   await render('breakfast');
-  await click(button('Mark cooked', day(1)));
+  await click(button('Made · rotate', day(1)));
   expect(day(1).textContent).toContain('Recipe 22');
   expect(writes).toContainEqual({table:'breakfast_recipe_queue', update:{field:'id', value:'breakfast-q1', payload:{position:3}}});
   expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q2' && write.value.week_of === 'breakfast-capsule')).toBeTruthy();
-  expect(writes.find(write => write.table === 'breakfast_recipe_library' && write.value?.has_been_cooked)).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_recipe_library').value).toMatchObject({has_been_cooked:false});
+  expect(container.querySelector('#recipe-library').textContent).not.toContain('Not cooked yet');
 });
 
 test('new breakfast recipes enter before the last rotated recipe', async () => {
