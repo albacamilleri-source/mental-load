@@ -145,6 +145,19 @@ test('marking breakfast made rotates it and preserves a permanent tried status',
   expect(container.querySelector('#recipe-library').textContent).toContain('✓ Tried');
 });
 
+test('skipping breakfast rotates it without marking an untried recipe as tried', async () => {
+  const first = {...sample(51), week_of:'breakfast-capsule', meal_number:1, queue_item_id:'breakfast-q1'};
+  const second = {...sample(52), day_number:1, position:2, id:'breakfast-q2', created_at:'2026-09-20T09:00:00Z'};
+  breakfastCurrent = [first];
+  breakfastQueue = [{...first, id:'breakfast-q1', day_number:1, position:1, created_at:'2026-09-20T08:00:00Z'}, second];
+  breakfastTagRows = [first, second].map(row => ({recipe_key:recipeKey(row), tags:['pancake']}));
+  await render('breakfast');
+  await click(button('Skip · rotate', day(1)));
+  expect(day(1).textContent).toContain('Recipe 52');
+  expect(writes.find(write => write.table === 'breakfast_recipe_library').value).toMatchObject({has_been_cooked:false});
+  expect(container.querySelector('#recipe-library').textContent).toContain('Not tried yet');
+});
+
 test('breakfast grocery lists use the scheduled recipes that already have ingredients', async () => {
   const pancake = {...sample(41), week_of:'breakfast-capsule', meal_number:1};
   breakfastCurrent = [pancake];

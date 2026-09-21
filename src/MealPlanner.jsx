@@ -994,7 +994,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     } catch (e) { setMealErrors(prev => ({ ...prev, [index]: e.message || 'Could not unschedule this recipe. Please retry.' })); }
     finally { setBusy(false); }
   }
-  async function markCooked(index) {
+  async function markCooked(index, markAsTried = true) {
     if (busy || loadingWeek || loadError) return;
     const meal = meals[index];
     if (!meal?.id || meal.dirty) return;
@@ -1005,8 +1005,8 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       const payload = {
         recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: meal.servings ?? null,
         extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '',
-        cooked_at: new Date().toISOString(),
-        has_been_cooked: true, is_deleted: false,
+        cooked_at: markAsTried ? new Date().toISOString() : existing?.cooked_at || meal.cooked_at || new Date().toISOString(),
+        has_been_cooked: config.capsule ? !!existing?.has_been_cooked || markAsTried : true, is_deleted: false,
       };
       const { data: banked, error: bankError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (bankError) throw bankError;
@@ -1035,7 +1035,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       setLibraryRecords(prev => [banked, ...prev.filter(r => r.recipe_key !== key)]);
       setQueueRows(nextQueue);
       setMeals(prev => prev.map((m, i) => i === index ? nextMeal : m));
-      setGroceryGenerated(false); setToast(config.capsule ? `${meal.title} made · next breakfast scheduled` : `${meal.title} marked as cooked`);
+      setGroceryGenerated(false); setToast(config.capsule ? markAsTried ? `${meal.title} made · next breakfast scheduled` : `${meal.title} skipped · next breakfast scheduled` : `${meal.title} marked as cooked`);
     } catch (e) { setMealErrors(prev => ({ ...prev, [index]: e.message || 'Could not mark this recipe as cooked. Please retry.' })); }
     finally { setBusy(false); }
   }
@@ -1181,6 +1181,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
             <button className="btn secondary" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim()} onClick={() => saveMeal(index, true)}>{meal.ingredients ? 'Review ingredients' : 'Extract ingredients'}</button>
             <button className="btn secondary" disabled={busy || meal.dirty || meal.is_override} onClick={() => setSwitchDay(meal.meal_number)}>Switch</button>
             <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => unscheduleMeal(index)}>Unschedule</button>
+            {config.capsule && <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index, false)}>Skip · rotate</button>}
             <button className="btn cookedBtn" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index)}>{config.capsule ? 'Made · rotate' : 'Mark cooked'}</button>
             {meal.id && !meal.dirty && <span className="dragHint scheduledDragHint" draggable={!busy} onDragStart={e => startScheduledMealDrag(e, meal)} onDragEnd={() => { setDraggedMealNumber(null); setLibraryDropActive(false); }}>Drag to library</span>}
           </div>
