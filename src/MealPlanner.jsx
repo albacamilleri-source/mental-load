@@ -407,7 +407,10 @@ function RecipeDetailsModal({ recipe, tags, scheduledDays, queuedDays, busy, coo
   useEffect(() => setTagsText(tags.join(', ')), [tags]);
   const tagsChanged = JSON.stringify(parseTags(tagsText)) !== JSON.stringify(parseTags(tags));
   useEffect(() => {
-    if (!tagsChanged) return;
+    if (!tagsChanged) {
+      setTagSaveState(current => current === 'pending' ? 'idle' : current);
+      return;
+    }
     setTagSaveState('pending'); setError('');
     const timer = window.setTimeout(async () => {
       setTagSaveState('saving');
@@ -417,6 +420,11 @@ function RecipeDetailsModal({ recipe, tags, scheduledDays, queuedDays, busy, coo
     }, 650);
     return () => window.clearTimeout(timer);
   }, [tagsText, tagsChanged]);
+  useEffect(() => {
+    if (tagSaveState !== 'saved') return;
+    const timer = window.setTimeout(() => setTagSaveState('idle'), 1600);
+    return () => window.clearTimeout(timer);
+  }, [tagSaveState]);
   const tagsSaving = (tagsChanged && tagSaveState !== 'error') || tagSaveState === 'saving';
   const changed = source.trim() !== String(recipe.source_ref || '').trim() || method !== (recipe.method || '');
   async function submit(event) {
@@ -452,7 +460,10 @@ function RecipeCard({ meal, tags, scheduledDays = [], queuedDays = [], onTagsSav
   const draftTags = parseTags(draft);
   const changed = JSON.stringify(draftTags) !== JSON.stringify(parseTags(tags));
   useEffect(() => {
-    if (!changed) return;
+    if (!changed) {
+      setSaveState(current => current === 'pending' ? 'idle' : current);
+      return;
+    }
     setSaveState('pending'); setError('');
     const timer = window.setTimeout(async () => {
       setSaveState('saving');
@@ -462,6 +473,11 @@ function RecipeCard({ meal, tags, scheduledDays = [], queuedDays = [], onTagsSav
     }, 650);
     return () => window.clearTimeout(timer);
   }, [draft, changed]);
+  useEffect(() => {
+    if (saveState !== 'saved') return;
+    const timer = window.setTimeout(() => setSaveState('idle'), 1600);
+    return () => window.clearTimeout(timer);
+  }, [saveState]);
   const tagsSaving = changed || saveState === 'saving';
   return <div className={`recipeCard${draggable ? ' draggableRecipe' : ''}`} draggable={draggable && !busy && !changed} onDragStart={e => onDragStart?.(e, meal)} onDragEnd={onDragEnd}>
     <div className="recipeCardHead"><div><h4>{meal.title}</h4><div className="small">{meal.source_ref}</div></div><div className="recipeCardMeta"><button type="button" className={`recipeStatus statusButton ${meal.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy || using} aria-label={`${meal.has_been_cooked ? 'Mark as not cooked yet' : 'Mark as cooked'}: ${meal.title}`} onClick={async () => setError(await onToggleCooked(meal) || '')}>{cookedBusy ? 'Updating…' : meal.has_been_cooked ? '✓ Cooked' : 'Not cooked yet'}</button>{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}{draggable && <span className="dragHint" aria-hidden="true">Drag to a day</span>}</div></div>
