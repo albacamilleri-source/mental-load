@@ -24,5 +24,5 @@ const breakfastTables = {
 
 export const PLANNER_CONFIG = {
   dinner: { title: 'Dinners', singular: 'dinner', tables: dinnerTables, defaultCategories: DEFAULT_CATEGORIES, slotCount: 6 },
-  breakfast: { title: 'Breakfasts', singular: 'breakfast', tables: breakfastTables, defaultCategories: BREAKFAST_CATEGORIES, slotCount: 6, capsule: true, dayNames: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Saturday', 'Sunday'] },
+  breakfast: { title: 'Breakfasts', singular: 'breakfast', tables: breakfastTables, defaultCategories: BREAKFAST_CATEGORIES, slotCount: 6, capsule: true, autoQueue: true, dayNames: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Saturday', 'Sunday'] },
 };

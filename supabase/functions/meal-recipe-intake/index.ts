@@ -28,8 +28,9 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const sourceUrl = normalizeRecipeUrl(body?.url);
-    const destination = body?.destination === "library" ? "library" : body?.destination === "queue" ? "queue" : "";
+    const requestedDestination = body?.destination === "library" ? "library" : body?.destination === "queue" ? "queue" : "";
     const mealType = body?.mealType === undefined || body?.mealType === "dinner" ? "dinner" : body?.mealType === "breakfast" ? "breakfast" : "";
+    const destination = mealType === "breakfast" && requestedDestination ? "queue" : requestedDestination;
     const weekOf = String(body?.weekOf || "").trim();
     const dryRun = body?.dryRun === true;
     if (!destination) return json({ error: "Choose Import & queue or Import only." }, 400);
