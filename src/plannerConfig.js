@@ -1,6 +1,6 @@
 import { DEFAULT_CATEGORIES } from './mealPlanning';
 
-export const BREAKFAST_CATEGORIES = Array.from({ length: 6 }, (_, index) => ({
+export const BREAKFAST_CATEGORIES = Array.from({ length: 4 }, (_, index) => ({
   day_number: index + 1,
   name: '',
   accepted_tags: [],
@@ -23,6 +23,6 @@ const breakfastTables = {
 };
 
 export const PLANNER_CONFIG = {
-  dinner: { title: 'Dinners', singular: 'dinner', tables: dinnerTables, defaultCategories: DEFAULT_CATEGORIES },
-  breakfast: { title: 'Breakfasts', singular: 'breakfast', tables: breakfastTables, defaultCategories: BREAKFAST_CATEGORIES },
+  dinner: { title: 'Dinners', singular: 'dinner', tables: dinnerTables, defaultCategories: DEFAULT_CATEGORIES, slotCount: 6 },
+  breakfast: { title: 'Breakfasts', singular: 'breakfast', tables: breakfastTables, defaultCategories: BREAKFAST_CATEGORIES, slotCount: 4, capsule: true, dayNames: ['Monday', 'Tuesday', 'Wednesday', 'Thursday'] },
 };

@@ -34,7 +34,7 @@ Deno.serve(async (req: Request) => {
     const dryRun = body?.dryRun === true;
     if (!destination) return json({ error: "Choose Import & queue or Import only." }, 400);
     if (!mealType) return json({ error: "Choose Dinners or Breakfasts." }, 400);
-    if (destination === "queue" && !/^\d{4}-W\d{2}$/.test(weekOf)) return json({ error: "The current planning week is missing." }, 400);
+    if (destination === "queue" && !(mealType === "breakfast" ? weekOf === "breakfast-capsule" : /^\d{4}-W\d{2}$/.test(weekOf))) return json({ error: "The current planning period is missing." }, 400);
     const tables = plannerTables[mealType];
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -53,7 +53,7 @@ Deno.serve(async (req: Request) => {
     const loadError = [categoriesResult, mealsResult, queueResult, existingLibraryResult].find(result => result.error)?.error;
     if (loadError) throw loadError;
     const categories = categoriesResult.data || [];
-    if (categories.length !== 6) throw new Error("Day categories could not be loaded.");
+    if (categories.length !== (mealType === "breakfast" ? 4 : 6)) throw new Error("Day categories could not be loaded.");
     const categoryTags = [...new Set(categories.flatMap(category => parseTags(category.accepted_tags)))];
 
     let extraction = body?.recipe;
@@ -84,7 +84,13 @@ Deno.serve(async (req: Request) => {
     let dayNumber: number | null = null;
     const queueRows = queueResult.data || [];
     const existingQueue = destination === "queue" ? queueRows.find(row => row.source_ref === sourceUrl) : null;
-    if (destination === "queue") dayNumber = Number(existingQueue?.day_number || chooseQueueDay(tags, categories, mealsResult.data || []));
+    if (destination === "queue") {
+      if (mealType === "breakfast" && !categories.some(category => {
+        const accepted = parseTags(category.accepted_tags);
+        return !accepted.length || accepted.some(tag => tags.includes(tag));
+      })) return json({ error: "Add a tag that matches a breakfast category before sending this recipe to a queue." }, 422);
+      dayNumber = Number(existingQueue?.day_number || chooseQueueDay(tags, categories, mealsResult.data || []));
+    }
     if (dryRun) return json({ ok: true, dryRun: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: !!existingQueue });
 
     const { error: tagError } = await client.from(tables.tags).upsert({ recipe_key: key, tags });
