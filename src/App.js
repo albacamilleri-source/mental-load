@@ -147,7 +147,7 @@ const exchangeCodeFromURL = async () => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${SUPABASE_ANON}`,
       },
-      body: JSON.stringify({ action: "exchange", code, secret: GCAL_APP_SECRET }),
+      body: JSON.stringify({ action: "exchange", code, redirect_uri: GCAL_REDIRECT_URI, secret: GCAL_APP_SECRET }),
     });
     const data = await res.json();
     console.log("Exchange response:", res.status, JSON.stringify(data));
