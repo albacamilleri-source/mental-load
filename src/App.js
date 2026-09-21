@@ -35,7 +35,7 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 // ─── GOOGLE CALENDAR ──────────────────────────────────────────────────────────
 const GCAL_CLIENT_ID    = "283368801613-lku2v6o5uvaqh5ttkci8u2d47bu9etdm.apps.googleusercontent.com";
 const GCAL_SCOPE        = "https://www.googleapis.com/auth/calendar.readonly";
-const GCAL_REDIRECT_URI = "https://albacamilleri-source.github.io/mental-load";
+const GCAL_REDIRECT_URI = "https://mental-load.app";
 const GCAL_EDGE_FN      = "https://qvibdnrfywisvfsqgqux.supabase.co/functions/v1/gcal-auth";
 const GCAL_APP_SECRET   = "ml-alba-2026";
 
