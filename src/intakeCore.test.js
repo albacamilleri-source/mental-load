@@ -30,7 +30,7 @@ test('recipe URLs are normalized to prevent tracking duplicates', () => {
   expect(parseTags([' Soup ', 'soup', 'Quick'])).toEqual(['soup','quick']);
 });
 
-test('queued recipes carry their cooking method into the scheduled day', () => {
-  const payload = queueMealPayload({id:'q1', title:'Soup', source_ref:'Book', ingredients:[], method:'1. Simmer.', notes:''}, '2026-W37', 6);
-  expect(payload).toMatchObject({meal_number:6, method:'1. Simmer.', queue_item_id:'q1'});
+test('queued recipes carry their cooking method and servings into the scheduled day', () => {
+  const payload = queueMealPayload({id:'q1', title:'Soup', source_ref:'Book', ingredients:[], method:'1. Simmer.', servings:4, notes:''}, '2026-W37', 6);
+  expect(payload).toMatchObject({meal_number:6, method:'1. Simmer.', servings:4, queue_item_id:'q1'});
 });
