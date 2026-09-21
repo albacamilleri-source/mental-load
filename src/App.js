@@ -53,7 +53,7 @@ function urlBase64ToUint8Array(base64String) {
 async function registerPushForJosh() {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
   try {
-    const reg = await navigator.serviceWorker.register("/mental-load/sw.js");
+    const reg = await navigator.serviceWorker.register("/sw.js");
     await navigator.serviceWorker.ready;
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return false;
