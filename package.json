@@ -1,7 +1,6 @@
 {
   "name": "react",
   "version": "0.0.0",
-  "homepage": "https://albacamilleri-source.github.io/mental-load",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
