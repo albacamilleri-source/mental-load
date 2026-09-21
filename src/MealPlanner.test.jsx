@@ -97,6 +97,10 @@ test('Breakfasts has its own persistent category rotation and recipe tables', as
   expect(container.querySelector('[aria-label="Friday cereal day"]').textContent).toContain('Enjoy the day off.');
   expect([...container.querySelectorAll('.dayHeading')].map(node => node.textContent)).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
   expect(container.querySelector('.weekNav')).toBeNull();
+  expect(container.textContent).not.toContain('Six rotating breakfast queues');
+  expect(container.textContent).not.toContain('Queue choices follow your day categories');
+  expect(button('Save to library')).toBeUndefined();
+  expect(button('Generate grocery list').disabled).toBe(false);
   await change('Day 4 meal title', 'Savory eggs'); await change('Day 4 source', 'Family notebook'); await change('Day 4 recipe tags', 'savory');
   await click(button('Save meal', day(4)));
   expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.title === 'Savory eggs')).toBeTruthy();
@@ -105,11 +109,11 @@ test('Breakfasts has its own persistent category rotation and recipe tables', as
 });
 
 test('Breakfast URL imports are scoped to Breakfasts', async () => {
-  mockInvoke.mockResolvedValue({data: {ok:true, destination:'library', updatedExisting:false, alreadyQueued:false, recipe:{title:'Oat Pancakes'}}, error: null});
+  mockInvoke.mockResolvedValue({data: {ok:true, destination:'queue', dayNumber:1, updatedExisting:false, alreadyQueued:false, recipe:{title:'Oat Pancakes'}}, error: null});
   await render('breakfast');
   await change('Recipe URL to import', 'https://example.com/oat-pancakes');
-  await click(button('Save to library'));
-  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/oat-pancakes', destination:'library', weekOf:'breakfast-capsule', mealType:'breakfast'}});
+  await click(button('Import recipe'));
+  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/oat-pancakes', destination:'queue', weekOf:'breakfast-capsule', mealType:'breakfast'}});
 });
 
 test('Breakfasts fills from its own queue and saves its own category changes', async () => {
@@ -126,7 +130,7 @@ test('Breakfasts fills from its own queue and saves its own category changes', a
   expect(writes.find(write => write.table === 'meal_day_categories')).toBeUndefined();
 });
 
-test('marking breakfast made rotates it without setting the permanent cooked status', async () => {
+test('marking breakfast made rotates it and preserves a permanent tried status', async () => {
   const first = {...sample(21), week_of:'breakfast-capsule', meal_number:1, queue_item_id:'breakfast-q1'};
   const second = {...sample(22), day_number:1, position:2, id:'breakfast-q2', created_at:'2026-09-20T09:00:00Z'};
   breakfastCurrent = [first];
@@ -137,8 +141,33 @@ test('marking breakfast made rotates it without setting the permanent cooked sta
   expect(day(1).textContent).toContain('Recipe 22');
   expect(writes).toContainEqual({table:'breakfast_recipe_queue', update:{field:'id', value:'breakfast-q1', payload:{position:3}}});
   expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q2' && write.value.week_of === 'breakfast-capsule')).toBeTruthy();
-  expect(writes.find(write => write.table === 'breakfast_recipe_library').value).toMatchObject({has_been_cooked:false});
-  expect(container.querySelector('#recipe-library').textContent).not.toContain('Not cooked yet');
+  expect(writes.find(write => write.table === 'breakfast_recipe_library').value).toMatchObject({has_been_cooked:true});
+  expect(container.querySelector('#recipe-library').textContent).toContain('✓ Tried');
+});
+
+test('breakfast grocery lists use the scheduled recipes that already have ingredients', async () => {
+  const pancake = {...sample(41), week_of:'breakfast-capsule', meal_number:1};
+  breakfastCurrent = [pancake];
+  breakfastTagRows = [{recipe_key:recipeKey(pancake), tags:['pancake']}];
+  await render('breakfast');
+  expect(button('Generate grocery list').disabled).toBe(false);
+  await click(button('Generate grocery list'));
+  expect(container.querySelector('#grocery').textContent).toContain('carrot, 1');
+});
+
+test('manual breakfast recipes have one save action and always enter a queue', async () => {
+  await render('breakfast');
+  await click(button('Add manually'));
+  const modal = document.body.querySelector('[aria-label="Add a recipe manually"]');
+  expect(button('Save to library', modal)).toBeUndefined();
+  expect(button('Save & queue', modal)).toBeUndefined();
+  await change('Manual recipe title', 'Sunday Toast');
+  await change('Manual recipe URL or source', 'Family notebook');
+  await change('Manual recipe tags', 'weekend');
+  await change('Manual recipe ingredients', '2 slices bread');
+  await click(button('Save recipe', modal));
+  expect(writes.find(write => write.table === 'breakfast_recipe_library' && write.value?.title === 'Sunday Toast')).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.insert?.title === 'Sunday Toast')).toBeTruthy();
 });
 
 test('new breakfast recipes enter before the last rotated recipe', async () => {
