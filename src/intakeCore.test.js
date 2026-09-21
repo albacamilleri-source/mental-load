@@ -1,4 +1,4 @@
-import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queueMealPayload } from '../supabase/functions/meal-recipe-intake/intake-core';
+import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queueInsertionBeforeTail, queueMealPayload } from '../supabase/functions/meal-recipe-intake/intake-core';
 
 const categories = [
   {day_number:1, accepted_tags:['pasta']},
@@ -12,6 +12,12 @@ const categories = [
 test('queue assignment uses a matching category and keeps FIFO positions', () => {
   expect(chooseQueueDay(['SOUP'], categories, [], () => 0.8)).toBe(6);
   expect(nextQueuePosition([{day_number:6, position:1}, {day_number:6, position:4}, {day_number:2, position:9}], 6)).toBe(5);
+});
+
+test('breakfast insertion keeps the last rotated recipe at the back', () => {
+  const tail = {id:'old', day_number:1, position:3};
+  expect(queueInsertionBeforeTail([{id:'next',day_number:1,position:1}, tail], 1)).toEqual({position:3, tail});
+  expect(queueInsertionBeforeTail([], 1)).toEqual({position:1, tail:null});
 });
 
 test('queue assignment randomly selects matching days', () => {

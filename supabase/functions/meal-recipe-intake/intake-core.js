@@ -49,6 +49,15 @@ export function nextQueuePosition(items, day) {
   return positions.length ? Math.max(...positions) + 1 : 1;
 }
 
+export function queueInsertionBeforeTail(items, day) {
+  const rows = items
+    .filter(item => Number(item.day_number) === Number(day))
+    .sort((a, b) => Number(a.position) - Number(b.position) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  if (!rows.length) return { position: 1, tail: null };
+  const tail = rows[rows.length - 1];
+  return { position: Number(tail.position), tail };
+}
+
 export function queueMealPayload(item, weekOf, day) {
   return {
     week_of: weekOf,
