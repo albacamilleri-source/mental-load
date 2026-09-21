@@ -45,19 +45,20 @@ async function change(label, value) {
   await act(async () => { Simulate.change(document.body.querySelector(`[aria-label="${label}"]`), { target: { value } }); });
 }
 function button(text, parent = document.body) { return [...parent.querySelectorAll('button')].find(b => b.textContent === text); }
-function day(n) { return [...container.querySelectorAll('.meal')].find(el => el.querySelector('h3').textContent === `Day ${n}`); }
+function day(n) { const label = container.querySelector('.plannerHeader .brand')?.textContent.startsWith('Breakfasts') ? ['Monday', 'Tuesday', 'Wednesday', 'Thursday'][n-1] : `Day ${n}`; return [...container.querySelectorAll('.meal')].find(el => el.querySelector('h3').textContent === label); }
 async function click(el) { await act(async () => { el.click(); }); }
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   window.confirm = jest.fn(() => true);
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); breakfastCurrent = []; breakfastPast = []; breakfastLibrary = []; breakfastQueue = []; breakfastTagRows = []; breakfastCategories = BREAKFAST_CATEGORIES.map(c => ({...c})); writes = []; failure = ''; deferWeeklyWrite = false; resolveWeeklyWrite = null; mockInvoke.mockReset(); setupQueries();
+  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); breakfastCurrent = []; breakfastPast = []; breakfastLibrary = []; breakfastQueue = []; breakfastTagRows = []; breakfastCategories = BREAKFAST_CATEGORIES.map((c, i) => ({...c, name: ['Pancakes', 'Waffles', 'Oats', 'Savory'][i], accepted_tags: [['pancake'], ['waffle'], ['oats'], ['savory']][i]})); writes = []; failure = ''; deferWeeklyWrite = false; resolveWeeklyWrite = null; mockInvoke.mockReset(); setupQueries();
   window.history.replaceState({}, '', '/mental-load/#meal-planner'); window.scrollTo = jest.fn();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
 
 test('Meal Planner opens a choice screen and returns from Breakfasts without leaving the app', async () => {
   await act(async () => { root.render(<MealPlanner/>); });
+  expect(container.querySelector('.plannerChoice .plannerChoiceTitle').textContent).toContain('Breakfasts');
   expect(container.querySelector('[aria-label="Open Dinners planner"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="Open Breakfasts planner"]')).not.toBeNull();
   await click(container.querySelector('[aria-label="Open Breakfasts planner"]'));
@@ -81,7 +82,7 @@ test('browser navigation does not discard an unsaved Breakfasts draft', async ()
   expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Porridge draft');
 });
 
-test('Breakfasts uses its own recipes and tables with no category rules yet', async () => {
+test('Breakfasts has its own persistent category rotation and recipe tables', async () => {
   library = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false}];
   breakfastLibrary = [{...sample(2), recipe_key:recipeKey(sample(2)), has_been_cooked:false, is_deleted:false}];
   await render('breakfast');
@@ -91,10 +92,13 @@ test('Breakfasts uses its own recipes and tables with no category rules yet', as
   expect(mockFrom).not.toHaveBeenCalledWith('meal_recipe_library');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 2');
   expect(container.querySelector('#recipe-library').textContent).not.toContain('Recipe 1');
-  expect(day(4).textContent).not.toContain('Requires');
-  await change('Day 4 meal title', 'Porridge'); await change('Day 4 source', 'Family notebook');
+  expect(day(4).textContent).toContain('Savory');
+  expect(container.querySelectorAll('.meal')).toHaveLength(4);
+  expect(container.querySelector('[aria-label="Friday cereal day"]').textContent).toContain('Enjoy the day off.');
+  expect(container.querySelector('.weekNav')).toBeNull();
+  await change('Day 4 meal title', 'Savory eggs'); await change('Day 4 source', 'Family notebook'); await change('Day 4 recipe tags', 'savory');
   await click(button('Save meal', day(4)));
-  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.title === 'Porridge')).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.title === 'Savory eggs')).toBeTruthy();
   expect(writes.find(write => write.table === 'breakfast_recipe_tags')).toBeTruthy();
   expect(writes.find(write => write.table === 'weekly_meals')).toBeUndefined();
 });
@@ -104,20 +108,43 @@ test('Breakfast URL imports are scoped to Breakfasts', async () => {
   await render('breakfast');
   await change('Recipe URL to import', 'https://example.com/oat-pancakes');
   await click(button('Save to library'));
-  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/oat-pancakes', destination:'library', weekOf:expect.any(String), mealType:'breakfast'}});
+  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/oat-pancakes', destination:'library', weekOf:'breakfast-capsule', mealType:'breakfast'}});
 });
 
 test('Breakfasts fills from its own queue and saves its own category changes', async () => {
   breakfastQueue = [{...sample(3), id:'breakfast-q1', day_number:1, position:1, created_at:'2026-09-20T08:00:00Z'}];
+  breakfastTagRows = [{recipe_key:recipeKey(sample(3)), tags:['pancake']}];
   await render('breakfast');
   expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 3');
-  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q1')).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q1' && write.value.week_of === 'breakfast-capsule')).toBeTruthy();
   expect(writes.find(write => write.table === 'weekly_meals')).toBeUndefined();
   await click(button('Edit categories'));
-  await change('Day 1 accepted tags', 'oats');
+  await change('Day 1 accepted tags', 'pancake, crepe');
   await click(button('Save day categories'));
-  expect(writes.find(write => write.table === 'breakfast_day_categories' && write.value?.[0]?.accepted_tags?.includes('oats'))).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_day_categories' && write.value?.[0]?.accepted_tags?.includes('crepe'))).toBeTruthy();
   expect(writes.find(write => write.table === 'meal_day_categories')).toBeUndefined();
+});
+
+test('cooking breakfast promotes the next queued recipe in the same persistent rotation', async () => {
+  const first = {...sample(21), week_of:'breakfast-capsule', meal_number:1, queue_item_id:'breakfast-q1'};
+  const second = {...sample(22), day_number:1, position:2, id:'breakfast-q2', created_at:'2026-09-20T09:00:00Z'};
+  breakfastCurrent = [first];
+  breakfastQueue = [{...first, id:'breakfast-q1', day_number:1, position:1, created_at:'2026-09-20T08:00:00Z'}, second];
+  breakfastTagRows = [first, second].map(row => ({recipe_key:recipeKey(row), tags:['pancake']}));
+  await render('breakfast');
+  await click(button('Mark cooked', day(1)));
+  expect(day(1).textContent).toContain('Recipe 22');
+  expect(writes).toContainEqual({table:'breakfast_recipe_queue', delete:{field:'id', value:'breakfast-q1', payload:undefined}});
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q2' && write.value.week_of === 'breakfast-capsule')).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_recipe_library' && write.value?.has_been_cooked)).toBeTruthy();
+});
+
+test('unmatched breakfast tags cannot enter a category queue', async () => {
+  breakfastLibrary = [{...sample(23), recipe_key:recipeKey(sample(23)), has_been_cooked:false, is_deleted:false}];
+  await render('breakfast');
+  await click(button('Send to queue'));
+  expect(document.body.textContent).toContain('Add a tag that matches a breakfast category');
+  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.insert)).toBeUndefined();
 });
 
 test('blocks a mismatched meal and saves normalized tags with a matching meal', async () => {
