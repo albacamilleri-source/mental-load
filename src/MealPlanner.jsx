@@ -19,6 +19,7 @@ const emptyMeal = (meal_number) => ({
   source_ref: "",
   ingredients: null,
   method: "",
+  servings: null,
   extracted_at: null,
   rating: null,
   notes: "",
@@ -30,7 +31,7 @@ const emptyMeal = (meal_number) => ({
 function queueMealPayload(item, week, day) {
   return {
     week_of: week, meal_number: day, title: item.title.trim(), source_ref: item.source_ref.trim(),
-    ingredients: item.ingredients, method: item.method || '', extracted_at: item.extracted_at, rating: item.rating, notes: item.notes || '',
+    ingredients: item.ingredients, method: item.method || '', servings: item.servings ?? null, extracted_at: item.extracted_at, rating: item.rating, notes: item.notes || '',
     queue_item_id: item.id, is_override: false, override_type: null,
   };
 }
@@ -136,6 +137,12 @@ function displayQty(qty, unit) {
   return `${fmtNumber(qty)} ${unit}`.trim();
 }
 
+function normalizeServings(value) {
+  if (value === '' || value == null) return null;
+  const servings = Number(value);
+  return Number.isInteger(servings) && servings > 0 ? servings : null;
+}
+
 function aggregateIngredients(ingredients, suggestions) {
   const enabled = suggestions.filter(s => s.enabled);
   const alias = new Map();
@@ -169,6 +176,7 @@ function ExtractionModal({ meal, onClose, onSaved, category, tags, weeklyMealsTa
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [ingredients, setIngredients] = useState(Array.isArray(meal.ingredients) ? meal.ingredients : null);
+  const [servings, setServings] = useState(meal.servings ?? '');
   const [rawJson, setRawJson] = useState(Array.isArray(meal.ingredients) ? JSON.stringify(meal.ingredients, null, 2) : "");
 
   useEffect(() => { if (ingredients) setRawJson(JSON.stringify(ingredients,null,2)); }, [ingredients]);
@@ -193,6 +201,7 @@ function ExtractionModal({ meal, onClose, onSaved, category, tags, weeklyMealsTa
       if (data?.error) throw new Error(data.error);
       if (!Array.isArray(data?.ingredients)) throw new Error("The AI returned an unexpected response.");
       setIngredients(data.ingredients);
+      if (normalizeServings(data.servings)) setServings(normalizeServings(data.servings));
     } catch (e) {
       const msg = e?.message || String(e);
       setError(msg);
@@ -223,6 +232,7 @@ function ExtractionModal({ meal, onClose, onSaved, category, tags, weeklyMealsTa
       title: meal.title.trim(),
       source_ref: meal.source_ref.trim(),
       ingredients: clean,
+      servings: normalizeServings(servings),
       extracted_at: new Date().toISOString(),
     };
     const { data, error: dbError } = await sb.from(weeklyMealsTable).upsert(payload, { onConflict:"week_of,meal_number" }).select().single();
@@ -244,6 +254,7 @@ function ExtractionModal({ meal, onClose, onSaved, category, tags, weeklyMealsTa
         <div className="actions"><button className="btn secondary" onClick={onClose}>Cancel</button><button className="btn" onClick={extract} disabled={loading}>{loading&&<span className="spinner"/>}{loading?"Extracting…":"Extract ingredients"}</button></div>
       </>}
       {ingredients && <>
+        <label className="tagField">Servings yielded<input className="input" type="number" min="1" step="1" aria-label="Recipe servings" value={servings} onChange={e=>setServings(e.target.value)} placeholder="Not specified"/></label>
         <div className="reviewTable">
           {ingredients.map((ing,idx)=><div className="ingredientRow" key={idx}>
             <input className="input" value={ing.name} onChange={e=>updateRow(idx,"name",e.target.value)} placeholder="ingredient"/>
@@ -302,6 +313,7 @@ function ManualRecipeModal({ busy, onClose, onSave }) {
   const [source, setSource] = useState('');
   const [ingredientsText, setIngredientsText] = useState('');
   const [method, setMethod] = useState('');
+  const [servings, setServings] = useState('');
   const [tagsText, setTagsText] = useState('');
   const [error, setError] = useState('');
   async function save(destination) {
@@ -310,7 +322,8 @@ function ManualRecipeModal({ busy, onClose, onSave }) {
     if (!title.trim()) { setError('Add a recipe title.'); return; }
     if (!source.trim()) { setError('Add a recipe URL or source.'); return; }
     if (!ingredients.length) { setError('Add at least one ingredient.'); return; }
-    const message = await onSave({ title: title.trim(), source_ref: source.trim(), ingredients, method: method.trim(), tags: parseTags(tagsText) }, destination);
+    if (servings !== '' && !normalizeServings(servings)) { setError('Servings must be a positive whole number.'); return; }
+    const message = await onSave({ title: title.trim(), source_ref: source.trim(), ingredients, method: method.trim(), servings: normalizeServings(servings), tags: parseTags(tagsText) }, destination);
     if (message) setError(message);
   }
   return <div className="modalBack" role="dialog" aria-modal="true" aria-label="Add a recipe manually" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}><div className="modal recipeDetailsModal">
@@ -318,6 +331,7 @@ function ManualRecipeModal({ busy, onClose, onSave }) {
     <label className="tagField">Recipe title<input className="input" aria-label="Manual recipe title" value={title} disabled={busy} onChange={event => setTitle(event.target.value)} placeholder="Recipe name"/></label>
     <label className="tagField">Recipe URL or source<input className="input" aria-label="Manual recipe URL or source" value={source} disabled={busy} onChange={event => setSource(event.target.value)} placeholder="Recipe URL, cookbook and page, or note"/></label>
     <label className="tagField">Recipe tags<input className="input" aria-label="Manual recipe tags" value={tagsText} disabled={busy} onChange={event => setTagsText(event.target.value)} placeholder="e.g. soup, vegetarian"/></label>
+    <label className="tagField">Servings yielded<input className="input" type="number" min="1" step="1" aria-label="Manual recipe servings" value={servings} disabled={busy} onChange={event => setServings(event.target.value)} placeholder="Not specified"/></label>
     <label className="tagField recipeMethod">Ingredients<textarea className="input" aria-label="Manual recipe ingredients" value={ingredientsText} disabled={busy} onChange={event => setIngredientsText(event.target.value)} rows="8" placeholder={'Enter one ingredient per line\ne.g. 2 carrots\n1 tbsp olive oil'}/></label>
     <label className="tagField recipeMethod">Method<textarea className="input" aria-label="Manual recipe method" value={method} disabled={busy} onChange={event => setMethod(event.target.value)} rows="10" placeholder="Type or paste the cooking method here…"/></label>
     {error && <div className="saveError" role="alert">{error}</div>}
@@ -360,6 +374,7 @@ function SwitchMealModal({ day, library, tagMap, busy, onClose, onSave }) {
   const [title, setTitle] = useState('');
   const [source, setSource] = useState('Manual recipe');
   const [tagsText, setTagsText] = useState('');
+  const [servings, setServings] = useState('');
   const [libraryKey, setLibraryKey] = useState('');
   const [error, setError] = useState('');
   function changeType(next) {
@@ -370,7 +385,7 @@ function SwitchMealModal({ day, library, tagMap, busy, onClose, onSave }) {
   }
   async function submit(e) {
     e.preventDefault();
-    let recipe = { title: title.trim(), source_ref: source.trim(), ingredients: null, method: '', extracted_at: null, rating: null, notes: '' };
+    let recipe = { title: title.trim(), source_ref: source.trim(), ingredients: null, method: '', servings: normalizeServings(servings), extracted_at: null, rating: null, notes: '' };
     let tags = parseTags(tagsText);
     if (type === 'library') {
       recipe = library.find(row => recipeKey(row) === libraryKey);
@@ -378,6 +393,7 @@ function SwitchMealModal({ day, library, tagMap, busy, onClose, onSave }) {
       tags = recipeTagsFor(recipe, tagMap);
     }
     if (!recipe.title || !recipe.source_ref) { setError('Add the recipe title and source.'); return; }
+    if (type !== 'library' && servings !== '' && !normalizeServings(servings)) { setError('Servings must be a positive whole number.'); return; }
     const message = await onSave(recipe, type, tags);
     if (message) setError(message); else onClose();
   }
@@ -388,6 +404,7 @@ function SwitchMealModal({ day, library, tagMap, busy, onClose, onSave }) {
       <label className="tagField">Recipe title<input className="input" aria-label="Switch recipe title" value={title} onChange={e => setTitle(e.target.value)}/></label>
       <label className="tagField">Source<input className="input" aria-label="Switch recipe source" value={source} onChange={e => setSource(e.target.value)} placeholder="Cookbook and page, printed recipe, or note"/></label>
       <label className="tagField">Recipe tags<input className="input" aria-label="Switch recipe tags" value={tagsText} onChange={e => setTagsText(e.target.value)} placeholder="e.g. pasta, soup"/></label>
+      <label className="tagField">Servings yielded<input className="input" type="number" min="1" step="1" aria-label="Switch recipe servings" value={servings} onChange={e => setServings(e.target.value)} placeholder="Not specified"/></label>
     </>}
     {error && <div className="saveError" role="alert">{error}</div>}
     <div className="actions"><button type="button" className="btn secondary" onClick={onClose}>Cancel</button><button className="btn" disabled={busy}>Switch meal</button></div>
@@ -397,6 +414,7 @@ function SwitchMealModal({ day, library, tagMap, busy, onClose, onSave }) {
 function RecipeDetailsModal({ recipe, tags, scheduledDays, queuedDays, busy, cookedBusy, onTagsSaved, onToggleCooked, onClose, onSave }) {
   const [source, setSource] = useState(recipe.source_ref || '');
   const [method, setMethod] = useState(recipe.method || '');
+  const [servings, setServings] = useState(recipe.servings ?? '');
   const [tagsText, setTagsText] = useState(tags.join(', '));
   const [tagSaveState, setTagSaveState] = useState('idle');
   const [error, setError] = useState('');
@@ -426,20 +444,22 @@ function RecipeDetailsModal({ recipe, tags, scheduledDays, queuedDays, busy, coo
     return () => window.clearTimeout(timer);
   }, [tagSaveState]);
   const tagsSaving = (tagsChanged && tagSaveState !== 'error') || tagSaveState === 'saving';
-  const changed = source.trim() !== String(recipe.source_ref || '').trim() || method !== (recipe.method || '');
+  const changed = source.trim() !== String(recipe.source_ref || '').trim() || method !== (recipe.method || '') || normalizeServings(servings) !== (recipe.servings ?? null);
   async function submit(event) {
     event.preventDefault(); setError('');
     if (tagsChanged || tagSaveState === 'saving') { setError('Wait for recipe tags to save before saving other changes.'); return; }
     if (!source.trim()) { setError('Add a recipe URL or source.'); return; }
-    const message = await onSave(recipe, { source_ref: source.trim(), method });
+    if (servings !== '' && !normalizeServings(servings)) { setError('Servings must be a positive whole number.'); return; }
+    const message = await onSave(recipe, { source_ref: source.trim(), method, servings: normalizeServings(servings) });
     if (message) setError(message);
   }
   return <div className="modalBack" role="dialog" aria-modal="true" aria-label={`Recipe details for ${recipe.title}`} onMouseDown={event => { if (event.target === event.currentTarget && !busy && !tagsSaving) onClose(); }}><form className="modal recipeDetailsModal" onSubmit={submit}>
     <div className="modalHead"><div><h2 className="sectionTitle">{recipe.title}</h2><div className="small">Recipe details</div></div><button type="button" className="iconBtn" aria-label="Close recipe details" disabled={busy || tagsSaving} onClick={onClose}>×</button></div>
-    <div className="recipeDetailStatuses"><button type="button" className={`recipeStatus statusButton ${recipe.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy} aria-label={`${recipe.has_been_cooked ? 'Mark as not cooked yet' : 'Mark as cooked'}: ${recipe.title}`} onClick={async () => { const message = await onToggleCooked(recipe); if (message) setError(message); else setError(''); }}>{cookedBusy ? 'Updating…' : recipe.has_been_cooked ? '✓ Cooked' : 'Not cooked yet'}</button>{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}</div>
+    <div className="recipeDetailStatuses">{recipe.servings && <span className="recipeStatus">Serves {recipe.servings}</span>}<button type="button" className={`recipeStatus statusButton ${recipe.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy} aria-label={`${recipe.has_been_cooked ? 'Mark as not cooked yet' : 'Mark as cooked'}: ${recipe.title}`} onClick={async () => { const message = await onToggleCooked(recipe); if (message) setError(message); else setError(''); }}>{cookedBusy ? 'Updating…' : recipe.has_been_cooked ? '✓ Cooked' : 'Not cooked yet'}</button>{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}</div>
     <label className="tagField recipeDetailTags">Recipe tags<input className="input" aria-label={`Tags for ${recipe.title} in details`} value={tagsText} disabled={busy || tagSaveState === 'saving'} onChange={event => setTagsText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="e.g. soup, vegetarian"/></label>
     {tagSaveState !== 'idle' && <div className={`tagSaveState ${tagSaveState}`} role="status">{tagSaveState === 'pending' ? 'Saving soon…' : tagSaveState === 'saving' ? 'Saving…' : tagSaveState === 'saved' ? '✓ Tags saved' : 'Tag save failed'}</div>}
     <label className="tagField">Recipe URL or source<input className="input" aria-label={`URL or source for ${recipe.title}`} value={source} disabled={busy} onChange={event => setSource(event.target.value)} placeholder="Recipe URL, cookbook and page, or note"/></label>
+    <label className="tagField">Servings yielded<input className="input" type="number" min="1" step="1" aria-label={`Servings for ${recipe.title}`} value={servings} disabled={busy} onChange={event => setServings(event.target.value)} placeholder="Not specified"/></label>
     <div className="recipeDetailSection"><h3>Ingredients</h3>{recipe.ingredients?.length > 0 ? <ul>{recipe.ingredients.map((ingredient, index) => <li key={`${ingredient.name}-${index}`}>{ingredient.name}{(ingredient.qty != null || ingredient.unit) ? ` · ${displayQty(ingredient.qty, ingredient.unit)}` : ''}</li>)}</ul> : <div className="small">No ingredients saved yet.</div>}</div>
     <label className="tagField recipeMethod">Method<textarea className="input" aria-label={`Method for ${recipe.title}`} value={method} disabled={busy} onChange={event => setMethod(event.target.value)} rows="10" placeholder="Type or paste the cooking method here…"/></label>
     {error && <div className="saveError" role="alert">{error}</div>}
@@ -480,7 +500,7 @@ function RecipeCard({ meal, tags, scheduledDays = [], queuedDays = [], onTagsSav
   }, [saveState]);
   const tagsSaving = changed || saveState === 'saving';
   return <div className={`recipeCard${draggable ? ' draggableRecipe' : ''}`} draggable={draggable && !busy && !changed} onDragStart={e => onDragStart?.(e, meal)} onDragEnd={onDragEnd}>
-    <div className="recipeCardHead"><div><h4>{meal.title}</h4><div className="small">{meal.source_ref}</div></div><div className="recipeCardMeta"><button type="button" className={`recipeStatus statusButton ${meal.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy || using} aria-label={`${meal.has_been_cooked ? 'Mark as not cooked yet' : 'Mark as cooked'}: ${meal.title}`} onClick={async () => setError(await onToggleCooked(meal) || '')}>{cookedBusy ? 'Updating…' : meal.has_been_cooked ? '✓ Cooked' : 'Not cooked yet'}</button>{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}{draggable && <span className="dragHint" aria-hidden="true">Drag to a day</span>}</div></div>
+    <div className="recipeCardHead"><div><h4>{meal.title}</h4><div className="small">{meal.source_ref}</div></div><div className="recipeCardMeta">{meal.servings && <span className="recipeStatus">Serves {meal.servings}</span>}<button type="button" className={`recipeStatus statusButton ${meal.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy || using} aria-label={`${meal.has_been_cooked ? 'Mark as not cooked yet' : 'Mark as cooked'}: ${meal.title}`} onClick={async () => setError(await onToggleCooked(meal) || '')}>{cookedBusy ? 'Updating…' : meal.has_been_cooked ? '✓ Cooked' : 'Not cooked yet'}</button>{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}{draggable && <span className="dragHint" aria-hidden="true">Drag to a day</span>}</div></div>
     <label className="tagField">Recipe tags<input className="input" aria-label={`Tags for ${meal.title}`} value={draft} disabled={busy || saveState === 'saving'} onChange={e => setDraft(e.target.value)} placeholder="e.g. soup, vegetarian"/></label>
     <div className="dayActions">
       {saveState !== 'idle' && <span className={`tagSaveState ${saveState}`}>{saveState === 'pending' ? 'Saving soon…' : saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Tags saved' : 'Save failed'}</span>}
@@ -617,7 +637,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     applyTags(key, tags, meal.meal_number - 1);
     const payload = {
       week_of: week, meal_number: meal.meal_number, title: meal.title.trim(), source_ref: meal.source_ref.trim(),
-      ingredients: meal.ingredients, method: meal.method || '', extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '',
+      ingredients: meal.ingredients, method: meal.method || '', servings: meal.servings ?? null, extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '',
       queue_item_id: meal.queue_item_id || null, is_override: !!meal.is_override, override_type: meal.override_type || null,
     };
     const { data, error } = await from('weekly_meals').upsert(payload, { onConflict: 'week_of,meal_number' }).select().single();
@@ -671,7 +691,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       const tags = recipeTags[oldKey] || [];
       const payload = {
         recipe_key: key, title: recipe.title.trim(), source_ref: source, ingredients: recipe.ingredients,
-        method: String(details.method || '').trim(), extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '',
+        method: String(details.method || '').trim(), servings: details.servings ?? null, extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '',
         cooked_at: existing?.cooked_at || recipe.cooked_at || new Date().toISOString(),
         has_been_cooked: !!(existing?.has_been_cooked || recipe.has_been_cooked), is_deleted: false,
       };
@@ -685,14 +705,14 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         const { error: oldRecordError } = await from('meal_recipe_library').update({ is_deleted: true }).eq('recipe_key', oldKey);
         if (oldRecordError) throw oldRecordError;
       }
-      const { error: queueError } = await from('meal_recipe_queue').update({ source_ref: source, method: payload.method }).eq('source_ref', recipe.source_ref);
+      const { error: queueError } = await from('meal_recipe_queue').update({ source_ref: source, method: payload.method, servings: payload.servings }).eq('source_ref', recipe.source_ref);
       if (queueError) throw queueError;
-      const { error: scheduleError } = await from('weekly_meals').update({ source_ref: source, method: payload.method }).eq('source_ref', recipe.source_ref);
+      const { error: scheduleError } = await from('weekly_meals').update({ source_ref: source, method: payload.method, servings: payload.servings }).eq('source_ref', recipe.source_ref);
       if (scheduleError) throw scheduleError;
       if (key !== oldKey) setRecipeTags(prev => ({ ...prev, [key]: tags }));
       setLibraryRecords(prev => [saved, ...prev.filter(row => row.recipe_key !== oldKey && row.recipe_key !== key)]);
-      setQueueRows(prev => prev.map(row => recipeKey(row) === oldKey ? { ...row, source_ref: source, method: payload.method } : row));
-      setMeals(prev => prev.map(row => recipeKey(row) === oldKey ? { ...row, source_ref: source, method: payload.method } : row));
+      setQueueRows(prev => prev.map(row => recipeKey(row) === oldKey ? { ...row, source_ref: source, method: payload.method, servings: payload.servings } : row));
+      setMeals(prev => prev.map(row => recipeKey(row) === oldKey ? { ...row, source_ref: source, method: payload.method, servings: payload.servings } : row));
       setDetailsRecipe(null);
       setToast('Recipe details saved');
       return '';
@@ -708,7 +728,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       const cooked = !recipe.has_been_cooked;
       const payload = {
         recipe_key: key, title: recipe.title.trim(), source_ref: recipe.source_ref.trim(),
-        ingredients: recipe.ingredients || [], method: recipe.method || '', extracted_at: recipe.extracted_at || null,
+        ingredients: recipe.ingredients || [], method: recipe.method || '', servings: recipe.servings ?? null, extracted_at: recipe.extracted_at || null,
         rating: recipe.rating ?? null, notes: recipe.notes || '',
         cooked_at: cooked ? new Date().toISOString() : existing?.cooked_at || recipe.cooked_at || new Date().toISOString(),
         has_been_cooked: cooked, is_deleted: false,
@@ -770,7 +790,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       const existing = libraryRecords.find(row => row.recipe_key === key);
       const now = new Date().toISOString();
       const payload = {
-        recipe_key: key, title: recipe.title, source_ref: recipe.source_ref, ingredients: recipe.ingredients, method: recipe.method || '',
+        recipe_key: key, title: recipe.title, source_ref: recipe.source_ref, ingredients: recipe.ingredients, method: recipe.method || '', servings: recipe.servings ?? null,
         extracted_at: existing?.extracted_at || null, rating: existing?.rating ?? null, notes: existing?.notes || '',
         cooked_at: existing?.cooked_at || now, has_been_cooked: !!existing?.has_been_cooked, is_deleted: false,
       };
@@ -786,7 +806,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
           const day = queueDayFor(recipe.tags);
           const queuePayload = {
             day_number: day, position: nextQueuePosition(queueRows, day), title: recipe.title, source_ref: recipe.source_ref,
-            ingredients: recipe.ingredients, method: recipe.method || '', extracted_at: null, rating: null, notes: '',
+            ingredients: recipe.ingredients, method: recipe.method || '', servings: recipe.servings ?? null, extracted_at: null, rating: null, notes: '',
           };
           const { data: queued, error: queueError } = await from('meal_recipe_queue').insert(queuePayload).select().single();
           if (queueError) throw queueError;
@@ -816,7 +836,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       const day = queueDayFor(tags);
       const payload = {
         day_number: day, position: nextQueuePosition(queueRows, day), title: recipe.title.trim(), source_ref: recipe.source_ref.trim(),
-        ingredients: recipe.ingredients, method: recipe.method || '', extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '',
+        ingredients: recipe.ingredients, method: recipe.method || '', servings: recipe.servings ?? null, extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '',
       };
       const { data: queued, error: queueError } = await from('meal_recipe_queue').insert(payload).select().single();
       if (queueError) throw queueError;
@@ -878,7 +898,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         if (tagError) throw tagError;
         const payload = {
           day_number: day, position: frontQueuePosition(queueRows, day), title: current.title.trim(), source_ref: current.source_ref.trim(),
-          ingredients: current.ingredients, method: current.method || '', extracted_at: current.extracted_at, rating: current.rating, notes: current.notes || '',
+          ingredients: current.ingredients, method: current.method || '', servings: current.servings ?? null, extracted_at: current.extracted_at, rating: current.rating, notes: current.notes || '',
         };
         const { data: preserved, error } = await from('meal_recipe_queue').insert(payload).select().single();
         if (error) throw error;
@@ -931,7 +951,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       const key = recipeKey(meal);
       const existing = libraryRecords.find(row => row.recipe_key === key);
       const payload = {
-        recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '',
+        recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: meal.servings ?? null,
         extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '', cooked_at: existing?.cooked_at || new Date().toISOString(),
         has_been_cooked: !!existing?.has_been_cooked, is_deleted: false,
       };
@@ -967,7 +987,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     try {
       const key = recipeKey(meal);
       const payload = {
-        recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '',
+        recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: meal.servings ?? null,
         extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '', cooked_at: new Date().toISOString(), has_been_cooked: true, is_deleted: false,
       };
       const { data: banked, error: bankError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
@@ -1030,7 +1050,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     try {
       const key = recipeKey(recipe);
       const payload = {
-        recipe_key: key, title: recipe.title.trim(), source_ref: recipe.source_ref.trim(), ingredients: recipe.ingredients, method: recipe.method || '',
+        recipe_key: key, title: recipe.title.trim(), source_ref: recipe.source_ref.trim(), ingredients: recipe.ingredients, method: recipe.method || '', servings: recipe.servings ?? null,
         extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '', cooked_at: recipe.cooked_at || new Date().toISOString(), has_been_cooked: !!recipe.has_been_cooked, is_deleted: true,
       };
       const { data: deleted, error } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
@@ -1072,12 +1092,13 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         ...recipe,
         ingredients: recipe.ingredients?.length ? recipe.ingredients : previous.ingredients,
         method: recipe.method || previous.method || '',
+        servings: recipe.servings ?? previous.servings ?? null,
         extracted_at: recipe.extracted_at || previous.extracted_at,
         notes: recipe.notes || previous.notes,
         rating: recipe.rating ?? previous.rating,
         has_been_cooked: recipe.has_been_cooked ?? previous.has_been_cooked ?? false,
         recipe_key: recipe.recipe_key || previous.recipe_key || key,
-      } : { ...recipe, method: recipe.method || '', recipe_key: recipe.recipe_key || key });
+      } : { ...recipe, method: recipe.method || '', servings: recipe.servings ?? null, recipe_key: recipe.recipe_key || key });
     });
     return [...recipes.values()].sort((a, b) => a.title.localeCompare(b.title));
   }, [pastRows, queueRows, meals, libraryRecords]);
@@ -1120,6 +1141,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
           <div className="fields">
             <input className="input" aria-label={`Day ${meal.meal_number} meal title`} value={meal.title} disabled={busy} onChange={e => updateMealField(index, 'title', e.target.value)} placeholder="Meal title"/>
             <input className="input" aria-label={`Day ${meal.meal_number} source`} value={meal.source_ref} disabled={busy} onChange={e => updateMealField(index, 'source_ref', e.target.value)} placeholder="Source — e.g. Cookish p.47 or URL"/>
+            <input className="input" type="number" min="1" step="1" aria-label={`Day ${meal.meal_number} servings`} value={meal.servings ?? ''} disabled={busy} onChange={e => updateMealField(index, 'servings', normalizeServings(e.target.value))} placeholder="Servings"/>
           </div>
           <label className="tagField">Recipe tags (comma-separated)<input className="input" aria-label={`Day ${meal.meal_number} recipe tags`} value={meal.tagsText} disabled={busy} onChange={e => updateMealField(index, 'tagsText', e.target.value)} placeholder="e.g. soup, instant pot, vegetarian"/></label>
           {tags.length > 0 && <div className="tagChips">{tags.map(tag => <span className="tagChip" key={tag}>{tag}</span>)}</div>}

@@ -25,9 +25,10 @@ const recipeSchema = {
       },
     },
     method: { type: "string" },
+    servings: { type: ["integer", "null"] },
     tags: { type: "array", items: { type: "string" } },
   },
-  required: ["title", "source_ref", "ingredients", "method", "tags"],
+  required: ["title", "source_ref", "ingredients", "method", "servings", "tags"],
   additionalProperties: false,
 };
 
@@ -88,7 +89,8 @@ Deno.serve(async (req: Request) => {
     const mealType = body?.mealType === "breakfast" ? "breakfast" : "dinner";
     const instruction = [
       `Extract this ${mealType} recipe for a meal-planning queue.`,
-      "Return the recipe title, the supplied page URL as source_ref, all ingredients needed to cook it, the complete cooking method, and 2-6 concise lowercase tags.",
+      "Return the recipe title, the supplied page URL as source_ref, all ingredients needed to cook it, the complete cooking method, its servings yield, and 2-6 concise lowercase tags.",
+      "Return servings as a positive whole number when the page states how many people the recipe serves. Return null when it is not stated or only an item yield is given.",
       "Write the method as clear numbered steps in a single text string. Preserve temperatures, timings, and useful preparation details.",
       "Normalize ingredient names, preserve stated quantities, use numeric quantities when stated, and use qty null for 'to taste' or 'as needed'.",
       "For countable items with no unit, use unit 'item'. Exclude equipment and method steps.",

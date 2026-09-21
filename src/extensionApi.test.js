@@ -17,7 +17,7 @@ test('Import only sends the library destination', async () => {
 
 test('reviewed tags and extracted recipe are sent with the confirmed save', async () => {
   const fetcher = jest.fn().mockResolvedValue({ok:true, json:async () => ({ok:true,destination:'library',updatedExisting:true})});
-  const recipe = {title:'Soup',source_ref:'https://example.com/soup',ingredients:[{name:'stock',qty:1,unit:'l'}],tags:['soup']};
+  const recipe = {title:'Soup',source_ref:'https://example.com/soup',ingredients:[{name:'stock',qty:1,unit:'l'}],servings:4,tags:['soup']};
   await sendRecipe({url:recipe.source_ref,destination:'library',recipe,tags:['soup','family']}, fetcher);
   expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({recipe,tags:['soup','family'],dryRun:false});
 });
