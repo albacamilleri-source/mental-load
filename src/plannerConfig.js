@@ -9,15 +9,16 @@ export const BREAKFAST_SLOTS = [
   { day_number: 6, day_name: 'Wednesday', audience: 'kids', label: 'Wednesday · Kids' },
   { day_number: 7, day_name: 'Thursday', audience: 'adults', label: 'Thursday · Adults' },
   { day_number: 8, day_name: 'Thursday', audience: 'kids', label: 'Thursday · Kids' },
-  { day_number: 9, day_name: 'Saturday', audience: 'shared', label: 'Saturday' },
-  { day_number: 10, day_name: 'Sunday', audience: 'shared', label: 'Sunday' },
+  { day_number: 9, day_name: 'Friday', audience: 'adults', label: 'Friday · Adults' },
+  { day_number: 10, day_name: 'Saturday', audience: 'shared', label: 'Saturday' },
+  { day_number: 11, day_name: 'Sunday', audience: 'shared', label: 'Sunday' },
 ];
 
 export const BREAKFAST_CATEGORIES = BREAKFAST_SLOTS.map(slot => ({
   ...slot,
   sort_order: slot.day_number,
-  name: ({ 2: 'Pancakes', 4: 'Waffles', 6: 'Oats', 8: 'Savory', 9: 'Weekend', 10: 'Weekend' })[slot.day_number] || '',
-  accepted_tags: ({ 2: ['pancake'], 4: ['waffle'], 6: ['oats'], 8: ['savory'], 9: ['weekend'], 10: ['weekend'] })[slot.day_number] || [],
+  name: ({ 2: 'Pancakes', 4: 'Waffles', 6: 'Oats', 8: 'Savory', 10: 'Weekend', 11: 'Weekend' })[slot.day_number] || '',
+  accepted_tags: ({ 2: ['pancake'], 4: ['waffle'], 6: ['oats'], 8: ['savory'], 10: ['weekend'], 11: ['weekend'] })[slot.day_number] || [],
 }));
 
 const dinnerTables = {
@@ -38,5 +39,5 @@ const breakfastTables = {
 
 export const PLANNER_CONFIG = {
   dinner: { title: 'Dinners', singular: 'dinner', tables: dinnerTables, defaultCategories: DEFAULT_CATEGORIES, slotCount: 6 },
-  breakfast: { title: 'Breakfasts', singular: 'breakfast', tables: breakfastTables, defaultCategories: BREAKFAST_CATEGORIES, slotCount: 10, capsule: true, autoQueue: true, dayNames: BREAKFAST_SLOTS.map(slot => slot.label) },
+  breakfast: { title: 'Breakfasts', singular: 'breakfast', tables: breakfastTables, defaultCategories: BREAKFAST_CATEGORIES, slotCount: 11, capsule: true, autoQueue: true, dayNames: BREAKFAST_SLOTS.map(slot => slot.label) },
 };
