@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import MealPlanner, { MealPlannerWorkspace } from './MealPlanner';
 import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
-import { BREAKFAST_CATEGORIES } from './plannerConfig';
+import { BREAKFAST_CATEGORIES, BREAKFAST_SLOTS } from './plannerConfig';
 
 const mockFrom = jest.fn();
 const mockInvoke = jest.fn();
@@ -45,13 +45,13 @@ async function change(label, value) {
   await act(async () => { Simulate.change(document.body.querySelector(`[aria-label="${label}"]`), { target: { value } }); });
 }
 function button(text, parent = document.body) { return [...parent.querySelectorAll('button')].find(b => b.textContent === text); }
-function day(n) { const label = container.querySelector('.plannerHeader .brand')?.textContent.startsWith('Breakfasts') ? ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Saturday', 'Sunday'][n-1] : `Day ${n}`; return [...container.querySelectorAll('.meal')].find(el => el.querySelector('h3').textContent === label); }
+function day(n) { const label = container.querySelector('.plannerHeader .brand')?.textContent.startsWith('Breakfasts') ? BREAKFAST_SLOTS[n-1].label : `Day ${n}`; return [...container.querySelectorAll('.meal')].find(el => el.querySelector('h3').textContent === label); }
 async function click(el) { await act(async () => { el.click(); }); }
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   window.confirm = jest.fn(() => true);
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); breakfastCurrent = []; breakfastPast = []; breakfastLibrary = []; breakfastQueue = []; breakfastTagRows = []; breakfastCategories = BREAKFAST_CATEGORIES.map((c, i) => ({...c, name: ['Pancakes', 'Waffles', 'Oats', 'Savory', 'Weekend', 'Weekend'][i], accepted_tags: [['pancake'], ['waffle'], ['oats'], ['savory'], ['weekend'], ['weekend']][i]})); writes = []; failure = ''; deferWeeklyWrite = false; resolveWeeklyWrite = null; mockInvoke.mockReset(); setupQueries();
+  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); breakfastCurrent = []; breakfastPast = []; breakfastLibrary = []; breakfastQueue = []; breakfastTagRows = []; breakfastCategories = BREAKFAST_CATEGORIES.map(c => ({...c, accepted_tags: [...c.accepted_tags]})); writes = []; failure = ''; deferWeeklyWrite = false; resolveWeeklyWrite = null; mockInvoke.mockReset(); setupQueries();
   window.history.replaceState({}, '', '/mental-load/#meal-planner'); window.scrollTo = jest.fn();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
@@ -92,17 +92,17 @@ test('Breakfasts has its own persistent category rotation and recipe tables', as
   expect(mockFrom).not.toHaveBeenCalledWith('meal_recipe_library');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 2');
   expect(container.querySelector('#recipe-library').textContent).not.toContain('Recipe 1');
-  expect(day(4).textContent).toContain('Savory');
-  expect(container.querySelectorAll('.meal')).toHaveLength(6);
+  expect(day(8).textContent).toContain('Savory');
+  expect(container.querySelectorAll('.meal')).toHaveLength(10);
   expect(container.querySelector('[aria-label="Friday cereal day"]').textContent).toContain('Enjoy the day off.');
-  expect([...container.querySelectorAll('.dayHeading')].map(node => node.textContent)).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+  expect([...container.querySelectorAll('.dayHeading')].map(node => node.textContent)).toEqual(['Monday · Adults', 'Monday · Kids', 'Tuesday · Adults', 'Tuesday · Kids', 'Wednesday · Adults', 'Wednesday · Kids', 'Thursday · Adults', 'Thursday · Kids', 'Friday', 'Saturday', 'Sunday']);
   expect(container.querySelector('.weekNav')).toBeNull();
   expect(container.textContent).not.toContain('Six rotating breakfast queues');
   expect(container.textContent).not.toContain('Queue choices follow your day categories');
   expect(button('Save to library')).toBeUndefined();
   expect(button('Generate grocery list').disabled).toBe(false);
-  await change('Day 4 meal title', 'Savory eggs'); await change('Day 4 source', 'Family notebook'); await change('Day 4 recipe tags', 'savory');
-  await click(button('Save meal', day(4)));
+  await change('Day 8 meal title', 'Savory eggs'); await change('Day 8 source', 'Family notebook'); await change('Day 8 recipe tags', 'savory');
+  await click(button('Save meal', day(8)));
   expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.title === 'Savory eggs')).toBeTruthy();
   expect(writes.find(write => write.table === 'breakfast_recipe_tags')).toBeTruthy();
   expect(writes.find(write => write.table === 'weekly_meals')).toBeUndefined();
@@ -117,28 +117,28 @@ test('Breakfast URL imports are scoped to Breakfasts', async () => {
 });
 
 test('Breakfasts fills from its own queue and saves its own category changes', async () => {
-  breakfastQueue = [{...sample(3), id:'breakfast-q1', day_number:1, position:1, created_at:'2026-09-20T08:00:00Z'}];
+  breakfastQueue = [{...sample(3), id:'breakfast-q1', day_number:2, position:1, created_at:'2026-09-20T08:00:00Z'}];
   breakfastTagRows = [{recipe_key:recipeKey(sample(3)), tags:['pancake']}];
   await render('breakfast');
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 3');
+  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Recipe 3');
   expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q1' && write.value.week_of === 'breakfast-capsule')).toBeTruthy();
   expect(writes.find(write => write.table === 'weekly_meals')).toBeUndefined();
   await click(button('Edit categories'));
-  await change('Day 1 accepted tags', 'pancake, crepe');
+  await change('Day 2 accepted tags', 'pancake, crepe');
   await click(button('Save day categories'));
-  expect(writes.find(write => write.table === 'breakfast_day_categories' && write.value?.[0]?.accepted_tags?.includes('crepe'))).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_day_categories' && write.value?.find(category => category.day_number === 2)?.accepted_tags?.includes('crepe'))).toBeTruthy();
   expect(writes.find(write => write.table === 'meal_day_categories')).toBeUndefined();
 });
 
 test('marking breakfast made rotates it and preserves a permanent tried status', async () => {
-  const first = {...sample(21), week_of:'breakfast-capsule', meal_number:1, queue_item_id:'breakfast-q1'};
-  const second = {...sample(22), day_number:1, position:2, id:'breakfast-q2', created_at:'2026-09-20T09:00:00Z'};
+  const first = {...sample(21), week_of:'breakfast-capsule', meal_number:2, queue_item_id:'breakfast-q1'};
+  const second = {...sample(22), day_number:2, position:2, id:'breakfast-q2', created_at:'2026-09-20T09:00:00Z'};
   breakfastCurrent = [first];
-  breakfastQueue = [{...first, id:'breakfast-q1', day_number:1, position:1, created_at:'2026-09-20T08:00:00Z'}, second];
+  breakfastQueue = [{...first, id:'breakfast-q1', day_number:2, position:1, created_at:'2026-09-20T08:00:00Z'}, second];
   breakfastTagRows = [first, second].map(row => ({recipe_key:recipeKey(row), tags:['pancake']}));
   await render('breakfast');
-  await click(button('Made · rotate', day(1)));
-  expect(day(1).textContent).toContain('Recipe 22');
+  await click(button('Made · rotate', day(2)));
+  expect(day(2).textContent).toContain('Recipe 22');
   expect(writes).toContainEqual({table:'breakfast_recipe_queue', update:{field:'id', value:'breakfast-q1', payload:{position:3}}});
   expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q2' && write.value.week_of === 'breakfast-capsule')).toBeTruthy();
   expect(writes.find(write => write.table === 'breakfast_recipe_library').value).toMatchObject({has_been_cooked:true});
@@ -146,20 +146,20 @@ test('marking breakfast made rotates it and preserves a permanent tried status',
 });
 
 test('skipping breakfast rotates it without marking an untried recipe as tried', async () => {
-  const first = {...sample(51), week_of:'breakfast-capsule', meal_number:1, queue_item_id:'breakfast-q1'};
-  const second = {...sample(52), day_number:1, position:2, id:'breakfast-q2', created_at:'2026-09-20T09:00:00Z'};
+  const first = {...sample(51), week_of:'breakfast-capsule', meal_number:2, queue_item_id:'breakfast-q1'};
+  const second = {...sample(52), day_number:2, position:2, id:'breakfast-q2', created_at:'2026-09-20T09:00:00Z'};
   breakfastCurrent = [first];
-  breakfastQueue = [{...first, id:'breakfast-q1', day_number:1, position:1, created_at:'2026-09-20T08:00:00Z'}, second];
+  breakfastQueue = [{...first, id:'breakfast-q1', day_number:2, position:1, created_at:'2026-09-20T08:00:00Z'}, second];
   breakfastTagRows = [first, second].map(row => ({recipe_key:recipeKey(row), tags:['pancake']}));
   await render('breakfast');
-  await click(button('Skip · rotate', day(1)));
-  expect(day(1).textContent).toContain('Recipe 52');
+  await click(button('Skip · rotate', day(2)));
+  expect(day(2).textContent).toContain('Recipe 52');
   expect(writes.find(write => write.table === 'breakfast_recipe_library').value).toMatchObject({has_been_cooked:false});
   expect(container.querySelector('#recipe-library').textContent).toContain('Not tried yet');
 });
 
 test('breakfast grocery lists use the scheduled recipes that already have ingredients', async () => {
-  const pancake = {...sample(41), week_of:'breakfast-capsule', meal_number:1};
+  const pancake = {...sample(41), week_of:'breakfast-capsule', meal_number:2};
   breakfastCurrent = [pancake];
   breakfastTagRows = [{recipe_key:recipeKey(pancake), tags:['pancake']}];
   await render('breakfast');
@@ -184,16 +184,16 @@ test('manual breakfast recipes have one save action and always enter a queue', a
 });
 
 test('new breakfast recipes enter before the last rotated recipe', async () => {
-  const currentRecipe = {...sample(31), week_of:'breakfast-capsule', meal_number:1, queue_item_id:'breakfast-q-current'};
+  const currentRecipe = {...sample(31), week_of:'breakfast-capsule', meal_number:2, queue_item_id:'breakfast-q-current'};
   const newRecipe = {...sample(32), recipe_key:recipeKey(sample(32)), has_been_cooked:false, is_deleted:false};
   breakfastCurrent = [currentRecipe];
-  breakfastQueue = [{...currentRecipe, id:'breakfast-q-current', day_number:1, position:1, created_at:'2026-09-20T08:00:00Z'}];
+  breakfastQueue = [{...currentRecipe, id:'breakfast-q-current', day_number:2, position:1, created_at:'2026-09-20T08:00:00Z'}];
   breakfastLibrary = [newRecipe];
   breakfastTagRows = [currentRecipe, newRecipe].map(row => ({recipe_key:recipeKey(row), tags:['pancake']}));
   await render('breakfast');
   await click(button('Send to queue'));
   expect(writes).toContainEqual({table:'breakfast_recipe_queue', update:{field:'id', value:'breakfast-q-current', payload:{position:2}}});
-  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.insert?.title === 'Recipe 32')).toMatchObject({insert:{day_number:1,position:1}});
+  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.insert?.title === 'Recipe 32')).toMatchObject({insert:{day_number:2,position:1}});
 });
 
 test('weekend-tagged breakfasts are assigned and scheduled on a weekend day', async () => {
@@ -203,17 +203,19 @@ test('weekend-tagged breakfasts are assigned and scheduled on a weekend day', as
   breakfastTagRows = [{recipe_key:recipe.recipe_key, tags:['weekend']}];
   await render('breakfast');
   await click(button('Send to queue'));
-  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.insert?.title === 'Recipe 33')).toMatchObject({insert:{day_number:5}});
-  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.meal_number === 5 && write.value?.title === 'Recipe 33')).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.insert?.title === 'Recipe 33')).toMatchObject({insert:{day_number:9}});
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.meal_number === 9 && write.value?.title === 'Recipe 33')).toBeTruthy();
   random.mockRestore();
 });
 
-test('unmatched breakfast tags cannot enter a category queue', async () => {
+test('breakfast rules select Kids independently while unmatched recipes use a blank Adults slot', async () => {
+  const random = jest.spyOn(Math, 'random').mockReturnValue(0);
   breakfastLibrary = [{...sample(23), recipe_key:recipeKey(sample(23)), has_been_cooked:false, is_deleted:false}];
   await render('breakfast');
   await click(button('Send to queue'));
-  expect(document.body.textContent).toContain('Add a tag that matches a breakfast category');
-  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.insert)).toBeUndefined();
+  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.insert?.title === 'Recipe 23')).toMatchObject({insert:{day_number:1}});
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.meal_number === 1)).toBeTruthy();
+  random.mockRestore();
 });
 
 test('blocks a mismatched meal and saves normalized tags with a matching meal', async () => {
