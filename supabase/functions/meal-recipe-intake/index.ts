@@ -54,7 +54,8 @@ Deno.serve(async (req: Request) => {
     const loadError = [categoriesResult, mealsResult, queueResult, existingLibraryResult].find(result => result.error)?.error;
     if (loadError) throw loadError;
     const categories = categoriesResult.data || [];
-    if (categories.length !== 6) throw new Error("Day categories could not be loaded.");
+    const expectedCategoryCount = mealType === "breakfast" ? 10 : 6;
+    if (categories.length !== expectedCategoryCount) throw new Error("Day categories could not be loaded.");
     const categoryTags = [...new Set(categories.flatMap(category => parseTags(category.accepted_tags)))];
 
     let extraction = body?.recipe;

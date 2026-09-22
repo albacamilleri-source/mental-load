@@ -1160,7 +1160,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         const match = meal.is_override || matchesCategory(tags, category);
         const draggedTags = recipeTags[draggedRecipeKey] || EMPTY_TAGS;
         const canDrop = !!draggedRecipeKey && canDropRecipe(meal, draggedTags, category);
-        return <React.Fragment key={meal.meal_number}>{config.capsule && meal.meal_number === 5 && <div className="cerealDay" aria-label="Friday cereal day"><div><h3 className="dayHeading">Friday</h3><div className="dayCategory">Cereal</div></div><div className="cerealMessage">Enjoy the day off.</div></div>}<details className={`meal${canDrop ? ' dropReady' : ''}${dropTarget === meal.meal_number ? ' dropActive' : ''}`}
+        return <React.Fragment key={meal.meal_number}>{config.capsule && meal.meal_number === 9 && <div className="cerealDay" aria-label="Friday cereal day"><div><h3 className="dayHeading">Friday</h3><div className="dayCategory">Cereal</div></div><div className="cerealMessage">Enjoy the day off.</div></div>}<details className={`meal${canDrop ? ' dropReady' : ''}${dropTarget === meal.meal_number ? ' dropActive' : ''}`}
           onDragOver={e => { if (canDrop) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDropTarget(meal.meal_number); } }}
           onDragLeave={() => setDropTarget(target => target === meal.meal_number ? null : target)}
           onDrop={e => canDrop && dropRecipe(e, meal.meal_number)}>
@@ -1189,7 +1189,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         </details></React.Fragment>;
       })}
       <button className="btn generate" onClick={generate} disabled={!ready}>Generate grocery list</button>
-      {!ready && <div className="hint">Save all six meals with ingredients and matching day tags to generate your list.</div>}
+      {!ready && <div className="hint">Save at least one breakfast with ingredients to generate your list.</div>}
     </section>
     {groceryGenerated && ready && <section className="card" id="grocery">
       <div className="rowBetween"><div><h2 className="sectionTitle">Grocery list</h2><div className="small">Plain text, ready for iOS Reminders.</div></div><button className="btn copyBtn" onClick={copyList}>Copy</button></div>
