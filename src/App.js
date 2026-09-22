@@ -1013,6 +1013,8 @@ function TodayScreen({ who }) {
   const [loading, setLoading] = useState(true);
   const [todayPlans, setTodayPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [planCompletionError, setPlanCompletionError] = useState("");
+  const completingPlanIdsRef = useRef(new Set());
   const weather = useWeather();
 
   const pKey = dailyKey();
@@ -1068,7 +1070,7 @@ function TodayScreen({ who }) {
         .select("*").eq("done", false).eq("due_date", todayDate);
       const { data: monthly } = await sb.from("routine_tasks")
         .select("*").eq("type", "monthly").not("due_date", "is", null).eq("due_date", todayDate);
-      setTodayPlans([...(actions || []), ...(monthly || [])]);
+      setTodayPlans([...(actions || []).filter(action => !completingPlanIdsRef.current.has(action.id)), ...(monthly || [])]);
       setPlansLoading(false);
     };
     loadPlans();
@@ -1078,6 +1080,25 @@ function TodayScreen({ who }) {
       .subscribe();
     return () => sb.removeChannel(sub);
   }, [todayDate]);
+
+  const completeTodayPlan = async (task) => {
+    if (completingPlanIdsRef.current.has(task.id)) return true;
+    completingPlanIdsRef.current.add(task.id);
+    setPlanCompletionError("");
+    setTodayPlans(plans => plans.filter(plan => plan.id !== task.id));
+    const { error } = await sb.from("next_actions").update({ done: true }).eq("id", task.id);
+    if (error) {
+      console.error("complete today plan error:", error.message);
+      completingPlanIdsRef.current.delete(task.id);
+      setTodayPlans(plans => plans.some(plan => plan.id === task.id) ? plans : [...plans, task]);
+      setPlanCompletionError("That task could not be completed. Please try again.");
+      return false;
+    }
+    const { error: historyError } = await sb.from("history_items").insert({ text: task.text, notes: task.notes || "", source: "next_action" });
+    if (historyError) console.error("next action history error:", historyError.message);
+    completingPlanIdsRef.current.delete(task.id);
+    return true;
+  };
 
   const toggle = async (taskId) => {
     const done = completions.has(taskId);
@@ -1238,11 +1259,7 @@ function TodayScreen({ who }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                   {todayPlans.map(t => (
                     <EditableTaskRow key={t.id} task={t}
-                      onToggle={async () => {
-                        await sb.from("next_actions").update({ done: true }).eq("id", t.id);
-                        await sb.from("history_items").insert({ text: t.text, notes: t.notes || "", source: "next_action" });
-                        setTodayPlans(ps => ps.filter(p => p.id !== t.id));
-                      }}
+                      onToggle={() => completeTodayPlan(t)}
                       onSave={async (task, newText, newContext, newDate, newNotes) => {
                         const { error } = await sb.from("next_actions").update({ text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null }).eq("id", task.id);
                         if (!error) setTodayPlans(ps => ps.map(p => p.id === task.id ? { ...p, text: newText, notes: newNotes || "", context: newContext, due_date: newDate || null } : p));
@@ -1256,6 +1273,7 @@ function TodayScreen({ who }) {
                     />
                   ))}
                 </div>
+                {planCompletionError && <div role="alert" style={{ color: "var(--danger)", fontSize: 12, marginTop: 8 }}>{planCompletionError}</div>}
               </div>
             )}
             <SuggestedTasks who={who} />
@@ -1601,7 +1619,10 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
     if (completing) return;
     haptic(8);
     setCompleting(true);
-    setTimeout(() => onToggle && onToggle(), 600);
+    setTimeout(async () => {
+      const completed = await onToggle?.();
+      if (completed === false) setCompleting(false);
+    }, 600);
   };
 
   const handleTouchStart = (e) => { startX.current = e.touches[0].clientX; setSwiping(true); };
@@ -1674,7 +1695,7 @@ function EditableTaskRow({ task, onToggle, onSave, onDelete, color, badge }) {
           userSelect: "none",
         }}>
         {ctxEmoji && <span style={{ fontSize: 11, width: 18, textAlign: "center", flexShrink: 0 }}>{ctxEmoji}</span>}
-        <div onClick={complete} style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: completing ? "var(--border)" : color, opacity: 0.7, cursor: "pointer", transition: "all 0.18s" }} />
+        <button type="button" aria-label={`Complete ${task.text}`} disabled={completing} onClick={complete} style={{ width: 18, height: 18, borderRadius: "50%", flexShrink: 0, background: completing ? "var(--border)" : color, opacity: 0.7, cursor: completing ? "default" : "pointer", transition: "all 0.18s", border: "none", padding: 0 }} />
         <div style={{ flex: 1 }} onClick={() => !completing && setEditing(true)}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span style={{ fontSize: 14, color: completing ? "var(--muted2)" : "var(--text)", textDecoration: completing ? "line-through" : "none", transition: "all 0.2s" }}>{task.text}</span>
@@ -1697,7 +1718,7 @@ const CONTEXTS = [
   { key: "home", label: "🏠 Home" },
 ];
 
-function TasksScreen({ who }) {
+export function TasksScreen({ who }) {
   const [tasks, setTasks] = useState([]);
   const [waiting, setWaiting] = useState([]);
   const [context, setContext] = useState("all");
@@ -1744,9 +1765,11 @@ function TasksScreen({ who }) {
 
     return () => {
       sb.removeChannel(sub);
-      // Clean up on unmount
       if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+      const pending = pendingDeleteRef.current;
       pendingDeleteRef.current = null;
+      deleteTimerRef.current = null;
+      if (pending) void commitRemoval(pending);
     };
   }, [load]);
 
