@@ -1140,6 +1140,59 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   }, [libraryRecipes, librarySearch, recipeTags]);
   const currentDetailsRecipe = detailsRecipe && (libraryRecipes.find(row => recipeKey(row) === recipeKey(detailsRecipe)) || detailsRecipe);
 
+  function renderMealCard(meal, index, heading, nested = false) {
+    const category = categoryFor(meal.meal_number);
+    const tags = parseTags(meal.tagsText);
+    const match = meal.is_override || matchesCategory(tags, category);
+    const draggedTags = recipeTags[draggedRecipeKey] || EMPTY_TAGS;
+    const canDrop = !!draggedRecipeKey && canDropRecipe(meal, draggedTags, category);
+    return <details key={meal.meal_number} className={`meal${nested ? ' breakfastAudienceMeal' : ''}${canDrop ? ' dropReady' : ''}${dropTarget === meal.meal_number ? ' dropActive' : ''}`}
+      onDragOver={e => { if (canDrop) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDropTarget(meal.meal_number); } }}
+      onDragLeave={() => setDropTarget(target => target === meal.meal_number ? null : target)}
+      onDrop={e => canDrop && dropRecipe(e, meal.meal_number)}>
+      <summary className="mealSummary"><div><h3 className="dayHeading">{heading || config.dayNames?.[meal.meal_number - 1] || `Day ${meal.meal_number}`}</h3><div className="dayCategory">{meal.is_override ? `Temporary ${meal.override_type || 'manual'} switch` : category?.name || 'Any recipe'}</div></div><div className={`mealSummaryValue${meal.title.trim() ? '' : ' isEmpty'}`}>{meal.title.trim() || 'Empty'}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
+      <div className="mealBody">
+      {!meal.is_override && category?.accepted_tags.length > 0 && <div className="dayRequirement">Requires {category.accepted_tags.join(' or ')}</div>}
+      <div className="fields">
+        <input className="input" aria-label={`Day ${meal.meal_number} meal title`} value={meal.title} disabled={busy} onChange={e => updateMealField(index, 'title', e.target.value)} placeholder="Meal title"/>
+        <input className="input" aria-label={`Day ${meal.meal_number} source`} value={meal.source_ref} disabled={busy} onChange={e => updateMealField(index, 'source_ref', e.target.value)} placeholder="Source — e.g. Cookish p.47 or URL"/>
+        <input className="input" type="number" min="1" step="1" aria-label={`Day ${meal.meal_number} servings`} value={meal.servings ?? ''} disabled={busy} onChange={e => updateMealField(index, 'servings', normalizeServings(e.target.value))} placeholder="Servings"/>
+      </div>
+      <label className="tagField">Recipe tags (comma-separated)<input className="input" aria-label={`Day ${meal.meal_number} recipe tags`} value={meal.tagsText} disabled={busy} onChange={e => updateMealField(index, 'tagsText', e.target.value)} placeholder="e.g. soup, instant pot, vegetarian"/></label>
+      {tags.length > 0 && <div className="tagChips">{tags.map(tag => <span className="tagChip" key={tag}>{tag}</span>)}</div>}
+      {!match && <div className="saveError">Add a recipe tagged {category.accepted_tags.join(' or ')} for this day.</div>}
+      {mealErrors[index] && <div className="saveError" role="alert">{mealErrors[index]}</div>}
+      <div className="dayActions"><span className="small">{meal.dirty ? 'Unsaved changes' : meal.id ? 'Saved' : 'Add a title, source and any required tags.'}{meal.ingredients?.length > 0 && ` · ✓ ${meal.ingredients.length} ingredients loaded`}</span>
+        <button className="btn ghost" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim() || (!meal.dirty && !!meal.id)} onClick={() => saveMeal(index)}>Save meal</button>
+        <button className="btn secondary" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim()} onClick={() => saveMeal(index, true)}>{meal.ingredients ? 'Review ingredients' : 'Extract ingredients'}</button>
+        <button className="btn secondary" disabled={busy || meal.dirty || meal.is_override} onClick={() => setSwitchDay(meal.meal_number)}>Switch</button>
+        <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => unscheduleMeal(index)}>Unschedule</button>
+        {config.capsule && <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index, false)}>Skip · rotate</button>}
+        <button className="btn cookedBtn" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index)}>{config.capsule ? 'Made · rotate' : 'Mark cooked'}</button>
+        {meal.id && !meal.dirty && <span className="dragHint scheduledDragHint" draggable={!busy} onDragStart={e => startScheduledMealDrag(e, meal)} onDragEnd={() => { setDraggedMealNumber(null); setLibraryDropActive(false); }}>Drag to library</span>}
+      </div>
+      </div>
+    </details>;
+  }
+
+  function renderBreakfastDays() {
+    const weekdays = [
+      { name: 'Monday', slots: [1, 2] },
+      { name: 'Tuesday', slots: [3, 4] },
+      { name: 'Wednesday', slots: [5, 6] },
+      { name: 'Thursday', slots: [7, 8] },
+    ];
+    const grouped = weekdays.map(day => {
+      const adult = meals[day.slots[0] - 1];
+      const kids = meals[day.slots[1] - 1];
+      return <details className="breakfastDayGroup" key={day.name}>
+        <summary className="mealSummary"><h3 className="dayHeading">{day.name}</h3><div className="breakfastDayPreview"><span>Adults · {adult.title.trim() || 'Empty'}</span><span>Kids · {kids.title.trim() || 'Empty'}</span><span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
+        <div className="breakfastDayBody">{renderMealCard(adult, day.slots[0] - 1, 'Adults', true)}{renderMealCard(kids, day.slots[1] - 1, 'Kids', true)}</div>
+      </details>;
+    });
+    return <>{grouped}<div className="cerealDay" aria-label="Friday cereal day"><div><h3 className="dayHeading">Friday</h3><div className="dayCategory">Cereal</div></div><div className="cerealMessage">Enjoy the day off.</div></div>{renderMealCard(meals[8], 8, 'Saturday')}{renderMealCard(meals[9], 9, 'Sunday')}</>;
+  }
+
   return <div className="meal-planner"><div className="app"><div className="shell">
     <header className="plannerHeader">
       {onBack && <button type="button" className="plannerBack" onClick={onBack} aria-label="Back to Meal Planner">‹ Meal Planner</button>}
@@ -1154,40 +1207,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     <section className="card"><RecipeImporter categories={categories} onImport={importRecipe} onManual={() => setManualOpen(true)} busy={busy} dayNames={config.dayNames} autoQueue={config.autoQueue}/></section>
     <section className="card">
       <div className="sectionHead"><h2 className="sectionTitle">{config.capsule ? 'Your breakfast rotation' : "This week's meals"}</h2>{!config.capsule && <div className="weekNav"><button className="iconBtn" aria-label="Previous week" disabled={busy || loadingWeek} onClick={() => changeWeek(-1)}>‹</button><div className="weekLabel">{formatWeekLabel(week)}</div><button className="iconBtn" aria-label="Next week" disabled={busy || loadingWeek} onClick={() => changeWeek(1)}>›</button></div>}</div>
-      {loadingWeek ? <div className="empty">{config.capsule ? 'Loading breakfasts…' : 'Loading week…'}</div> : !loadError && meals.map((meal, index) => {
-        const category = categoryFor(meal.meal_number);
-        const tags = parseTags(meal.tagsText);
-        const match = meal.is_override || matchesCategory(tags, category);
-        const draggedTags = recipeTags[draggedRecipeKey] || EMPTY_TAGS;
-        const canDrop = !!draggedRecipeKey && canDropRecipe(meal, draggedTags, category);
-        return <React.Fragment key={meal.meal_number}>{config.capsule && meal.meal_number === 9 && <div className="cerealDay" aria-label="Friday cereal day"><div><h3 className="dayHeading">Friday</h3><div className="dayCategory">Cereal</div></div><div className="cerealMessage">Enjoy the day off.</div></div>}<details className={`meal${canDrop ? ' dropReady' : ''}${dropTarget === meal.meal_number ? ' dropActive' : ''}`}
-          onDragOver={e => { if (canDrop) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDropTarget(meal.meal_number); } }}
-          onDragLeave={() => setDropTarget(target => target === meal.meal_number ? null : target)}
-          onDrop={e => canDrop && dropRecipe(e, meal.meal_number)}>
-          <summary className="mealSummary"><div><h3 className="dayHeading">{config.dayNames?.[meal.meal_number - 1] || `Day ${meal.meal_number}`}</h3><div className="dayCategory">{meal.is_override ? `Temporary ${meal.override_type || 'manual'} switch` : category?.name || 'Any recipe'}</div></div><div className={`mealSummaryValue${meal.title.trim() ? '' : ' isEmpty'}`}>{meal.title.trim() || 'Empty'}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
-          <div className="mealBody">
-          {!meal.is_override && category?.accepted_tags.length > 0 && <div className="dayRequirement">Requires {category.accepted_tags.join(' or ')}</div>}
-          <div className="fields">
-            <input className="input" aria-label={`Day ${meal.meal_number} meal title`} value={meal.title} disabled={busy} onChange={e => updateMealField(index, 'title', e.target.value)} placeholder="Meal title"/>
-            <input className="input" aria-label={`Day ${meal.meal_number} source`} value={meal.source_ref} disabled={busy} onChange={e => updateMealField(index, 'source_ref', e.target.value)} placeholder="Source — e.g. Cookish p.47 or URL"/>
-            <input className="input" type="number" min="1" step="1" aria-label={`Day ${meal.meal_number} servings`} value={meal.servings ?? ''} disabled={busy} onChange={e => updateMealField(index, 'servings', normalizeServings(e.target.value))} placeholder="Servings"/>
-          </div>
-          <label className="tagField">Recipe tags (comma-separated)<input className="input" aria-label={`Day ${meal.meal_number} recipe tags`} value={meal.tagsText} disabled={busy} onChange={e => updateMealField(index, 'tagsText', e.target.value)} placeholder="e.g. soup, instant pot, vegetarian"/></label>
-          {tags.length > 0 && <div className="tagChips">{tags.map(tag => <span className="tagChip" key={tag}>{tag}</span>)}</div>}
-          {!match && <div className="saveError">Add a recipe tagged {category.accepted_tags.join(' or ')} for this day.</div>}
-          {mealErrors[index] && <div className="saveError" role="alert">{mealErrors[index]}</div>}
-          <div className="dayActions"><span className="small">{meal.dirty ? 'Unsaved changes' : meal.id ? 'Saved' : 'Add a title, source and any required tags.'}{meal.ingredients?.length > 0 && ` · ✓ ${meal.ingredients.length} ingredients loaded`}</span>
-            <button className="btn ghost" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim() || (!meal.dirty && !!meal.id)} onClick={() => saveMeal(index)}>Save meal</button>
-            <button className="btn secondary" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim()} onClick={() => saveMeal(index, true)}>{meal.ingredients ? 'Review ingredients' : 'Extract ingredients'}</button>
-            <button className="btn secondary" disabled={busy || meal.dirty || meal.is_override} onClick={() => setSwitchDay(meal.meal_number)}>Switch</button>
-            <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => unscheduleMeal(index)}>Unschedule</button>
-            {config.capsule && <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index, false)}>Skip · rotate</button>}
-            <button className="btn cookedBtn" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index)}>{config.capsule ? 'Made · rotate' : 'Mark cooked'}</button>
-            {meal.id && !meal.dirty && <span className="dragHint scheduledDragHint" draggable={!busy} onDragStart={e => startScheduledMealDrag(e, meal)} onDragEnd={() => { setDraggedMealNumber(null); setLibraryDropActive(false); }}>Drag to library</span>}
-          </div>
-          </div>
-        </details></React.Fragment>;
-      })}
+      {loadingWeek ? <div className="empty">{config.capsule ? 'Loading breakfasts…' : 'Loading week…'}</div> : !loadError && (config.capsule ? renderBreakfastDays() : meals.map((meal, index) => renderMealCard(meal, index)))}
       <button className="btn generate" onClick={generate} disabled={!ready}>Generate grocery list</button>
       {!ready && <div className="hint">Save at least one breakfast with ingredients to generate your list.</div>}
     </section>

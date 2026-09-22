@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import MealPlanner, { MealPlannerWorkspace } from './MealPlanner';
 import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
-import { BREAKFAST_CATEGORIES, BREAKFAST_SLOTS } from './plannerConfig';
+import { BREAKFAST_CATEGORIES } from './plannerConfig';
 
 const mockFrom = jest.fn();
 const mockInvoke = jest.fn();
@@ -45,7 +45,7 @@ async function change(label, value) {
   await act(async () => { Simulate.change(document.body.querySelector(`[aria-label="${label}"]`), { target: { value } }); });
 }
 function button(text, parent = document.body) { return [...parent.querySelectorAll('button')].find(b => b.textContent === text); }
-function day(n) { const label = container.querySelector('.plannerHeader .brand')?.textContent.startsWith('Breakfasts') ? BREAKFAST_SLOTS[n-1].label : `Day ${n}`; return [...container.querySelectorAll('.meal')].find(el => el.querySelector('h3').textContent === label); }
+function day(n) { return container.querySelector(`[aria-label="Day ${n} meal title"]`)?.closest('.meal'); }
 async function click(el) { await act(async () => { el.click(); }); }
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -94,8 +94,13 @@ test('Breakfasts has its own persistent category rotation and recipe tables', as
   expect(container.querySelector('#recipe-library').textContent).not.toContain('Recipe 1');
   expect(day(8).textContent).toContain('Savory');
   expect(container.querySelectorAll('.meal')).toHaveLength(10);
+  expect(container.querySelectorAll('.breakfastDayGroup, .cerealDay, .meal:not(.breakfastAudienceMeal)')).toHaveLength(7);
+  expect(container.querySelectorAll('.breakfastDayGroup')).toHaveLength(4);
+  expect(container.querySelectorAll('.breakfastAudienceMeal')).toHaveLength(8);
   expect(container.querySelector('[aria-label="Friday cereal day"]').textContent).toContain('Enjoy the day off.');
-  expect([...container.querySelectorAll('.dayHeading')].map(node => node.textContent)).toEqual(['Monday · Adults', 'Monday · Kids', 'Tuesday · Adults', 'Tuesday · Kids', 'Wednesday · Adults', 'Wednesday · Kids', 'Thursday · Adults', 'Thursday · Kids', 'Friday', 'Saturday', 'Sunday']);
+  expect([...container.querySelectorAll('.breakfastDayGroup > .mealSummary > .dayHeading')].map(node => node.textContent)).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday']);
+  expect([...container.querySelectorAll('.breakfastDayGroup:first-of-type .breakfastAudienceMeal .dayHeading')].map(node => node.textContent)).toEqual(['Adults', 'Kids']);
+  expect([...container.querySelectorAll('.cerealDay > div > .dayHeading, .meal:not(.breakfastAudienceMeal) > .mealSummary .dayHeading')].map(node => node.textContent)).toEqual(['Friday', 'Saturday', 'Sunday']);
   expect(container.querySelector('.weekNav')).toBeNull();
   expect(container.textContent).not.toContain('Six rotating breakfast queues');
   expect(container.textContent).not.toContain('Queue choices follow your day categories');
