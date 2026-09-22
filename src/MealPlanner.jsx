@@ -1190,7 +1190,12 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         <div className="breakfastDayBody">{renderMealCard(adult, day.slots[0] - 1, 'Adults', true)}{renderMealCard(kids, day.slots[1] - 1, 'Kids', true)}</div>
       </details>;
     });
-    return <>{grouped}<div className="cerealDay" aria-label="Friday cereal day"><div><h3 className="dayHeading">Friday</h3><div className="dayCategory">Cereal</div></div><div className="cerealMessage">Enjoy the day off.</div></div>{renderMealCard(meals[8], 8, 'Saturday')}{renderMealCard(meals[9], 9, 'Sunday')}</>;
+    const fridayAdult = meals[8];
+    const friday = <details className="breakfastDayGroup" key="Friday">
+      <summary className="mealSummary"><h3 className="dayHeading">Friday</h3><div className="breakfastDayPreview"><span>Adults · {fridayAdult.title.trim() || 'Empty'}</span><span>Kids · Cereal</span><span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
+      <div className="breakfastDayBody">{renderMealCard(fridayAdult, 8, 'Adults', true)}<details className="meal breakfastAudienceMeal breakfastFixedMeal"><summary className="mealSummary"><div><h3 className="dayHeading">Kids</h3><div className="dayCategory">Cereal</div></div><div className="mealSummaryValue">Day off<span className="mealChevron" aria-hidden="true">⌄</span></div></summary><div className="mealBody cerealMessage">Enjoy the day off.</div></details></div>
+    </details>;
+    return <>{grouped}{friday}{renderMealCard(meals[9], 9, 'Saturday')}{renderMealCard(meals[10], 10, 'Sunday')}</>;
   }
 
   return <div className="meal-planner"><div className="app"><div className="shell">
