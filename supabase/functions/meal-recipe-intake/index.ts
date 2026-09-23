@@ -5,6 +5,7 @@ import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queue
 const plannerTables = {
   dinner: { categories: "meal_day_categories", meals: "weekly_meals", queue: "meal_recipe_queue", library: "meal_recipe_library", tags: "meal_recipe_tags" },
   breakfast: { categories: "breakfast_day_categories", meals: "breakfast_weekly_meals", queue: "breakfast_recipe_queue", library: "breakfast_recipe_library", tags: "breakfast_recipe_tags" },
+  lunch: { categories: "lunch_day_categories", meals: "lunch_weekly_meals", queue: "lunch_recipe_queue", library: "lunch_recipe_library", tags: "lunch_recipe_tags" },
 } as const;
 
 const corsHeaders = {
@@ -29,13 +30,15 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const sourceUrl = normalizeRecipeUrl(body?.url);
     const requestedDestination = body?.destination === "library" ? "library" : body?.destination === "queue" ? "queue" : "";
-    const mealType = body?.mealType === undefined || body?.mealType === "dinner" ? "dinner" : body?.mealType === "breakfast" ? "breakfast" : "";
-    const destination = mealType === "breakfast" && requestedDestination ? "queue" : requestedDestination;
+    const mealType = body?.mealType === undefined || body?.mealType === "dinner" ? "dinner" : body?.mealType === "breakfast" ? "breakfast" : body?.mealType === "lunch" ? "lunch" : "";
+    const capsule = mealType === "breakfast" || mealType === "lunch";
+    const destination = capsule && requestedDestination ? "queue" : requestedDestination;
     const weekOf = String(body?.weekOf || "").trim();
     const dryRun = body?.dryRun === true;
     if (!destination) return json({ error: "Choose Import & queue or Import only." }, 400);
-    if (!mealType) return json({ error: "Choose Dinners or Breakfasts." }, 400);
-    if (destination === "queue" && !(mealType === "breakfast" ? weekOf === "breakfast-capsule" : /^\d{4}-W\d{2}$/.test(weekOf))) return json({ error: "The current planning period is missing." }, 400);
+    if (!mealType) return json({ error: "Choose Dinners, Breakfasts or Lunches." }, 400);
+    const validPeriod = mealType === "breakfast" ? weekOf === "breakfast-capsule" : mealType === "lunch" ? weekOf === "lunch-capsule" : /^\d{4}-W\d{2}$/.test(weekOf);
+    if (destination === "queue" && !validPeriod) return json({ error: "The current planning period is missing." }, 400);
     const tables = plannerTables[mealType];
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -54,7 +57,7 @@ Deno.serve(async (req: Request) => {
     const loadError = [categoriesResult, mealsResult, queueResult, existingLibraryResult].find(result => result.error)?.error;
     if (loadError) throw loadError;
     const categories = categoriesResult.data || [];
-    const expectedCategoryCount = mealType === "breakfast" ? 11 : 6;
+    const expectedCategoryCount = mealType === "breakfast" ? 11 : mealType === "lunch" ? 12 : 6;
     if (categories.length !== expectedCategoryCount) throw new Error("Day categories could not be loaded.");
     const categoryTags = [...new Set(categories.flatMap(category => parseTags(category.accepted_tags)))];
 
@@ -89,10 +92,10 @@ Deno.serve(async (req: Request) => {
     const queueRows = queueResult.data || [];
     const existingQueue = destination === "queue" ? queueRows.find(row => row.source_ref === sourceUrl) : null;
     if (destination === "queue") {
-      if (mealType === "breakfast" && !categories.some(category => {
+      if (capsule && !categories.some(category => {
         const accepted = parseTags(category.accepted_tags);
         return !accepted.length || accepted.some(tag => tags.includes(tag));
-      })) return json({ error: "Add a tag that matches a breakfast category before sending this recipe to a queue." }, 422);
+      })) return json({ error: `Add a tag that matches a ${mealType} category before sending this recipe to a queue.` }, 422);
       dayNumber = Number(existingQueue?.day_number || chooseQueueDay(tags, categories, mealsResult.data || []));
     }
     if (dryRun) return json({ ok: true, dryRun: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: !!existingQueue });
@@ -125,7 +128,7 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: true });
     }
 
-    const insertion = mealType === "breakfast" ? queueInsertionBeforeTail(queueRows, dayNumber) : { position: nextQueuePosition(queueRows, dayNumber), tail: null };
+    const insertion = capsule ? queueInsertionBeforeTail(queueRows, dayNumber) : { position: nextQueuePosition(queueRows, dayNumber), tail: null };
     if (insertion.tail) {
       const shifted = await client.from(tables.queue).update({ position: Number(insertion.tail.position) + 1 }).eq("id", insertion.tail.id);
       if (shifted.error) throw shifted.error;
