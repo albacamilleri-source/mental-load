@@ -359,10 +359,10 @@ function QueueRecipe({ item, index, count, tags, categories, busy, onTagsSaved, 
   </div>;
 }
 
-function QueueManager({ queue, categories, tagMap, busy, onClose, onTagsSaved, onMove, onBump, dayNames, meals, rotating }) {
+function QueueManager({ queue, categories, tagMap, busy, onClose, onTagsSaved, onMove, onBump, dayNames, meals, rotating, mealLabel = 'meal' }) {
   const currentIds = new Set(meals.map(meal => meal.queue_item_id).filter(Boolean));
   return <div className="modalBack" role="dialog" aria-modal="true" aria-label="Manage recipe queues"><div className="modal queueModal">
-    <div className="modalHead"><div><h2 className="sectionTitle">Recipe queues</h2><div className="small">{rotating ? 'The current breakfast stays scheduled until you mark it made. It then moves to the back and the first waiting recipe takes its place.' : 'The first recipe in each queue fills that day. Reorder recipes or move them to another day.'}</div></div><button className="iconBtn" aria-label="Close recipe queues" onClick={onClose}>×</button></div>
+    <div className="modalHead"><div><h2 className="sectionTitle">Recipe queues</h2><div className="small">{rotating ? `The current ${mealLabel} stays scheduled until you mark it made. It then moves to the back and the first waiting recipe takes its place.` : 'The first recipe in each queue fills that day. Reorder recipes or move them to another day.'}</div></div><button className="iconBtn" aria-label="Close recipe queues" onClick={onClose}>×</button></div>
     <div className="queueColumns">{categories.map(category => { const rows = queueForDay(queue, category.day_number); return <section className="queueDay" key={category.day_number}>
       <h3>{dayNames?.[category.day_number - 1] || `Day ${category.day_number}`}{category.name ? ` · ${category.name}` : ''}</h3><div className="small">{category.accepted_tags?.length ? `Accepts ${category.accepted_tags.join(' or ')}` : 'No required tag'}</div>
       {rows.length ? rows.map((item, index) => <QueueRecipe key={item.id} item={item} index={index} count={rows.length} tags={recipeTagsFor(item, tagMap)} categories={categories} busy={busy} onTagsSaved={onTagsSaved} onMove={onMove} onBump={onBump} dayNames={dayNames} current={rotating && currentIds.has(item.id)}/>) : <div className="empty queueEmpty">Queue empty</div>}
@@ -520,7 +520,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   const dayName = day => config.dayNames?.[day - 1] || `Day ${day}`;
   function queueDayFor(tags) {
     if (config.capsule && !categories.some(category => matchesCategory(tags, category))) {
-      throw new Error('Add a tag that matches a breakfast category before sending this recipe to a queue.');
+      throw new Error(`Add a tag that matches a ${config.singular} category before sending this recipe to a queue.`);
     }
     return chooseQueueDay(tags, categories, meals);
   }
@@ -541,7 +541,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (error) throw error;
     return { queued, nextQueue: [...baseQueue, queued] };
   }
-  const [week, setWeek] = useState(config.capsule ? 'breakfast-capsule' : isoWeek(new Date()));
+  const [week, setWeek] = useState(config.periodKey || isoWeek(new Date()));
   const [meals, setMeals] = useState([]);
   const [loadingWeek, setLoadingWeek] = useState(true);
   const [reload, setReload] = useState(0);
@@ -950,7 +950,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     const tags = recipeTags[recipeKey(recipe)] || [];
     const matchingRules = emptyCategories.filter(category => parseTags(category.accepted_tags).length > 0 && matchesCategory(tags, category));
     const noRuleDays = emptyCategories.filter(category => parseTags(category.accepted_tags).length === 0);
-    if (config.capsule && !matchingRules.length && !noRuleDays.length) return 'No empty breakfast day matches this recipe’s tags. Edit the tags or clear a matching day.';
+    if (config.capsule && !matchingRules.length && !noRuleDays.length) return `No empty ${config.singular} day matches this recipe’s tags. Edit the tags or clear a matching day.`;
     const candidates = matchingRules.length ? matchingRules : noRuleDays.length ? noRuleDays : emptyCategories;
     const category = candidates[Math.floor(Math.random() * candidates.length)];
     useInFlight.current = true;
@@ -1035,7 +1035,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       setLibraryRecords(prev => [banked, ...prev.filter(r => r.recipe_key !== key)]);
       setQueueRows(nextQueue);
       setMeals(prev => prev.map((m, i) => i === index ? nextMeal : m));
-      setGroceryGenerated(false); setToast(config.capsule ? markAsTried ? `${meal.title} made · next breakfast scheduled` : `${meal.title} skipped · next breakfast scheduled` : `${meal.title} marked as cooked`);
+      setGroceryGenerated(false); setToast(config.capsule ? markAsTried ? `${meal.title} made · next ${config.singular} scheduled` : `${meal.title} skipped · next ${config.singular} scheduled` : `${meal.title} marked as cooked`);
     } catch (e) { setMealErrors(prev => ({ ...prev, [index]: e.message || 'Could not mark this recipe as cooked. Please retry.' })); }
     finally { setBusy(false); }
   }
@@ -1175,33 +1175,28 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     </details>;
   }
 
-  function renderBreakfastDays() {
-    const weekdays = [
-      { name: 'Monday', slots: [1, 2] },
-      { name: 'Tuesday', slots: [3, 4] },
-      { name: 'Wednesday', slots: [5, 6] },
-      { name: 'Thursday', slots: [7, 8] },
-    ];
-    const grouped = weekdays.map(day => {
-      const adult = meals[day.slots[0] - 1];
-      const kids = meals[day.slots[1] - 1];
+  function renderCapsuleDays() {
+    return <>{config.dayGroups.map(day => {
+      if (day.entries.length === 1 && !day.entries[0].fixed) {
+        const entry = day.entries[0];
+        return renderMealCard(meals[entry.slot - 1], entry.slot - 1, day.name);
+      }
       return <details className="breakfastDayGroup" key={day.name}>
-        <summary className="mealSummary"><h3 className="dayHeading">{day.name}</h3><div className="breakfastDayPreview"><span>Adults · {adult.title.trim() || 'Empty'}</span><span>Kids · {kids.title.trim() || 'Empty'}</span><span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
-        <div className="breakfastDayBody">{renderMealCard(adult, day.slots[0] - 1, 'Adults', true)}{renderMealCard(kids, day.slots[1] - 1, 'Kids', true)}</div>
+        <summary className="mealSummary"><h3 className="dayHeading">{day.name}</h3><div className="breakfastDayPreview">{day.entries.map(entry => {
+          const title = entry.fixed ? entry.category : meals[entry.slot - 1].title.trim() || 'Empty';
+          return <span key={entry.label}>{entry.label} · {title}</span>;
+        })}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
+        <div className="breakfastDayBody">{day.entries.map(entry => entry.fixed
+          ? <details className="meal breakfastAudienceMeal breakfastFixedMeal" key={entry.label}><summary className="mealSummary"><div><h3 className="dayHeading">{entry.label}</h3><div className="dayCategory">{entry.category}</div></div><div className="mealSummaryValue">{entry.summary}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary><div className="mealBody cerealMessage">{entry.message}</div></details>
+          : renderMealCard(meals[entry.slot - 1], entry.slot - 1, entry.label, true))}</div>
       </details>;
-    });
-    const fridayAdult = meals[8];
-    const friday = <details className="breakfastDayGroup" key="Friday">
-      <summary className="mealSummary"><h3 className="dayHeading">Friday</h3><div className="breakfastDayPreview"><span>Adults · {fridayAdult.title.trim() || 'Empty'}</span><span>Kids · Cereal</span><span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
-      <div className="breakfastDayBody">{renderMealCard(fridayAdult, 8, 'Adults', true)}<details className="meal breakfastAudienceMeal breakfastFixedMeal"><summary className="mealSummary"><div><h3 className="dayHeading">Kids</h3><div className="dayCategory">Cereal</div></div><div className="mealSummaryValue">Day off<span className="mealChevron" aria-hidden="true">⌄</span></div></summary><div className="mealBody cerealMessage">Enjoy the day off.</div></details></div>
-    </details>;
-    return <>{grouped}{friday}{renderMealCard(meals[9], 9, 'Saturday')}{renderMealCard(meals[10], 10, 'Sunday')}</>;
+    })}</>;
   }
 
   return <div className="meal-planner"><div className="app"><div className="shell">
     <header className="plannerHeader">
       {onBack && <button type="button" className="plannerBack" onClick={onBack} aria-label="Back to Meal Planner">‹ Meal Planner</button>}
-      <div className="plannerMonth">{config.capsule ? 'The breakfast rotation' : new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</div>
+      <div className="plannerMonth">{config.capsule ? `The ${config.singular} rotation` : new Date().toLocaleDateString('en-GB', {month:'long', year:'numeric'})}</div>
       <div className="plannerTitleRow">
         <h1 className="brand">{config.title}<span className="brandDot">.</span></h1>
         <div className="plannerHeaderActions"><button className="categoryToggle" disabled={busy || loadingWeek || !!loadError} aria-expanded={queueOpen} onClick={() => setQueueOpen(true)}>Manage queues{queueRows.length ? ` · ${queueRows.length}` : ''}</button><button className="categoryToggle" disabled={busy || loadingWeek || !!loadError} aria-expanded={settingsOpen} aria-controls="category-editor" onClick={() => setSettingsOpen(true)}>Edit categories</button></div>
@@ -1211,15 +1206,15 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     {loadError && <div className="plannerNotice" role="alert">{loadError} <button className="btn secondary" onClick={() => setReload(n => n + 1)}>Retry</button></div>}
     <section className="card"><RecipeImporter categories={categories} onImport={importRecipe} onManual={() => setManualOpen(true)} busy={busy} dayNames={config.dayNames} autoQueue={config.autoQueue}/></section>
     <section className="card">
-      <div className="sectionHead"><h2 className="sectionTitle">{config.capsule ? 'Your breakfast rotation' : "This week's meals"}</h2>{!config.capsule && <div className="weekNav"><button className="iconBtn" aria-label="Previous week" disabled={busy || loadingWeek} onClick={() => changeWeek(-1)}>‹</button><div className="weekLabel">{formatWeekLabel(week)}</div><button className="iconBtn" aria-label="Next week" disabled={busy || loadingWeek} onClick={() => changeWeek(1)}>›</button></div>}</div>
-      {loadingWeek ? <div className="empty">{config.capsule ? 'Loading breakfasts…' : 'Loading week…'}</div> : !loadError && (config.capsule ? renderBreakfastDays() : meals.map((meal, index) => renderMealCard(meal, index)))}
+      <div className="sectionHead"><h2 className="sectionTitle">{config.capsule ? `Your ${config.singular} rotation` : "This week's meals"}</h2>{!config.capsule && <div className="weekNav"><button className="iconBtn" aria-label="Previous week" disabled={busy || loadingWeek} onClick={() => changeWeek(-1)}>‹</button><div className="weekLabel">{formatWeekLabel(week)}</div><button className="iconBtn" aria-label="Next week" disabled={busy || loadingWeek} onClick={() => changeWeek(1)}>›</button></div>}</div>
+      {loadingWeek ? <div className="empty">{config.capsule ? `Loading ${config.title.toLowerCase()}…` : 'Loading week…'}</div> : !loadError && (config.capsule ? renderCapsuleDays() : meals.map((meal, index) => renderMealCard(meal, index)))}
       <button className="btn generate" onClick={generate} disabled={!ready}>Generate grocery list</button>
-      {!ready && <div className="hint">Save at least one breakfast with ingredients to generate your list.</div>}
+      {!ready && <div className="hint">Save at least one {config.singular} with ingredients to generate your list.</div>}
     </section>
     {groceryGenerated && ready && <section className="card" id="grocery">
       <div className="rowBetween"><div><h2 className="sectionTitle">Grocery list</h2><div className="small">Plain text, ready for iOS Reminders.</div></div><button className="btn copyBtn" onClick={copyList}>Copy</button></div>
       {mergeSuggestions.length > 0 && <div className="mergeBox"><div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Suggested merges — confirm these</div>{mergeSuggestions.map(s => <label className="mergeRow" key={s.id}><span><b>{s.variants.join(' + ')}</b> → {s.canonical}</span><input className="toggle" type="checkbox" checked={s.enabled} onChange={() => setMergeSuggestions(prev => prev.map(x => x.id === s.id ? { ...x, enabled: !x.enabled } : x))}/></label>)}</div>}
-      <div className="groceryBox">{groceryText || (config.capsule ? 'No ingredients are loaded for the scheduled breakfasts yet.' : '')}</div>
+      <div className="groceryBox">{groceryText || (config.capsule ? `No ingredients are loaded for the scheduled ${config.title.toLowerCase()} yet.` : '')}</div>
     </section>}
     <section className={`card${draggedMealNumber ? ' libraryDropReady' : ''}${libraryDropActive ? ' libraryDropActive' : ''}`} id="recipe-library" onDragOver={event => { if (draggedMealNumber) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setLibraryDropActive(true); } }} onDragLeave={() => setLibraryDropActive(false)} onDrop={event => draggedMealNumber && dropScheduledMeal(event)}>
       <div className="rowBetween"><h2 className="sectionTitle">Recipe library</h2><button className="btn ghost" aria-expanded={libraryOpen} disabled={loadingWeek || !!loadError} onClick={() => setLibraryOpen(v => !v)}>{libraryOpen ? 'Hide library' : 'Browse library'}</button></div>
@@ -1227,7 +1222,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     </section>
   </div></div>{(modalMeal || toast || queueOpen || settingsOpen || switchDay !== null || detailsRecipe || manualOpen) && createPortal(<div className="meal-planner">
     {modalMeal && <ExtractionModal meal={modalMeal} tags={parseTags(modalMeal.tagsText)} category={categoryFor(modalMeal.meal_number)} weeklyMealsTable={config.tables.weekly_meals} onClose={() => setModalMeal(null)} onSaved={onIngredientSaved}/>}
-    {queueOpen && <QueueManager queue={queueRows} categories={categories} tagMap={recipeTags} busy={busy} onClose={() => setQueueOpen(false)} onTagsSaved={savePastTags} onMove={moveQueueItem} onBump={bumpQueueItem} dayNames={config.dayNames} meals={meals} rotating={config.capsule}/>}
+    {queueOpen && <QueueManager queue={queueRows} categories={categories} tagMap={recipeTags} busy={busy} onClose={() => setQueueOpen(false)} onTagsSaved={savePastTags} onMove={moveQueueItem} onBump={bumpQueueItem} dayNames={config.dayNames} meals={meals} rotating={config.capsule} mealLabel={config.singular}/>}
     {settingsOpen && <div className="modalBack" role="dialog" aria-modal="true" aria-label="Edit day categories"><div className="modal categoryModal" id="category-editor"><div className="modalHead"><h2 className="sectionTitle">Day categories</h2><button type="button" className="iconBtn" aria-label="Close categories" onClick={() => setSettingsOpen(false)}>×</button></div><CategoryEditor categories={categories} onSave={saveCategories} busy={busy} dayNames={config.dayNames}/></div></div>}
     {switchDay !== null && <SwitchMealModal day={switchDay} library={libraryRecipes} tagMap={recipeTags} busy={busy} onClose={() => setSwitchDay(null)} onSave={switchMeal} rotating={config.capsule}/>}
     {currentDetailsRecipe && <RecipeDetailsModal recipe={currentDetailsRecipe} tags={recipeTags[recipeKey(currentDetailsRecipe)] || EMPTY_TAGS} scheduledDays={recipeDays(meals, currentDetailsRecipe, 'meal_number')} queuedDays={recipeDays(queueRows, currentDetailsRecipe, 'day_number')} busy={busy} cookedBusy={cookedUpdatingKey === recipeKey(currentDetailsRecipe)} onTagsSaved={savePastTags} onToggleCooked={toggleCookedStatus} onClose={() => setDetailsRecipe(null)} onSave={saveRecipeDetails} statusMode={config.capsule ? 'tried' : 'cooked'}/>}
@@ -1239,8 +1234,13 @@ const EMPTY_TAGS = [];
 
 function viewFromHash() {
   if (window.location.hash === '#meal-planner/breakfasts') return 'breakfast';
+  if (window.location.hash === '#meal-planner/lunches') return 'lunch';
   if (window.location.hash === '#meal-planner/dinners') return 'dinner';
   return null;
+}
+
+function plannerHash(view) {
+  return `#meal-planner/${view === 'breakfast' ? 'breakfasts' : view === 'lunch' ? 'lunches' : 'dinners'}`;
 }
 
 export default function MealPlanner({ onDirtyChange, onPathChange } = {}) {
@@ -1253,7 +1253,7 @@ export default function MealPlanner({ onDirtyChange, onPathChange } = {}) {
       const next = viewFromHash();
       if (next === view) return;
       if (view && dirty && !window.confirm('Leave this plan? Any unsaved changes will be lost.')) {
-        const previousHash = `#meal-planner/${view === 'breakfast' ? 'breakfasts' : 'dinners'}`;
+        const previousHash = plannerHash(view);
         window.history.replaceState(window.history.state, '', previousHash);
         onPathChange?.(previousHash);
         return;
@@ -1267,7 +1267,7 @@ export default function MealPlanner({ onDirtyChange, onPathChange } = {}) {
   function navigate(next) {
     if (view && dirty && !window.confirm('Leave this plan? Any unsaved changes will be lost.')) return;
     const url = new URL(window.location.href);
-    url.hash = next ? `meal-planner/${next === 'breakfast' ? 'breakfasts' : 'dinners'}` : 'meal-planner';
+    url.hash = next ? plannerHash(next) : 'meal-planner';
     window.history.pushState(window.history.state, '', url);
     onPathChange?.(url.hash);
     setDirty(false); reportDirty(false); setView(next);
@@ -1278,7 +1278,8 @@ export default function MealPlanner({ onDirtyChange, onPathChange } = {}) {
     <header className="plannerHeader plannerHomeHeader"><div className="plannerMonth">Make space for what matters</div><h1 className="brand">Meal Planner<span className="brandDot">.</span></h1><p className="plannerHomeIntro">What would you like to plan?</p></header>
     <div className="plannerChoices">
       <button type="button" className="plannerChoice" onClick={() => navigate('breakfast')} aria-label="Open Breakfasts planner"><span className="plannerChoiceNumber">01 / BREAKFASTS</span><span className="plannerChoiceTitle">Breakfasts <span aria-hidden="true">↗</span></span><span className="plannerChoiceDescription">Your ongoing breakfast rotation, recipes and queues.</span></button>
-      <button type="button" className="plannerChoice" onClick={() => navigate('dinner')} aria-label="Open Dinners planner"><span className="plannerChoiceNumber">02 / DINNERS</span><span className="plannerChoiceTitle">Dinners <span aria-hidden="true">↗</span></span><span className="plannerChoiceDescription">Your current six-day plan, recipe library and queues.</span></button>
+      <button type="button" className="plannerChoice" onClick={() => navigate('lunch')} aria-label="Open Lunches planner"><span className="plannerChoiceNumber">02 / LUNCHES</span><span className="plannerChoiceTitle">Lunches <span aria-hidden="true">↗</span></span><span className="plannerChoiceDescription">Your ongoing lunch rotation, recipes and queues.</span></button>
+      <button type="button" className="plannerChoice" onClick={() => navigate('dinner')} aria-label="Open Dinners planner"><span className="plannerChoiceNumber">03 / DINNERS</span><span className="plannerChoiceTitle">Dinners <span aria-hidden="true">↗</span></span><span className="plannerChoiceDescription">Your current six-day plan, recipe library and queues.</span></button>
     </div>
   </div></div></div>;
 }
