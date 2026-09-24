@@ -14,6 +14,15 @@
         <div id="page-title" class="title">Reading this page…</div>
         <div id="page-url" class="url"></div>
       </section>
+      <fieldset class="planner-picker">
+        <legend>Send to</legend>
+        <div class="planner-options">
+          <label><input type="radio" name="meal-type" value="breakfast"><span>Breakfast</span></label>
+          <label><input type="radio" name="meal-type" value="lunch"><span>Lunch</span></label>
+          <label><input type="radio" name="meal-type" value="dinner" checked><span>Dinner</span></label>
+        </div>
+        <div id="planner-help" class="help">Choose whether this recipe belongs in your Breakfast, Lunch or Dinner library.</div>
+      </fieldset>
       <div id="initial-actions" class="actions">
         <button id="import-queue" type="button">Import &amp; queue</button>
         <button id="import-only" class="secondary" type="button">Import only</button>
