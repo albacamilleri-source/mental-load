@@ -6,6 +6,7 @@ const plannerTables = {
   dinner: { categories: "meal_day_categories", meals: "weekly_meals", queue: "meal_recipe_queue", library: "meal_recipe_library", tags: "meal_recipe_tags" },
   breakfast: { categories: "breakfast_day_categories", meals: "breakfast_weekly_meals", queue: "breakfast_recipe_queue", library: "breakfast_recipe_library", tags: "breakfast_recipe_tags" },
   lunch: { categories: "lunch_day_categories", meals: "lunch_weekly_meals", queue: "lunch_recipe_queue", library: "lunch_recipe_library", tags: "lunch_recipe_tags" },
+  kids_lunch: { categories: "kids_lunch_day_categories", meals: "kids_lunch_weekly_meals", queue: "kids_lunch_recipe_queue", library: "kids_lunch_recipe_library", tags: "kids_lunch_recipe_tags" },
 } as const;
 
 const corsHeaders = {
@@ -30,14 +31,14 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const sourceUrl = normalizeRecipeUrl(body?.url);
     const requestedDestination = body?.destination === "library" ? "library" : body?.destination === "queue" ? "queue" : "";
-    const mealType = body?.mealType === undefined || body?.mealType === "dinner" ? "dinner" : body?.mealType === "breakfast" ? "breakfast" : body?.mealType === "lunch" ? "lunch" : "";
-    const capsule = mealType === "breakfast" || mealType === "lunch";
+    const mealType = body?.mealType === undefined || body?.mealType === "dinner" ? "dinner" : body?.mealType === "breakfast" ? "breakfast" : body?.mealType === "lunch" ? "lunch" : body?.mealType === "kids_lunch" ? "kids_lunch" : "";
+    const capsule = mealType === "breakfast" || mealType === "lunch" || mealType === "kids_lunch";
     const destination = capsule && requestedDestination ? "queue" : requestedDestination;
     const weekOf = String(body?.weekOf || "").trim();
     const dryRun = body?.dryRun === true;
     if (!destination) return json({ error: "Choose Import & queue or Import only." }, 400);
-    if (!mealType) return json({ error: "Choose Dinners, Breakfasts or Lunches." }, 400);
-    const validPeriod = mealType === "breakfast" ? weekOf === "breakfast-capsule" : mealType === "lunch" ? weekOf === "lunch-capsule" : /^\d{4}-W\d{2}$/.test(weekOf);
+    if (!mealType) return json({ error: "Choose Dinners, Breakfasts, Adult Lunches or Kids Lunches." }, 400);
+    const validPeriod = mealType === "breakfast" ? weekOf === "breakfast-capsule" : mealType === "lunch" ? weekOf === "lunch-capsule" : mealType === "kids_lunch" ? weekOf === "kids-lunch-capsule" : /^\d{4}-W\d{2}$/.test(weekOf);
     if (destination === "queue" && !validPeriod) return json({ error: "The current planning period is missing." }, 400);
     const tables = plannerTables[mealType];
 
@@ -57,7 +58,7 @@ Deno.serve(async (req: Request) => {
     const loadError = [categoriesResult, mealsResult, queueResult, existingLibraryResult].find(result => result.error)?.error;
     if (loadError) throw loadError;
     const categories = categoriesResult.data || [];
-    const expectedCategoryCount = mealType === "breakfast" ? 11 : mealType === "lunch" ? 12 : 6;
+    const expectedCategoryCount = mealType === "breakfast" ? 11 : mealType === "lunch" || mealType === "kids_lunch" ? 7 : 6;
     if (categories.length !== expectedCategoryCount) throw new Error("Day categories could not be loaded.");
     const categoryTags = [...new Set(categories.flatMap(category => parseTags(category.accepted_tags)))];
 
@@ -70,7 +71,7 @@ Deno.serve(async (req: Request) => {
       const extractionResponse = await fetch(`${supabaseUrl}/functions/v1/meal-recipe-import`, {
         method: "POST",
         headers: { Authorization: authorization, apikey, "Content-Type": "application/json" },
-        body: JSON.stringify({ url: sourceUrl, categoryTags, mealType }),
+        body: JSON.stringify({ url: sourceUrl, categoryTags, mealType: mealType === "kids_lunch" ? "lunch" : mealType }),
       });
       extraction = await extractionResponse.json().catch(() => ({}));
       if (!extractionResponse.ok) return json({ error: extraction?.error || "The recipe could not be extracted.", code: extraction?.code || "EXTRACTION_FAILED" }, extractionResponse.status);
@@ -95,7 +96,7 @@ Deno.serve(async (req: Request) => {
       if (capsule && !categories.some(category => {
         const accepted = parseTags(category.accepted_tags);
         return !accepted.length || accepted.some(tag => tags.includes(tag));
-      })) return json({ error: `Add a tag that matches a ${mealType} category before sending this recipe to a queue.` }, 422);
+      })) return json({ error: `Add a tag that matches a ${mealType === "kids_lunch" ? "kids lunch" : mealType} category before sending this recipe to a queue.` }, 422);
       dayNumber = Number(existingQueue?.day_number || chooseQueueDay(tags, categories, mealsResult.data || []));
     }
     if (dryRun) return json({ ok: true, dryRun: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: !!existingQueue });

@@ -22,21 +22,31 @@ export const BREAKFAST_CATEGORIES = BREAKFAST_SLOTS.map(slot => ({
 }));
 
 export const LUNCH_SLOTS = [
-  { day_number: 1, day_name: 'Monday', audience: 'adults', label: 'Monday · Adults' },
-  { day_number: 2, day_name: 'Monday', audience: 'kids', label: 'Monday · Kids' },
-  { day_number: 3, day_name: 'Tuesday', audience: 'adults', label: 'Tuesday · Adults' },
-  { day_number: 4, day_name: 'Tuesday', audience: 'kids', label: 'Tuesday · Kids' },
-  { day_number: 5, day_name: 'Wednesday', audience: 'adults', label: 'Wednesday · Adults' },
-  { day_number: 6, day_name: 'Wednesday', audience: 'kids', label: 'Wednesday · Kids' },
-  { day_number: 7, day_name: 'Thursday', audience: 'adults', label: 'Thursday · Adults' },
-  { day_number: 8, day_name: 'Thursday', audience: 'kids', label: 'Thursday · Kids' },
-  { day_number: 9, day_name: 'Friday', audience: 'adults', label: 'Friday · Adults' },
-  { day_number: 10, day_name: 'Friday', audience: 'kids', label: 'Friday · Kids' },
-  { day_number: 11, day_name: 'Saturday', audience: 'shared', label: 'Saturday' },
-  { day_number: 12, day_name: 'Sunday', audience: 'shared', label: 'Sunday' },
-];
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+].map((day_name, index) => ({
+  day_number: index + 1,
+  day_name,
+  audience: 'adults',
+  label: day_name,
+}));
+
+export const KIDS_LUNCH_SLOTS = [
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+].map((day_name, index) => ({
+  day_number: index + 1,
+  day_name,
+  audience: 'kids',
+  label: day_name,
+}));
 
 export const LUNCH_CATEGORIES = LUNCH_SLOTS.map(slot => ({
+  ...slot,
+  sort_order: slot.day_number,
+  name: '',
+  accepted_tags: [],
+}));
+
+export const KIDS_LUNCH_CATEGORIES = KIDS_LUNCH_SLOTS.map(slot => ({
   ...slot,
   sort_order: slot.day_number,
   name: '',
@@ -79,6 +89,16 @@ const lunchTables = {
   meal_recipe_queue: 'lunch_recipe_queue',
 };
 
+const kidsLunchTables = {
+  weekly_meals: 'kids_lunch_weekly_meals',
+  meal_recipe_tags: 'kids_lunch_recipe_tags',
+  meal_day_categories: 'kids_lunch_day_categories',
+  meal_recipe_library: 'kids_lunch_recipe_library',
+  meal_recipe_queue: 'kids_lunch_recipe_queue',
+  side_options: 'kids_lunch_side_options',
+  day_sides: 'kids_lunch_day_sides',
+};
+
 const breakfastDayGroups = [
   ...pairedDayGroups(['Monday', 'Tuesday', 'Wednesday', 'Thursday'], 10).slice(0, 4),
   {
@@ -94,5 +114,6 @@ const breakfastDayGroups = [
 export const PLANNER_CONFIG = {
   dinner: { title: 'Dinners', singular: 'dinner', tables: dinnerTables, defaultCategories: DEFAULT_CATEGORIES, slotCount: 6 },
   breakfast: { title: 'Breakfasts', singular: 'breakfast', tables: breakfastTables, defaultCategories: BREAKFAST_CATEGORIES, slotCount: 11, capsule: true, autoQueue: true, periodKey: 'breakfast-capsule', dayNames: BREAKFAST_SLOTS.map(slot => slot.label), dayGroups: breakfastDayGroups },
-  lunch: { title: 'Lunches', singular: 'lunch', tables: lunchTables, defaultCategories: LUNCH_CATEGORIES, slotCount: 12, capsule: true, autoQueue: true, periodKey: 'lunch-capsule', dayNames: LUNCH_SLOTS.map(slot => slot.label), dayGroups: pairedDayGroups(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], 11) },
+  lunch: { title: 'Adult Lunches', singular: 'lunch', tables: lunchTables, defaultCategories: LUNCH_CATEGORIES, slotCount: 7, capsule: true, autoQueue: true, periodKey: 'lunch-capsule', dayNames: LUNCH_SLOTS.map(slot => slot.label), dayGroups: LUNCH_SLOTS.map(slot => ({ name: slot.day_name, entries: [{ slot: slot.day_number, label: slot.label }] })) },
+  kids_lunch: { title: 'Kids Lunches', singular: 'kids lunch', tables: kidsLunchTables, defaultCategories: KIDS_LUNCH_CATEGORIES, slotCount: 7, capsule: true, autoQueue: true, periodKey: 'kids-lunch-capsule', dayNames: KIDS_LUNCH_SLOTS.map(slot => slot.label), dayGroups: KIDS_LUNCH_SLOTS.map(slot => ({ name: slot.day_name, entries: [{ slot: slot.day_number, label: slot.label }] })), hasSides: true },
 };
