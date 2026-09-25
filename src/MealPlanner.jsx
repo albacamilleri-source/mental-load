@@ -258,7 +258,7 @@ function ExtractionModal({ meal, onClose, onSaved, category, tags, weeklyMealsTa
         <div className="actions"><button className="btn secondary" onClick={onClose}>Cancel</button><button className="btn" onClick={extract} disabled={loading}>{loading&&<span className="spinner"/>}{loading?"Extracting…":"Extract ingredients"}</button></div>
       </>}
       {ingredients && <>
-        <label className="tagField">Servings yielded<input className="input" type="number" min="1" step="1" aria-label="Recipe servings" value={servings} onChange={e=>setServings(e.target.value)} placeholder="Not specified"/></label>
+        <label className="tagField">Servings needed<input className="input" type="number" min="1" step="1" aria-label="Servings needed for scheduled meal" value={servings} onChange={e=>setServings(e.target.value)} placeholder="Not specified"/></label>
         <div className="reviewTable">
           {ingredients.map((ing,idx)=><div className="ingredientRow" key={idx}>
             <input className="input" value={ing.name} onChange={e=>updateRow(idx,"name",e.target.value)} placeholder="ingredient"/>
@@ -434,7 +434,7 @@ function SwitchMealModal({ day, library, tagMap, busy, onClose, onSave, rotating
       <label className="tagField">Recipe title<input className="input" aria-label="Switch recipe title" value={title} onChange={e => setTitle(e.target.value)}/></label>
       <label className="tagField">Source<input className="input" aria-label="Switch recipe source" value={source} onChange={e => setSource(e.target.value)} placeholder="Cookbook and page, printed recipe, or note"/></label>
       <label className="tagField">Recipe tags<input className="input" aria-label="Switch recipe tags" value={tagsText} onChange={e => setTagsText(e.target.value)} placeholder="e.g. pasta, soup"/></label>
-      <label className="tagField">Servings yielded<input className="input" type="number" min="1" step="1" aria-label="Switch recipe servings" value={servings} onChange={e => setServings(e.target.value)} placeholder="Not specified"/></label>
+      <label className="tagField">Servings needed<input className="input" type="number" min="1" step="1" aria-label="Switch meal servings needed" value={servings} onChange={e => setServings(e.target.value)} placeholder="Not specified"/></label>
     </>}
     {error && <div className="saveError" role="alert">{error}</div>}
     <div className="actions"><button type="button" className="btn secondary" onClick={onClose}>Cancel</button><button className="btn" disabled={busy}>Switch meal</button></div>
@@ -485,11 +485,11 @@ function RecipeDetailsModal({ recipe, tags, scheduledDays, queuedDays, busy, coo
   }
   return <div className="modalBack" role="dialog" aria-modal="true" aria-label={`Recipe details for ${recipe.title}`} onMouseDown={event => { if (event.target === event.currentTarget && !busy && !tagsSaving) onClose(); }}><form className="modal recipeDetailsModal" onSubmit={submit}>
     <div className="modalHead"><div><h2 className="sectionTitle">{recipe.title}</h2><div className="small">Recipe details</div></div><button type="button" className="iconBtn" aria-label="Close recipe details" disabled={busy || tagsSaving} onClick={onClose}>×</button></div>
-    <div className="recipeDetailStatuses">{recipe.servings && <span className="recipeStatus">Serves {recipe.servings}</span>}{showCookedStatus && <button type="button" className={`recipeStatus statusButton ${recipe.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy} aria-label={`${recipe.has_been_cooked ? `Mark as not ${statusMode === 'tried' ? 'tried' : 'cooked yet'}` : `Mark as ${statusMode === 'tried' ? 'tried' : 'cooked'}`}: ${recipe.title}`} onClick={async () => { const message = await onToggleCooked(recipe); if (message) setError(message); else setError(''); }}>{cookedBusy ? 'Updating…' : recipe.has_been_cooked ? statusMode === 'tried' ? '✓ Tried' : '✓ Cooked' : statusMode === 'tried' ? 'Not tried yet' : 'Not cooked yet'}</button>}{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}</div>
+    <div className="recipeDetailStatuses">{recipe.servings && <span className="recipeStatus">Yields {recipe.servings} servings</span>}{showCookedStatus && <button type="button" className={`recipeStatus statusButton ${recipe.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy} aria-label={`${recipe.has_been_cooked ? `Mark as not ${statusMode === 'tried' ? 'tried' : 'cooked yet'}` : `Mark as ${statusMode === 'tried' ? 'tried' : 'cooked'}`}: ${recipe.title}`} onClick={async () => { const message = await onToggleCooked(recipe); if (message) setError(message); else setError(''); }}>{cookedBusy ? 'Updating…' : recipe.has_been_cooked ? statusMode === 'tried' ? '✓ Tried' : '✓ Cooked' : statusMode === 'tried' ? 'Not tried yet' : 'Not cooked yet'}</button>}{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}</div>
     <label className="tagField recipeDetailTags">Recipe tags<input className="input" aria-label={`Tags for ${recipe.title} in details`} value={tagsText} disabled={busy || tagSaveState === 'saving'} onChange={event => setTagsText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="e.g. soup, vegetarian"/></label>
     {tagSaveState !== 'idle' && <div className={`tagSaveState ${tagSaveState}`} role="status">{tagSaveState === 'pending' ? 'Saving soon…' : tagSaveState === 'saving' ? 'Saving…' : tagSaveState === 'saved' ? '✓ Tags saved' : 'Tag save failed'}</div>}
     <label className="tagField">Recipe URL or source<input className="input" aria-label={`URL or source for ${recipe.title}`} value={source} disabled={busy} onChange={event => setSource(event.target.value)} placeholder="Recipe URL, cookbook and page, or note"/></label>
-    <label className="tagField">Servings yielded<input className="input" type="number" min="1" step="1" aria-label={`Servings for ${recipe.title}`} value={servings} disabled={busy} onChange={event => setServings(event.target.value)} placeholder="Not specified"/></label>
+    <label className="tagField">Recipe yield<input className="input" type="number" min="1" step="1" aria-label={`Recipe yield for ${recipe.title}`} value={servings} disabled={busy} onChange={event => setServings(event.target.value)} placeholder="Not specified"/></label>
     <div className="recipeDetailSection"><h3>Ingredients</h3>{recipe.ingredients?.length > 0 ? <ul>{recipe.ingredients.map((ingredient, index) => <li key={`${ingredient.name}-${index}`}>{ingredient.name}{(ingredient.qty != null || ingredient.unit) ? ` · ${displayQty(ingredient.qty, ingredient.unit)}` : ''}</li>)}</ul> : <div className="small">No ingredients saved yet.</div>}</div>
     <label className="tagField recipeMethod">Method<textarea className="input" aria-label={`Method for ${recipe.title}`} value={method} disabled={busy} onChange={event => setMethod(event.target.value)} rows="10" placeholder="Type or paste the cooking method here…"/></label>
     {error && <div className="saveError" role="alert">{error}</div>}
@@ -530,7 +530,7 @@ function RecipeCard({ meal, tags, scheduledDays = [], queuedDays = [], onTagsSav
   }, [saveState]);
   const tagsSaving = changed || saveState === 'saving';
   return <div className={`recipeCard${draggable ? ' draggableRecipe' : ''}`} draggable={draggable && !busy && !changed} onDragStart={e => onDragStart?.(e, meal)} onDragEnd={onDragEnd}>
-    <div className="recipeCardHead"><div><h4>{meal.title}</h4><div className="small">{meal.source_ref}</div></div><div className="recipeCardMeta">{meal.servings && <span className="recipeStatus">Serves {meal.servings}</span>}{showCookedStatus && <button type="button" className={`recipeStatus statusButton ${meal.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy || using} aria-label={`${meal.has_been_cooked ? `Mark as not ${statusMode === 'tried' ? 'tried' : 'cooked yet'}` : `Mark as ${statusMode === 'tried' ? 'tried' : 'cooked'}`}: ${meal.title}`} onClick={async () => setError(await onToggleCooked(meal) || '')}>{cookedBusy ? 'Updating…' : meal.has_been_cooked ? statusMode === 'tried' ? '✓ Tried' : '✓ Cooked' : statusMode === 'tried' ? 'Not tried yet' : 'Not cooked yet'}</button>}{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}{draggable && <span className="dragHint" aria-hidden="true">Drag to a day</span>}</div></div>
+    <div className="recipeCardHead"><div><h4>{meal.title}</h4><div className="small">{meal.source_ref}</div></div><div className="recipeCardMeta">{meal.servings && <span className="recipeStatus">Yields {meal.servings} servings</span>}{showCookedStatus && <button type="button" className={`recipeStatus statusButton ${meal.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy || using} aria-label={`${meal.has_been_cooked ? `Mark as not ${statusMode === 'tried' ? 'tried' : 'cooked yet'}` : `Mark as ${statusMode === 'tried' ? 'tried' : 'cooked'}`}: ${meal.title}`} onClick={async () => setError(await onToggleCooked(meal) || '')}>{cookedBusy ? 'Updating…' : meal.has_been_cooked ? statusMode === 'tried' ? '✓ Tried' : '✓ Cooked' : statusMode === 'tried' ? 'Not tried yet' : 'Not cooked yet'}</button>}{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}{draggable && <span className="dragHint" aria-hidden="true">Drag to a day</span>}</div></div>
     <label className="tagField">Recipe tags<input className="input" aria-label={`Tags for ${meal.title}`} value={draft} disabled={busy || saveState === 'saving'} onChange={e => setDraft(e.target.value)} placeholder="e.g. soup, vegetarian"/></label>
     <div className="dayActions">
       {saveState !== 'idle' && <span className={`tagSaveState ${saveState}`}>{saveState === 'pending' ? 'Saving soon…' : saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Tags saved' : 'Save failed'}</span>}
@@ -794,12 +794,12 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       }
       const { error: queueError } = await from('meal_recipe_queue').update({ source_ref: source, method: payload.method, servings: payload.servings }).eq('source_ref', recipe.source_ref);
       if (queueError) throw queueError;
-      const { error: scheduleError } = await from('weekly_meals').update({ source_ref: source, method: payload.method, servings: payload.servings }).eq('source_ref', recipe.source_ref);
+      const { error: scheduleError } = await from('weekly_meals').update({ source_ref: source, method: payload.method }).eq('source_ref', recipe.source_ref);
       if (scheduleError) throw scheduleError;
       if (key !== oldKey) setRecipeTags(prev => ({ ...prev, [key]: tags }));
       setLibraryRecords(prev => [saved, ...prev.filter(row => row.recipe_key !== oldKey && row.recipe_key !== key)]);
       setQueueRows(prev => prev.map(row => recipeKey(row) === oldKey ? { ...row, source_ref: source, method: payload.method, servings: payload.servings } : row));
-      setMeals(prev => prev.map(row => recipeKey(row) === oldKey ? { ...row, source_ref: source, method: payload.method, servings: payload.servings } : row));
+      setMeals(prev => prev.map(row => recipeKey(row) === oldKey ? { ...row, source_ref: source, method: payload.method } : row));
       setDetailsRecipe(null);
       setToast('Recipe details saved');
       return '';
@@ -987,11 +987,12 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       if (current.id && !current.queue_item_id) {
         const currentTags = parseTags(current.tagsText);
         const key = recipeKey(current);
+        const storedRecipe = libraryRecords.find(row => !row.is_deleted && sameRecipe(row, current));
         const { error: tagError } = await from('meal_recipe_tags').upsert({ recipe_key: key, tags: currentTags });
         if (tagError) throw tagError;
         const payload = {
           day_number: day, position: frontQueuePosition(queueRows, day), title: current.title.trim(), source_ref: current.source_ref.trim(),
-          ingredients: current.ingredients, method: current.method || '', servings: current.servings ?? null, extracted_at: current.extracted_at, rating: current.rating, notes: current.notes || '',
+          ingredients: current.ingredients, method: current.method || '', servings: storedRecipe?.servings ?? current.servings ?? null, extracted_at: current.extracted_at, rating: current.rating, notes: current.notes || '',
         };
         const { data: preserved, error } = await from('meal_recipe_queue').insert(payload).select().single();
         if (error) throw error;
@@ -1043,8 +1044,9 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     try {
       const key = recipeKey(meal);
       const existing = libraryRecords.find(row => row.recipe_key === key);
+      const queuedRecipe = queueRows.find(row => sameRecipe(row, meal));
       const payload = {
-        recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: meal.servings ?? null,
+        recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: existing?.servings ?? queuedRecipe?.servings ?? meal.servings ?? null,
         extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '', cooked_at: existing?.cooked_at || new Date().toISOString(),
         has_been_cooked: !!existing?.has_been_cooked, is_deleted: false,
       };
@@ -1109,8 +1111,9 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     try {
       const key = recipeKey(meal);
       const existing = libraryRecords.find(row => row.recipe_key === key);
+      const queuedRecipe = queueRows.find(row => sameRecipe(row, meal));
       const payload = {
-        recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: meal.servings ?? null,
+        recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: existing?.servings ?? queuedRecipe?.servings ?? meal.servings ?? null,
         extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '',
         cooked_at: markAsTried ? new Date().toISOString() : existing?.cooked_at || meal.cooked_at || new Date().toISOString(),
         has_been_cooked: config.capsule ? !!existing?.has_been_cooked || markAsTried : true, is_deleted: false,
@@ -1197,7 +1200,18 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     ? meals.filter(meal => !meal.dirty && !mealValidation(meal, parseTags(meal.tagsText), categories.find(category => category.day_number === meal.meal_number)) && Array.isArray(meal.ingredients) && meal.ingredients.length > 0)
     : meals,
   [meals, categories, config.capsule]);
-  const allIngredients = useMemo(() => groceryMeals.flatMap(m => Array.isArray(m.ingredients) ? m.ingredients : []), [groceryMeals]);
+  const allIngredients = useMemo(() => groceryMeals.flatMap(meal => {
+    if (!Array.isArray(meal.ingredients)) return [];
+    const libraryRecipe = libraryRecords.find(recipe => !recipe.is_deleted && sameRecipe(recipe, meal));
+    const queuedRecipe = queueRows.find(recipe => sameRecipe(recipe, meal));
+    const recipeYield = normalizeServings(libraryRecipe?.servings) || normalizeServings(queuedRecipe?.servings) || normalizeServings(meal.servings);
+    const servingsNeeded = normalizeServings(meal.servings) || recipeYield;
+    const scale = recipeYield && servingsNeeded ? servingsNeeded / recipeYield : 1;
+    return meal.ingredients.map(ingredient => ({
+      ...ingredient,
+      qty: ingredient.qty == null || !Number.isFinite(Number(ingredient.qty)) ? ingredient.qty : Number(ingredient.qty) * scale,
+    }));
+  }), [groceryMeals, libraryRecords, queueRows]);
   const ready = !loadingWeek && !loadError && !busy && meals.length === config.slotCount && (config.capsule || meals.every(m => !m.dirty && !mealValidation(m, parseTags(m.tagsText), categoryFor(m.meal_number)) && Array.isArray(m.ingredients) && m.ingredients.length > 0));
   const groceryLines = useMemo(() => aggregateIngredients(allIngredients, mergeSuggestions), [allIngredients, mergeSuggestions]);
   const groceryText = groceryLines.join('\n');
@@ -1267,7 +1281,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       <div className="fields">
         <input className="input" aria-label={`Day ${meal.meal_number} meal title`} value={meal.title} disabled={busy} onChange={e => updateMealField(index, 'title', e.target.value)} placeholder="Meal title"/>
         <input className="input" aria-label={`Day ${meal.meal_number} source`} value={meal.source_ref} disabled={busy} onChange={e => updateMealField(index, 'source_ref', e.target.value)} placeholder="Source — e.g. Cookish p.47 or URL"/>
-        <input className="input" type="number" min="1" step="1" aria-label={`Day ${meal.meal_number} servings`} value={meal.servings ?? ''} disabled={busy} onChange={e => updateMealField(index, 'servings', normalizeServings(e.target.value))} placeholder="Servings"/>
+        <label className="tagField">Servings needed<input className="input" type="number" min="1" step="1" aria-label={`Day ${meal.meal_number} servings needed`} value={meal.servings ?? ''} disabled={busy} onChange={e => updateMealField(index, 'servings', normalizeServings(e.target.value))} placeholder="Servings needed"/></label>
       </div>
       {config.hasSides && <div className="kidsLunchSides">
         <label className="tagField">Side 1<select className="input" aria-label={`${dayName(meal.meal_number)} Side 1`} value={daySides[meal.meal_number]?.side_one_id || ''} disabled={busy} onChange={event => saveDaySide(meal.meal_number, 'side_one_id', event.target.value)}><option value="">Choose a side…</option>{sideOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
