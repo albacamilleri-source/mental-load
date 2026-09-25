@@ -148,7 +148,8 @@ Deno.serve(async (req: Request) => {
     const slot = (mealsResult.data || []).find(meal => Number(meal.meal_number) === dayNumber);
     const blank = !slot || (!String(slot.title || "").trim() && !String(slot.source_ref || "").trim());
     const isFront = !queueRows.some(row => Number(row.day_number) === dayNumber && Number(row.position) < Number(queued.position));
-    if (blank && isFront) {
+    const paused = categories.find(category => Number(category.day_number) === dayNumber)?.is_paused === true;
+    if (blank && isFront && !paused) {
       const scheduled = await client.from(tables.meals).upsert(queueMealPayload(queued, weekOf, dayNumber), { onConflict: "week_of,meal_number" });
       if (scheduled.error) throw scheduled.error;
     }

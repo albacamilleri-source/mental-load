@@ -37,10 +37,14 @@ function queueMealPayload(item, week, day) {
 }
 
 function recipeDays(rows, recipe, dayField) {
-  const key = recipeKey(recipe);
-  return [...new Set(rows.filter(row => row?.title?.trim() && row?.source_ref?.trim() && recipeKey(row) === key).map(row => row[dayField]).filter(Boolean))].sort((a, b) => a - b);
+  return [...new Set(rows.filter(row => sameRecipe(row, recipe)).map(row => row[dayField]).filter(Boolean))].sort((a, b) => a - b);
 }
 
+function sameRecipe(left, right) {
+  const leftSource = String(left?.source_ref || '').trim();
+  const rightSource = String(right?.source_ref || '').trim();
+  return !!leftSource && leftSource === rightSource;
+}
 
 function isoWeek(date) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -633,6 +637,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
           for (let day = 1; day <= config.slotCount; day += 1) {
             const slot = next[day - 1];
             const front = queueForDay(queuedRows, day)[0];
+            if (dayRows.find(category => Number(category.day_number) === day)?.is_paused) continue;
             if ((!slot.title.trim() && !slot.source_ref.trim()) && front) {
               const { data: saved, error } = await from('weekly_meals').upsert(queueMealPayload(front, week, day), { onConflict: 'week_of,meal_number' }).select().single();
               if (error) throw error;
@@ -826,6 +831,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     const nextMeals = [...meals];
     for (let day = 1; day <= config.slotCount; day += 1) {
       const current = nextMeals[day - 1];
+      if (categoryFor(day)?.is_paused) continue;
       if (current.is_override) continue;
       const front = queueForDay(nextQueue, day)[0];
       const empty = !current.title.trim() && !current.source_ref.trim();
@@ -884,7 +890,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       setRecipeTags(prev => ({ ...prev, [key]: recipe.tags }));
       setLibraryRecords(prev => [saved, ...prev.filter(row => row.recipe_key !== key)]);
       if (destination === 'queue') {
-        const alreadyQueued = queueRows.find(row => recipeKey(row) === key);
+        const alreadyQueued = queueRows.find(row => sameRecipe(row, recipe));
         if (!alreadyQueued) {
           const day = queueDayFor(recipe.tags);
           const queuePayload = {
@@ -893,7 +899,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
           };
           const { queued, nextQueue } = await insertQueuedRecipe(queuePayload, day);
           const slot = meals[day - 1];
-          if (!slot.title.trim() && !slot.source_ref.trim() && queueForDay(nextQueue, day)[0]?.id === queued.id) {
+          if (!categoryFor(day)?.is_paused && !slot.title.trim() && !slot.source_ref.trim() && queueForDay(nextQueue, day)[0]?.id === queued.id) {
             const { data: scheduled, error: scheduleError } = await from('weekly_meals').upsert(queueMealPayload(queued, week, day), { onConflict: 'week_of,meal_number' }).select().single();
             if (scheduleError) throw scheduleError;
             setMeals(prev => prev.map((row, index) => index === day - 1 ? { ...scheduled, tagsText: recipe.tags.join(', '), dirty: false } : row));
@@ -910,9 +916,17 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   async function queueLibraryRecipe(recipe) {
     if (busy) return 'Please wait for the current save.';
     const key = recipeKey(recipe);
-    if (queueRows.some(row => recipeKey(row) === key)) return 'This recipe is already queued.';
+    const localQueueItem = queueRows.find(row => sameRecipe(row, recipe));
+    if (localQueueItem) { setToast(`${recipe.title} is already in the ${dayName(localQueueItem.day_number)} queue`); return ''; }
     setBusy(true);
     try {
+      const { data: storedQueueItem, error: lookupError } = await from('meal_recipe_queue').select('*').eq('source_ref', recipe.source_ref.trim()).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (storedQueueItem) {
+        setQueueRows(previous => previous.some(row => row.id === storedQueueItem.id) ? previous : [...previous, storedQueueItem]);
+        setToast(`${recipe.title} is already in the ${dayName(storedQueueItem.day_number)} queue`);
+        return '';
+      }
       const tags = recipeTags[key] || [];
       const day = queueDayFor(tags);
       const payload = {
@@ -921,7 +935,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       };
       const { queued, nextQueue } = await insertQueuedRecipe(payload, day);
       const slot = meals[day - 1];
-      if (!slot.title.trim() && !slot.source_ref.trim() && queueForDay(nextQueue, day)[0]?.id === queued.id) {
+      if (!categoryFor(day)?.is_paused && !slot.title.trim() && !slot.source_ref.trim() && queueForDay(nextQueue, day)[0]?.id === queued.id) {
         const { data: saved, error } = await from('weekly_meals').upsert(queueMealPayload(queued, week, day), { onConflict: 'week_of,meal_number' }).select().single();
         if (error) throw error;
         setMeals(prev => prev.map((meal, index) => index === day - 1 ? { ...saved, tagsText: tags.join(', '), dirty: false } : meal));
@@ -1005,7 +1019,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (useInFlight.current) return 'Please wait for the current recipe to be added.';
     const emptyCategories = categories.filter(category => {
       const slot = meals[category.day_number - 1];
-      return slot && !slot.title.trim() && !slot.source_ref.trim();
+      return !category.is_paused && slot && !slot.title.trim() && !slot.source_ref.trim();
     });
     if (!emptyCategories.length) {
       setToast('All days already have an assigned meal. Clear a day if you want to use this recipe.');
@@ -1056,6 +1070,35 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       setMeals(prev => prev.map((row, mealIndex) => mealIndex === index ? nextMeal : row));
       setGroceryGenerated(false); setToast(`${meal.title} unscheduled and kept in your library`);
     } catch (e) { setMealErrors(prev => ({ ...prev, [index]: e.message || 'Could not unschedule this recipe. Please retry.' })); }
+    finally { setBusy(false); }
+  }
+  async function setQueuePaused(index, paused) {
+    if (busy || loadingWeek || loadError) return;
+    const meal = meals[index];
+    const day = meal.meal_number;
+    setBusy(true); setMealErrors(previous => ({ ...previous, [index]: '' }));
+    try {
+      const { error: categoryError } = await from('meal_day_categories').update({ is_paused: paused }).eq('day_number', day);
+      if (categoryError) throw categoryError;
+      let nextMeal = { ...emptyMeal(day), week_of: week, tagsText: '', dirty: false };
+      if (paused) {
+        if (meal.id) {
+          const { error } = await from('weekly_meals').delete().eq('id', meal.id);
+          if (error) throw error;
+        }
+      } else {
+        const front = queueForDay(queueRows, day)[0];
+        if (front) {
+          const { data: saved, error } = await from('weekly_meals').upsert(queueMealPayload(front, week, day), { onConflict: 'week_of,meal_number' }).select().single();
+          if (error) throw error;
+          nextMeal = { ...saved, tagsText: recipeTagsFor(front, recipeTags).join(', '), dirty: false };
+        }
+      }
+      setCategories(previous => previous.map(row => Number(row.day_number) === day ? { ...row, is_paused: paused } : row));
+      setMeals(previous => previous.map((row, mealIndex) => mealIndex === index ? nextMeal : row));
+      setGroceryGenerated(false);
+      setToast(paused ? `${dayName(day)} queue paused` : queueForDay(queueRows, day)[0] ? `${dayName(day)} queue resumed` : `${dayName(day)} queue resumed · no recipes waiting`);
+    } catch (error) { setMealErrors(previous => ({ ...previous, [index]: error.message || `Could not ${paused ? 'pause' : 'resume'} this queue. Please retry.` })); }
     finally { setBusy(false); }
   }
   async function markCooked(index, markAsTried = true) {
@@ -1206,16 +1249,19 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
 
   function renderMealCard(meal, index, heading, nested = false) {
     const category = categoryFor(meal.meal_number);
+    const paused = config.capsule && !!category?.is_paused;
+    const queuedNext = queueForDay(queueRows, meal.meal_number)[0];
     const tags = parseTags(meal.tagsText);
     const match = meal.is_override || matchesCategory(tags, category);
     const draggedTags = recipeTags[draggedRecipeKey] || EMPTY_TAGS;
-    const canDrop = !!draggedRecipeKey && canDropRecipe(meal, draggedTags, category);
+    const canDrop = !paused && !!draggedRecipeKey && canDropRecipe(meal, draggedTags, category);
     return <details key={meal.meal_number} className={`meal${nested ? ' breakfastAudienceMeal' : ''}${canDrop ? ' dropReady' : ''}${dropTarget === meal.meal_number ? ' dropActive' : ''}`}
       onDragOver={e => { if (canDrop) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDropTarget(meal.meal_number); } }}
       onDragLeave={() => setDropTarget(target => target === meal.meal_number ? null : target)}
       onDrop={e => canDrop && dropRecipe(e, meal.meal_number)}>
-      <summary className="mealSummary"><div><h3 className="dayHeading">{heading || config.dayNames?.[meal.meal_number - 1] || `Day ${meal.meal_number}`}</h3><div className="dayCategory">{meal.is_override ? `Temporary ${meal.override_type || 'manual'} switch` : category?.name || 'Any recipe'}</div></div><div className={`mealSummaryValue${meal.title.trim() ? '' : ' isEmpty'}`}>{meal.title.trim() || 'Empty'}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
+      <summary className="mealSummary"><div><h3 className="dayHeading">{heading || config.dayNames?.[meal.meal_number - 1] || `Day ${meal.meal_number}`}</h3><div className="dayCategory">{paused ? 'Queue paused' : meal.is_override ? `Temporary ${meal.override_type || 'manual'} switch` : category?.name || 'Any recipe'}</div></div><div className={`mealSummaryValue${meal.title.trim() ? '' : ' isEmpty'}`}>{paused ? 'Paused' : meal.title.trim() || 'Empty'}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
       <div className="mealBody">
+      {paused ? <><div className="plannerNotice">Nothing is scheduled for {dayName(meal.meal_number)}. {queuedNext ? `${queuedNext.title} is still first in this queue.` : 'There are no recipes waiting in this queue.'}</div>{mealErrors[index] && <div className="saveError" role="alert">{mealErrors[index]}</div>}<div className="dayActions"><button className="btn" disabled={busy} onClick={() => setQueuePaused(index, false)}>Resume queue</button></div></> : <>
       {!meal.is_override && category?.accepted_tags.length > 0 && <div className="dayRequirement">Requires {category.accepted_tags.join(' or ')}</div>}
       {config.hasSides && <div className="kidsLunchMainLabel">Main</div>}
       <div className="fields">
@@ -1236,10 +1282,12 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         <button className="btn secondary" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim()} onClick={() => saveMeal(index, true)}>{meal.ingredients ? 'Review ingredients' : 'Extract ingredients'}</button>
         <button className="btn secondary" disabled={busy || meal.dirty || meal.is_override} onClick={() => setSwitchDay(meal.meal_number)}>Switch</button>
         <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => unscheduleMeal(index)}>Unschedule</button>
+        {config.capsule && <button className="btn secondary" disabled={busy || !meal.id || meal.dirty || meal.is_override} onClick={() => setQueuePaused(index, true)}>Pause queue</button>}
         {config.capsule && <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index, false)}>Skip · rotate</button>}
         <button className="btn cookedBtn" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index)}>{config.capsule ? 'Made · rotate' : 'Mark cooked'}</button>
         {meal.id && !meal.dirty && <span className="dragHint scheduledDragHint" draggable={!busy} onDragStart={e => startScheduledMealDrag(e, meal)} onDragEnd={() => { setDraggedMealNumber(null); setLibraryDropActive(false); }}>Drag to library</span>}
       </div>
+      </>}
       </div>
     </details>;
   }
