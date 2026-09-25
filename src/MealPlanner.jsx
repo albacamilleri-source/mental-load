@@ -771,7 +771,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     try {
       const oldKey = recipeKey(recipe);
       const source = String(details.source_ref || '').trim();
-      const key = recipeKey({ ...recipe, source_ref: source });
+      const key = recipeKey({ ...recipe, recipe_key: '', source_ref: source });
       const collision = libraryRecords.find(row => !row.is_deleted && row.recipe_key !== oldKey && String(row.source_ref || '').trim() === source);
       if (collision) throw new Error(`That source is already used by ${collision.title}.`);
       const existing = libraryRecords.find(row => row.recipe_key === oldKey);
