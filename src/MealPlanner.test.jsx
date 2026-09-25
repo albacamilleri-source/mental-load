@@ -293,6 +293,17 @@ test('breakfast grocery lists use the scheduled recipes that already have ingred
   expect(container.querySelector('#grocery').textContent).toContain('carrot, 1');
 });
 
+test('grocery quantities scale from recipe yield to the servings needed for a scheduled meal', async () => {
+  const pancake = {...sample(71), week_of:'breakfast-capsule', meal_number:2, servings:2, ingredients:[{name:'flour', qty:200, unit:'g'}]};
+  breakfastCurrent = [pancake];
+  breakfastLibrary = [{...pancake, recipe_key:recipeKey(pancake), servings:4, has_been_cooked:false, is_deleted:false}];
+  breakfastTagRows = [{recipe_key:recipeKey(pancake), tags:['pancake']}];
+  await render('breakfast');
+  expect(container.querySelector('[aria-label="Day 2 servings needed"]').value).toBe('2');
+  await click(button('Generate grocery list'));
+  expect(container.querySelector('#grocery').textContent).toContain('flour, 100 g');
+});
+
 test('manual breakfast recipes have one save action and always enter a queue', async () => {
   await render('breakfast');
   await click(button('Add manually'));
@@ -471,11 +482,12 @@ test('URL extraction displays the function error in the review modal', async () 
 });
 
 test('marking a saved meal cooked banks the recipe and clears its day', async () => {
-  current = [sample(1, ['pasta'])];
+  current = [{...sample(1, ['pasta']), servings:2}];
+  library = [{...sample(1), recipe_key:recipeKey(sample(1)), servings:4, has_been_cooked:false, is_deleted:false}];
   tagRows = [{recipe_key: recipeKey(current[0]), tags: ['pasta']}];
   await render();
   await click(button('Mark cooked', day(1)));
-  expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1', has_been_cooked: true, is_deleted: false});
+  expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1', servings:4, has_been_cooked: true, is_deleted: false});
   expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
   expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 1');
@@ -643,18 +655,18 @@ test('library cards open a modal with ingredients, editable source and method, a
   expect(details.textContent).toContain('carrot · 1');
   expect(details.querySelector('[aria-label="URL or source for Recipe 1"]').value).toBe('Book 1');
   expect(details.querySelector('[aria-label="Method for Recipe 1"]').value).toBe('1. Boil the carrots.');
-  expect(details.querySelector('[aria-label="Servings for Recipe 1"]').value).toBe('');
+  expect(details.querySelector('[aria-label="Recipe yield for Recipe 1"]').value).toBe('');
   await change('Tags for Recipe 1 in details', 'quick, soup');
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 700)); });
   await change('URL or source for Recipe 1', 'https://example.com/recipe-1');
   await change('Method for Recipe 1', '1. Roast the carrots.');
-  await change('Servings for Recipe 1', '5');
+  await change('Recipe yield for Recipe 1', '5');
   await click(button('Save changes', details));
   expect(document.body.querySelector('[aria-label="Recipe details for Recipe 1"]')).toBeNull();
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.method === '1. Roast the carrots.' && write.value.servings === 5 && write.value.source_ref === 'https://example.com/recipe-1')).toBeTruthy();
   expect(writes).toContainEqual({table:'meal_recipe_tags', value:{recipe_key:recipeKey({...sample(1), source_ref:'https://example.com/recipe-1'}), tags:['quick', 'soup']}});
   expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'source_ref', value:'Book 1', payload:{source_ref:'https://example.com/recipe-1', method:'1. Roast the carrots.', servings:5}}});
-  expect(writes).toContainEqual({table:'weekly_meals', update:{field:'source_ref', value:'Book 1', payload:{source_ref:'https://example.com/recipe-1', method:'1. Roast the carrots.', servings:5}}});
+  expect(writes).toContainEqual({table:'weekly_meals', update:{field:'source_ref', value:'Book 1', payload:{source_ref:'https://example.com/recipe-1', method:'1. Roast the carrots.'}}});
   await click(button('Delete', recipeLibrary));
   expect(window.confirm).toHaveBeenCalled();
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.is_deleted)).toBeTruthy();
