@@ -16,20 +16,23 @@ function setupQueries() {
     const kind = table.startsWith('breakfast_') ? 'breakfast' : table.startsWith('kids_lunch_') ? 'kids_lunch' : table.startsWith('lunch_') ? 'lunch' : 'dinner';
     const logicalTable = kind === 'breakfast' ? ({breakfast_weekly_meals:'weekly_meals',breakfast_recipe_tags:'meal_recipe_tags',breakfast_day_categories:'meal_day_categories',breakfast_recipe_library:'meal_recipe_library',breakfast_recipe_queue:'meal_recipe_queue'}[table] || table) : kind === 'kids_lunch' ? ({kids_lunch_weekly_meals:'weekly_meals',kids_lunch_recipe_tags:'meal_recipe_tags',kids_lunch_day_categories:'meal_day_categories',kids_lunch_recipe_library:'meal_recipe_library',kids_lunch_recipe_queue:'meal_recipe_queue',kids_lunch_side_options:'side_options',kids_lunch_day_sides:'day_sides'}[table] || table) : kind === 'lunch' ? ({lunch_weekly_meals:'weekly_meals',lunch_recipe_tags:'meal_recipe_tags',lunch_day_categories:'meal_day_categories',lunch_recipe_library:'meal_recipe_library',lunch_recipe_queue:'meal_recipe_queue'}[table] || table) : table;
     if (logicalTable === 'weekly_meals') weeklyReadCount[kind] += 1;
-    let isPast = logicalTable === 'weekly_meals' && weeklyReadCount[kind] === 2, payload, action = '';
+    let isPast = logicalTable === 'weekly_meals' && weeklyReadCount[kind] === 2, payload, action = '', maybeSingle = false;
+    const filters = {};
     const query = {
       select: () => query,
-      eq: (field, value) => { if (action) writes.push({ table, [action]: { field, value, payload } }); return query; },
+      eq: (field, value) => { filters[field] = value; if (action) writes.push({ table, [action]: { field, value, payload } }); return query; },
       lt: () => { isPast = true; return query; }, order: () => query,
       upsert: value => { payload = value; writes.push({ table, value }); return query; },
       insert: value => { payload = value; action = 'insert'; writes.push({ table, insert: value }); return query; },
       update: value => { payload = value; action = 'update'; return query; },
       delete: () => { action = 'delete'; return query; },
       single: () => query,
+      maybeSingle: () => { maybeSingle = true; return query; },
       then: (resolve, reject) => {
         if (failure) return Promise.resolve({ error: {message: failure} }).then(resolve, reject);
         const source = kind === 'breakfast' ? {current:breakfastCurrent,past:breakfastPast,library:breakfastLibrary,queue:breakfastQueue,tagRows:breakfastTagRows,categories:breakfastCategories} : kind === 'kids_lunch' ? {current:kidsLunchCurrent,past:kidsLunchPast,library:kidsLunchLibrary,queue:kidsLunchQueue,tagRows:kidsLunchTagRows,categories:kidsLunchCategories,sideOptions:kidsLunchSideOptions,daySides:kidsLunchDaySides} : kind === 'lunch' ? {current:lunchCurrent,past:lunchPast,library:lunchLibrary,queue:lunchQueue,tagRows:lunchTagRows,categories:lunchCategories} : {current,past,library,queue,tagRows,categories};
         let data = logicalTable === 'weekly_meals' ? (isPast ? source.past : source.current) : logicalTable === 'meal_recipe_tags' ? source.tagRows : logicalTable === 'meal_day_categories' ? source.categories : logicalTable === 'meal_recipe_library' ? source.library : logicalTable === 'side_options' ? source.sideOptions : logicalTable === 'day_sides' ? source.daySides : source.queue;
+        if (maybeSingle && logicalTable === 'meal_recipe_queue') data = source.queue.find(row => Object.entries(filters).every(([field, value]) => row[field] === value)) || null;
         if (payload && logicalTable === 'weekly_meals') data = { id: 'saved', ...payload };
         if (payload && logicalTable === 'meal_recipe_library') data = payload;
         if (payload && logicalTable === 'meal_recipe_queue' && action === 'insert') data = { id: `queue-${writes.length}`, created_at: '2026-09-11T08:00:00Z', ...payload };
@@ -233,6 +236,41 @@ test('skipping breakfast rotates it without marking an untried recipe as tried',
   expect(day(2).textContent).toContain('Recipe 52');
   expect(writes.find(write => write.table === 'breakfast_recipe_library').value).toMatchObject({has_been_cooked:false});
   expect(container.querySelector('#recipe-library').textContent).toContain('Not tried yet');
+});
+
+test('pausing a breakfast clears the day without removing or rotating its queue', async () => {
+  const sunday = {...sample(61), week_of:'breakfast-capsule', meal_number:11, queue_item_id:'breakfast-q-sunday'};
+  breakfastCurrent = [sunday];
+  breakfastQueue = [{...sunday, id:'breakfast-q-sunday', day_number:11, position:1, created_at:'2026-09-20T08:00:00Z'}];
+  await render('breakfast');
+  const sundayCard = day(11);
+  await click(button('Pause queue', sundayCard));
+  expect(writes).toContainEqual({table:'breakfast_day_categories', update:{field:'day_number', value:11, payload:{is_paused:true}}});
+  expect(writes).toContainEqual({table:'breakfast_weekly_meals', delete:{field:'id', value:'meal-61', payload:undefined}});
+  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.delete)).toBeUndefined();
+  expect(sundayCard.textContent).toContain('Queue paused');
+  expect(sundayCard.textContent).toContain('Recipe 61 is still first in this queue');
+  await click(button('Resume queue', sundayCard));
+  expect(writes).toContainEqual({table:'breakfast_day_categories', update:{field:'day_number', value:11, payload:{is_paused:false}}});
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q-sunday')).toBeTruthy();
+});
+
+test('a paused breakfast stays blank on reload even when its queue has recipes', async () => {
+  breakfastCategories[10].is_paused = true;
+  breakfastQueue = [{...sample(62), id:'breakfast-q-paused', day_number:11, position:1, created_at:'2026-09-20T08:00:00Z'}];
+  await render('breakfast');
+  expect(container.textContent).toContain('Queue paused');
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q-paused')).toBeUndefined();
+});
+
+test('queue status recognises a recipe by source when a stale queue title differs', async () => {
+  const libraryRecipe = {...sample(63), title:'Updated breakfast title', source_ref:'Manual entry: Alba', recipe_key:recipeKey({title:'Updated breakfast title', source_ref:'Manual entry: Alba'}), has_been_cooked:true, is_deleted:false};
+  breakfastLibrary = [libraryRecipe];
+  breakfastQueue = [{...sample(63), id:'breakfast-q-existing', title:'Old breakfast title', source_ref:'Manual entry: Alba', day_number:8, position:1, created_at:'2026-09-20T08:00:00Z'}];
+  await render('breakfast');
+  const card = [...container.querySelectorAll('#recipe-library .recipeCard')].find(node => node.textContent.includes('Updated breakfast title'));
+  expect(card.textContent).toContain('Queued · Day 8');
+  expect(button('Queued', card).disabled).toBe(true);
 });
 
 test('breakfast grocery lists use the scheduled recipes that already have ingredients', async () => {
