@@ -263,6 +263,16 @@ test('a paused breakfast stays blank on reload even when its queue has recipes',
   expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q-paused')).toBeUndefined();
 });
 
+test('an already empty breakfast day can be paused before anything fills it', async () => {
+  await render('breakfast');
+  const sundayCard = day(11);
+  expect(button('Pause queue', sundayCard).disabled).toBe(false);
+  await click(button('Pause queue', sundayCard));
+  expect(writes).toContainEqual({table:'breakfast_day_categories', update:{field:'day_number', value:11, payload:{is_paused:true}}});
+  expect(sundayCard.textContent).toContain('Queue paused');
+  expect(button('Resume queue', sundayCard)).toBeTruthy();
+});
+
 test('queue status recognises a recipe by source when a stale queue title differs', async () => {
   const libraryRecipe = {...sample(63), title:'Updated breakfast title', source_ref:'Manual entry: Alba', recipe_key:recipeKey({title:'Updated breakfast title', source_ref:'Manual entry: Alba'}), has_been_cooked:true, is_deleted:false};
   breakfastLibrary = [libraryRecipe];

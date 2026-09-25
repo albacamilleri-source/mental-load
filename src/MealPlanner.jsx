@@ -1282,7 +1282,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         <button className="btn secondary" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim()} onClick={() => saveMeal(index, true)}>{meal.ingredients ? 'Review ingredients' : 'Extract ingredients'}</button>
         <button className="btn secondary" disabled={busy || meal.dirty || meal.is_override} onClick={() => setSwitchDay(meal.meal_number)}>Switch</button>
         <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => unscheduleMeal(index)}>Unschedule</button>
-        {config.capsule && <button className="btn secondary" disabled={busy || !meal.id || meal.dirty || meal.is_override} onClick={() => setQueuePaused(index, true)}>Pause queue</button>}
+        {config.capsule && <button className="btn secondary" disabled={busy || meal.dirty || meal.is_override} onClick={() => setQueuePaused(index, true)}>Pause queue</button>}
         {config.capsule && <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index, false)}>Skip · rotate</button>}
         <button className="btn cookedBtn" disabled={busy || !meal.id || meal.dirty} onClick={() => markCooked(index)}>{config.capsule ? 'Made · rotate' : 'Mark cooked'}</button>
         {meal.id && !meal.dirty && <span className="dragHint scheduledDragHint" draggable={!busy} onDragStart={e => startScheduledMealDrag(e, meal)} onDragEnd={() => { setDraggedMealNumber(null); setLibraryDropActive(false); }}>Drag to library</span>}
