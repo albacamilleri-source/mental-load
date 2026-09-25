@@ -10,6 +10,8 @@ export function parseTags(value) {
 }
 
 export function recipeKey(meal) {
+  const storedKey = String(meal?.recipe_key || '').trim();
+  if (storedKey) return storedKey;
   return JSON.stringify([meal.title.trim().toLowerCase(), meal.source_ref.trim()]);
 }
 

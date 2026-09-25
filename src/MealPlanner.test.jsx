@@ -106,6 +106,22 @@ test('Adult Lunches has an isolated library and seven-day framework', async () =
   expect(container.querySelector('.weekNav')).toBeNull();
 });
 
+test('Adult Lunches marks a renamed library recipe tried using its stored database key', async () => {
+  const source = 'https://example.com/adult-lunch';
+  const storedKey = JSON.stringify(['original lunch title', source]);
+  lunchLibrary = [{...sample(91), title:'Improved Lunch Title', source_ref:source, recipe_key:storedKey, has_been_cooked:false, is_deleted:false}];
+  lunchTagRows = [{recipe_key:storedKey, tags:['adult']}];
+  await render('lunch');
+  const card = [...container.querySelectorAll('#recipe-library .recipeCard')].find(node => node.textContent.includes('Improved Lunch Title'));
+  await click(card.querySelector('[aria-label="Mark as tried: Improved Lunch Title"]'));
+  expect(writes.find(write => write.table === 'lunch_recipe_library' && write.value?.has_been_cooked === true)?.value).toMatchObject({
+    recipe_key: storedKey,
+    source_ref: source,
+    has_been_cooked: true,
+  });
+  expect(card.textContent).toContain('✓ Tried');
+});
+
 test('Kids Lunches uses separate recipes and offers editable side dropdowns for seven days', async () => {
   kidsLunchLibrary = [{...sample(80), recipe_key:recipeKey(sample(80)), has_been_cooked:false, is_deleted:false}];
   kidsLunchSideOptions = [{id:'side-fruit', name:'Fruit', sort_order:1}];
