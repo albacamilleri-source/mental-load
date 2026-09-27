@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import MealPlanner, { MealPlannerWorkspace, SelectionPlannerWorkspace } from './MealPlanner';
 import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
-import { BREAKFAST_CATEGORIES, KIDS_LUNCH_CATEGORIES, LUNCH_CATEGORIES } from './plannerConfig';
+import { BREAKFAST_CATEGORIES, BREAKFAST_SLOTS, KIDS_LUNCH_CATEGORIES, LUNCH_CATEGORIES } from './plannerConfig';
 
 const mockFrom = jest.fn();
 const mockInvoke = jest.fn();
@@ -189,9 +189,10 @@ test('Breakfasts has its own persistent category rotation and recipe tables', as
   expect(container.textContent).not.toContain('Queue choices follow your day categories');
   expect(button('Save to library')).toBeUndefined();
   expect(button('Generate grocery list').disabled).toBe(false);
+  expect(container.querySelector('[aria-label="Day 8 scheduled date"]').value).toBeTruthy();
   await change('Day 8 meal title', 'Savory eggs'); await change('Day 8 source', 'Family notebook'); await change('Day 8 recipe tags', 'savory');
   await click(button('Save meal', day(8)));
-  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.title === 'Savory eggs')).toBeTruthy();
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.title === 'Savory eggs')?.value.scheduled_for).toBe(container.querySelector('[aria-label="Day 8 scheduled date"]').value);
   expect(writes.find(write => write.table === 'breakfast_recipe_tags')).toBeTruthy();
   expect(writes.find(write => write.table === 'weekly_meals')).toBeUndefined();
 });
@@ -746,6 +747,20 @@ test('Meal Planner landing page shows today at a glance before all five planners
   expect(container.querySelector('.todayFood')).not.toBeNull();
   expect(container.querySelector('.todayFood').textContent).toContain('at a glance');
   expect([...container.querySelectorAll('.plannerChoiceTitle')].map(node => node.textContent)).toHaveLength(5);
+});
+
+test('day at a glance only shows capsule meals scheduled for the selected calendar date', async () => {
+  const today = new Date();
+  const nextWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7, 12);
+  const iso = value => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  const dayName = nextWeek.toLocaleDateString('en-GB', { weekday: 'long' });
+  const slot = BREAKFAST_SLOTS.find(item => item.day_name === dayName);
+  breakfastCurrent = [{ ...sample(slot.day_number), title: 'Breakfast for next week', week_of: 'breakfast-capsule', scheduled_for: iso(nextWeek) }];
+  breakfastPast = [...breakfastCurrent];
+  await act(async () => { root.render(<MealPlanner/>); });
+  expect(container.querySelector('.todayFood').textContent).not.toContain('Breakfast for next week');
+  await change('Choose date for meal overview', iso(nextWeek));
+  expect(container.querySelector('.todayFood').textContent).toContain('Breakfast for next week');
 });
 
 test('Dinners uses seven named weekday slots', async () => {
