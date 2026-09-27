@@ -43,9 +43,27 @@ function recipeDays(rows, recipe, dayField) {
   return [...new Set(rows.filter(row => sameRecipe(row, recipe)).map(row => row[dayField]).filter(Boolean))].sort((a, b) => a - b);
 }
 
+function normalizedSourceRef(value) {
+  const source = String(value || '').trim();
+  if (!source) return '';
+  try {
+    const url = new URL(source);
+    if (!['http:', 'https:'].includes(url.protocol)) return source.toLowerCase().replace(/\s+/g, ' ');
+    url.hash = '';
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(utm_|fbclid$|gclid$|mc_cid$|mc_eid$)/i.test(key)) url.searchParams.delete(key);
+    }
+    url.hostname = url.hostname.toLowerCase();
+    if (url.pathname.length > 1) url.pathname = url.pathname.replace(/\/+$/, '');
+    return url.toString();
+  } catch {
+    return source.toLowerCase().replace(/\s+/g, ' ');
+  }
+}
+
 function sameRecipe(left, right) {
-  const leftSource = String(left?.source_ref || '').trim();
-  const rightSource = String(right?.source_ref || '').trim();
+  const leftSource = normalizedSourceRef(left?.source_ref);
+  const rightSource = normalizedSourceRef(right?.source_ref);
   return !!leftSource && leftSource === rightSource;
 }
 
@@ -636,6 +654,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   const [switchDay, setSwitchDay] = useState(null);
   const [detailsRecipe, setDetailsRecipe] = useState(null);
   const [cookedUpdatingKey, setCookedUpdatingKey] = useState('');
+  const queueMutationsRef = useRef(new Set());
   const useInFlight = useRef(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [sideOptions, setSideOptions] = useState([]);
@@ -954,6 +973,9 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   async function queueLibraryRecipe(recipe) {
     if (busy) return 'Please wait for the current save.';
     const key = recipeKey(recipe);
+    const actionKey = normalizedSourceRef(recipe.source_ref) || key;
+    if (queueMutationsRef.current.has(actionKey)) return 'This recipe is already being updated.';
+    queueMutationsRef.current.add(actionKey);
     const localQueueItem = queueRows.find(row => sameRecipe(row, recipe));
     if (localQueueItem) {
       setBusy(true);
@@ -970,7 +992,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         setGroceryGenerated(false); setToast(`${recipe.title} removed from the queue`);
         return '';
       } catch (e) { return e.message || 'Could not remove this recipe from the queue.'; }
-      finally { setBusy(false); }
+      finally { queueMutationsRef.current.delete(actionKey); setBusy(false); }
     }
     setBusy(true);
     try {
@@ -997,7 +1019,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       setQueueRows(nextQueue); setGroceryGenerated(false); setToast(`${recipe.title} added to ${dayName(day)} queue`);
       return '';
     } catch (e) { return e.message || 'Could not queue this recipe. Please retry.'; }
-    finally { setBusy(false); }
+    finally { queueMutationsRef.current.delete(actionKey); setBusy(false); }
   }
   async function moveQueueItem(id, day) {
     if (busy) return;
@@ -1286,8 +1308,9 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       if (!recipe?.title?.trim() || !recipe?.source_ref?.trim()) return;
       const key = recipeKey(recipe);
       if (deletedKeys.has(key)) return;
-      const previous = recipes.get(key);
-      recipes.set(key, previous ? {
+      const identity = normalizedSourceRef(recipe.source_ref) || key;
+      const previous = recipes.get(identity);
+      recipes.set(identity, previous ? {
         ...previous,
         ...recipe,
         ingredients: recipe.ingredients?.length ? recipe.ingredients : previous.ingredients,
