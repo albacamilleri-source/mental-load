@@ -610,6 +610,18 @@ test('queue membership recognises tracking variants of the same recipe URL', asy
   expect(container.querySelectorAll('#recipe-library .recipeCard')).toHaveLength(1);
 });
 
+test('legacy queue rows without a source still match their library recipe by title', async () => {
+  const recipe = {...sample(1), source_ref:'Family notebook', recipe_key:'stable-manual-recipe', has_been_cooked:false, is_deleted:false};
+  library = [recipe];
+  queue = [{...recipe, source_ref:'', id:'legacy-q1', day_number:3, position:1, created_at:'2026-09-27T08:00:00Z'}];
+  tagRows = [{recipe_key:recipe.recipe_key, tags:[]}];
+  await render();
+  const cards = container.querySelectorAll('#recipe-library .recipeCard');
+  expect(cards).toHaveLength(1);
+  expect(cards[0].textContent).toContain('Queued · Day 3');
+  expect(button('Remove from queue', cards[0])).toBeTruthy();
+});
+
 test('a saved meal can be unscheduled and remains in the recipe library', async () => {
   current = [sample(1)];
   await render();
