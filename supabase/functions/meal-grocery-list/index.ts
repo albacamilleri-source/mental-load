@@ -24,8 +24,9 @@ const resultSchema = {
                 amount: { type: "string" },
                 note: { type: "string" },
                 sources: { type: "array", items: { type: "string" } },
+                inputNames: { type: "array", items: { type: "string" } },
               },
-              required: ["name", "amount", "note", "sources"],
+              required: ["name", "amount", "note", "sources", "inputNames"],
               additionalProperties: false,
             },
           },
@@ -83,6 +84,40 @@ function cleanRecipes(value: unknown) {
   });
 }
 
+function normalizedName(value: unknown) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isSectionHeading(value: unknown) {
+  return /^(instructions?|base|toppings?|for the (filling|wrap)|cheesecake layer|raspberry chia layer)$/i.test(String(value || "").trim());
+}
+
+function preserveUnmappedIngredients(result: any, recipes: any[]) {
+  const covered = new Set((result?.sections || []).flatMap((section: any) => section?.items || [])
+    .flatMap((item: any) => item?.inputNames || []).map(normalizedName).filter(Boolean));
+  const expected = new Map<string, { name: string; amounts: string[]; sources: string[] }>();
+  for (const recipe of recipes) for (const ingredient of recipe.ingredients) {
+    const key = normalizedName(ingredient.name);
+    if (!key || isSectionHeading(key) || covered.has(key)) continue;
+    if (!expected.has(key)) expected.set(key, { name: ingredient.name, amounts: [], sources: [] });
+    const entry = expected.get(key)!;
+    const amount = ingredient.qty == null ? ingredient.unit || "as needed" : `${ingredient.qty}${ingredient.unit ? ` ${ingredient.unit}` : ""}`;
+    if (!entry.amounts.includes(amount)) entry.amounts.push(amount);
+    if (!entry.sources.includes(recipe.title)) entry.sources.push(recipe.title);
+  }
+  if (!expected.size) return result;
+  let other = (result.sections || []).find((section: any) => section.name === "Other");
+  if (!other) { other = { name: "Other", items: [] }; result.sections.push(other); }
+  for (const [key, entry] of expected) other.items.push({ name: entry.name, amount: entry.amounts.join(" + "), note: "Kept from the original recipe for checking", sources: entry.sources, inputNames: [key] });
+  result.review = result.review || [];
+  result.review.push({
+    issue: `The AI did not safely consolidate ${[...expected.values()].map(entry => entry.name).join(", ")}.`,
+    suggestion: "The original entries were kept under Other so nothing is lost. Check and combine them manually if appropriate.",
+    sources: [...new Set([...expected.values()].flatMap(entry => entry.sources))],
+  });
+  return result;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
@@ -104,7 +139,7 @@ Deno.serve(async (req: Request) => {
       "Use practical UK shopping names and assign every retained item to one shop section. Do not invent quantities or ingredients.",
       "Recipes without a scheduledFor date are deliberate current Prep List selections for Adult Lunches, Side Dishes, or Treats & Snacks. Include each once and do not flag the missing date for review.",
       "Perform a second QA pass. Put suspicious quantities, uncertain merges, ambiguous ingredients and likely extraction mistakes in review with a concrete suggestion. Still include the most useful conservative version in the main list when possible.",
-      "List the contributing recipe titles in sources for traceability. Omit empty shop sections. Keep item notes short.",
+      "List the contributing recipe titles in sources for traceability. For every output item, inputNames must contain every original ingredient name consolidated into it, copied exactly as supplied. Every supplied ingredient must appear in exactly one inputNames array unless it is clearly a recipe-section heading. Omit empty shop sections. Keep item notes short.",
       `Structured meal data:\n${JSON.stringify(recipes)}`,
     ].join("\n\n");
 
@@ -123,7 +158,7 @@ Deno.serve(async (req: Request) => {
     if (!response.ok) throw new Error(data?.error?.message || `AI grocery request failed (${response.status})`);
     const output = outputText(data);
     if (!output) throw new Error("The AI returned no grocery list.");
-    const result = JSON.parse(output);
+    const result = preserveUnmappedIngredients(JSON.parse(output), recipes);
     return json({ ...result, recipeCount: recipes.length, inputIngredientCount: recipes.reduce((total, recipe) => total + recipe.ingredients.length, 0) });
   } catch (error) {
     console.error(error);
