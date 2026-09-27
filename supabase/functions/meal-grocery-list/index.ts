@@ -102,6 +102,7 @@ Deno.serve(async (req: Request) => {
       "Convert compatible units before adding. When units cannot safely be combined, keep the amounts together in one readable amount string separated by +. Preserve to taste, optional and as needed wording.",
       "Repair obvious parsing artefacts where quantities or units were embedded in the ingredient name. Never append zero quantities. Remove recipe-section headings and non-ingredients such as instructions, base, topping, for the filling and for the wrap.",
       "Use practical UK shopping names and assign every retained item to one shop section. Do not invent quantities or ingredients.",
+      "Recipes without a scheduledFor date are deliberate current Prep List selections for Adult Lunches, Side Dishes, or Treats & Snacks. Include each once and do not flag the missing date for review.",
       "Perform a second QA pass. Put suspicious quantities, uncertain merges, ambiguous ingredients and likely extraction mistakes in review with a concrete suggestion. Still include the most useful conservative version in the main list when possible.",
       "List the contributing recipe titles in sources for traceability. Omit empty shop sections. Keep item notes short.",
       `Structured meal data:\n${JSON.stringify(recipes)}`,
