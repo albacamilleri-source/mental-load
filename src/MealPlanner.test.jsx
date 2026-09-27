@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
-import MealPlanner, { MealPlannerWorkspace } from './MealPlanner';
+import MealPlanner, { MealPlannerWorkspace, SelectionPlannerWorkspace } from './MealPlanner';
 import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
 import { BREAKFAST_CATEGORIES, KIDS_LUNCH_CATEGORIES, LUNCH_CATEGORIES } from './plannerConfig';
 
@@ -44,7 +44,7 @@ function setupQueries() {
     return query;
   });
 }
-async function render(mealType = 'dinner') { await act(async () => { root.render(<MealPlannerWorkspace mealType={mealType}/>); }); }
+async function render(mealType = 'dinner') { await act(async () => { root.render(['lunch', 'sides', 'treats'].includes(mealType) ? <SelectionPlannerWorkspace mealType={mealType}/> : <MealPlannerWorkspace mealType={mealType}/>); }); }
 async function change(label, value) {
   await act(async () => { Simulate.change(document.body.querySelector(`[aria-label="${label}"]`), { target: { value } }); });
 }
@@ -78,7 +78,7 @@ test('Meal Planner opens a choice screen and returns from Breakfasts without lea
 
 test('Meal Planner opens a Lunches submenu with Kids before Adults', async () => {
   await act(async () => { root.render(<MealPlanner/>); });
-  expect([...container.querySelectorAll('.plannerChoiceTitle')].map(node => node.textContent.trim().replace('↗', '').trim())).toEqual(['Breakfasts', 'Lunches', 'Dinners']);
+  expect([...container.querySelectorAll('.plannerChoiceTitle')].map(node => node.textContent.trim().replace('↗', '').trim())).toEqual(['Breakfasts', 'Lunches', 'Dinners', 'Side Dishes', 'Treats & Snacks']);
   await click(container.querySelector('[aria-label="Open Lunches planner"]'));
   expect(window.location.hash).toBe('#meal-planner/lunches');
   expect([...container.querySelectorAll('.plannerChoiceTitle')].map(node => node.textContent.trim().replace('↗', '').trim())).toEqual(['Kids', 'Adults']);
@@ -89,37 +89,29 @@ test('Meal Planner opens a Lunches submenu with Kids before Adults', async () =>
   expect(window.location.hash).toBe('#meal-planner/lunches');
 });
 
-test('Adult Lunches has an isolated library and seven-day framework', async () => {
+test('Adult Lunches has an isolated selection library and Prep List', async () => {
   library = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false}];
   lunchLibrary = [{...sample(90), recipe_key:recipeKey(sample(90)), has_been_cooked:false, is_deleted:false}];
   await render('lunch');
-  expect(mockFrom).toHaveBeenCalledWith('lunch_weekly_meals');
   expect(mockFrom).toHaveBeenCalledWith('lunch_recipe_library');
-  expect(mockFrom).toHaveBeenCalledWith('lunch_recipe_queue');
+  expect(mockFrom).toHaveBeenCalledWith('lunch_prep_selections');
   expect(mockFrom).not.toHaveBeenCalledWith('meal_recipe_library');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 90');
   expect(container.querySelector('#recipe-library').textContent).not.toContain('Recipe 1');
-  expect(container.querySelectorAll('[aria-label$=" meal title"]')).toHaveLength(7);
-  expect(container.querySelectorAll('.breakfastDayGroup')).toHaveLength(0);
-  expect([...container.querySelectorAll('.meal > .mealSummary .dayHeading')].map(node => node.textContent)).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
-  expect([...container.querySelectorAll('.dayCategory')].every(node => node.textContent === 'Any recipe')).toBe(true);
-  expect(container.querySelector('.weekNav')).toBeNull();
+  expect(container.querySelector('.prepRibbon')).not.toBeNull();
+  expect(container.querySelectorAll('[aria-label$=" meal title"]')).toHaveLength(0);
 });
 
-test('Adult Lunches marks a renamed library recipe tried using its stored database key', async () => {
+test('Adult Lunches can add and remove a recipe from the Prep List', async () => {
   const source = 'https://example.com/adult-lunch';
   const storedKey = JSON.stringify(['original lunch title', source]);
   lunchLibrary = [{...sample(91), title:'Improved Lunch Title', source_ref:source, recipe_key:storedKey, has_been_cooked:false, is_deleted:false}];
   lunchTagRows = [{recipe_key:storedKey, tags:['adult']}];
   await render('lunch');
   const card = [...container.querySelectorAll('#recipe-library .recipeCard')].find(node => node.textContent.includes('Improved Lunch Title'));
-  await click(card.querySelector('[aria-label="Mark as tried: Improved Lunch Title"]'));
-  expect(writes.find(write => write.table === 'lunch_recipe_library' && write.value?.has_been_cooked === true)?.value).toMatchObject({
-    recipe_key: storedKey,
-    source_ref: source,
-    has_been_cooked: true,
-  });
-  expect(card.textContent).toContain('✓ Tried');
+  await click(card.querySelector('input[type="checkbox"]'));
+  expect(writes.find(write => write.table === 'lunch_prep_selections' && write.value?.recipe_key === storedKey)).toBeTruthy();
+  expect(container.querySelector('.prepRibbon').textContent).toContain('Improved Lunch Title');
 });
 
 test('Kids Lunches uses separate recipes and offers editable side dropdowns for seven days', async () => {
@@ -146,12 +138,12 @@ test('Kids Lunches uses separate recipes and offers editable side dropdowns for 
   expect(writes.find(write => write.table === 'kids_lunch_side_options' && Array.isArray(write.value))).toBeTruthy();
 });
 
-test('Lunch URL imports use the lunch capsule and always enter the lunch queue', async () => {
-  mockInvoke.mockResolvedValue({data: {ok:true, destination:'queue', dayNumber:1, updatedExisting:false, alreadyQueued:false, recipe:{title:'Tomato Wrap'}}, error: null});
+test('Adult Lunch URL imports save directly to its selection library', async () => {
+  mockInvoke.mockResolvedValue({data: {ok:true, destination:'library', updatedExisting:false, alreadyQueued:false, recipe:{title:'Tomato Wrap'}}, error: null});
   await render('lunch');
   await change('Recipe URL to import', 'https://example.com/tomato-wrap');
   await click(button('Import recipe'));
-  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/tomato-wrap', destination:'queue', weekOf:'lunch-capsule', mealType:'lunch'}});
+  expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/tomato-wrap', destination:'library', mealType:'lunch'}});
   expect(button('Save to library')).toBeUndefined();
 });
 
@@ -296,7 +288,7 @@ test('queue status recognises a recipe by source when a stale queue title differ
   await render('breakfast');
   const card = [...container.querySelectorAll('#recipe-library .recipeCard')].find(node => node.textContent.includes('Updated breakfast title'));
   expect(card.textContent).toContain('Queued · Day 8');
-  expect(button('Queued', card).disabled).toBe(true);
+  expect(button('Remove from queue', card).disabled).toBe(false);
 });
 
 test('breakfast grocery lists use the scheduled recipes that already have ingredients', async () => {
@@ -383,15 +375,15 @@ test('blocks a mismatched meal and saves normalized tags with a matching meal', 
   expect(day(4).textContent).toContain('Saved');
 });
 
-test('grocery generation requires all saved recipes to match, including after category edits', async () => {
-  current = Array.from({length:6}, (_,i) => sample(i+1));
+test('grocery generation includes valid saved recipes after category edits', async () => {
+  current = Array.from({length:7}, (_,i) => sample(i+1));
   tagRows = [current[3], current[5]].map(m => ({recipe_key: recipeKey(m), tags: m.meal_number === 4 ? ['instant pot'] : ['soup']}));
   await render();
   expect(button('Generate grocery list').disabled).toBe(false);
   await click(button('Edit categories'));
   await change('Day 1 accepted tags', 'soup');
   await click(button('Save day categories'));
-  expect(button('Generate grocery list').disabled).toBe(true);
+  expect(button('Generate grocery list').disabled).toBe(false);
   expect(day(1).textContent).toContain('Add a recipe tagged soup');
 });
 
@@ -402,7 +394,7 @@ test('day categories are edited in a modal instead of taking space on the planne
   await click(button('Edit categories'));
   const modal = document.body.querySelector('[aria-label="Edit day categories"]');
   expect(modal).not.toBeNull();
-  expect(modal.querySelectorAll('.categoryCard')).toHaveLength(6);
+  expect(modal.querySelectorAll('.categoryCard')).toHaveLength(7);
   await click(modal.querySelector('[aria-label="Close categories"]'));
   expect(document.body.querySelector('[aria-label="Edit day categories"]')).toBeNull();
 });
@@ -449,12 +441,12 @@ test('using one recipe leaves other library cards interactive while its save is 
 });
 
 test('Use recipe shows an error popup when every day already has a meal', async () => {
-  current = Array.from({length:6}, (_, index) => sample(index + 1));
-  library = [{...sample(7), recipe_key:recipeKey(sample(7)), has_been_cooked:false, is_deleted:false}];
+  current = Array.from({length:7}, (_, index) => sample(index + 1));
+  library = [{...sample(8), recipe_key:recipeKey(sample(8)), has_been_cooked:false, is_deleted:false}];
   await render();
-  await click(button('Use recipe', [...container.querySelectorAll('#recipe-library .recipeCard')].find(card => card.textContent.includes('Recipe 7'))));
+  await click(button('Use recipe', [...container.querySelectorAll('#recipe-library .recipeCard')].find(card => card.textContent.includes('Recipe 8'))));
   expect(document.body.textContent).toContain('All days already have an assigned meal. Clear a day if you want to use this recipe.');
-  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.title === 'Recipe 7')).toBeUndefined();
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.title === 'Recipe 8')).toBeUndefined();
 });
 
 test('week days are collapsed summaries with the recipe name visible', async () => {
@@ -555,7 +547,7 @@ test('a library recipe can be sent to its matching queue and fills a blank day',
   expect(queueWrite.insert).toMatchObject({day_number:6, position:1, title:'Recipe 1'});
   expect(container.querySelector('[aria-label="Day 6 meal title"]').value).toBe('Recipe 1');
   expect(card.textContent).toContain('Queued · Day 6');
-  expect(button('Queued', card).disabled).toBe(true);
+  expect(button('Remove from queue', card).disabled).toBe(false);
 });
 
 test('a saved meal can be unscheduled and remains in the recipe library', async () => {
@@ -602,7 +594,7 @@ test('imports a URL with AI details, assigns a queue, and fills its blank day', 
   await change('Recipe URL to import', 'https://example.com/pasta');
   await click(button('Import & queue'));
   expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/pasta', destination:'queue', weekOf:expect.stringMatching(/^\d{4}-W\d{2}$/), mealType:'dinner'}});
-  expect(document.body.textContent).toContain('Lemony Pasta added to Day 1 queue');
+  expect(document.body.textContent).toContain('Lemony Pasta added to Monday queue');
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
 });
 
@@ -682,8 +674,8 @@ test('library cards open a modal with editable ingredients, source and method, a
   const editedIngredients = [{name:'chopped carrot', qty:2, unit:'cups'}];
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.method === '1. Roast the carrots.' && write.value.servings === 5 && write.value.source_ref === 'https://example.com/recipe-1' && JSON.stringify(write.value.ingredients) === JSON.stringify(editedIngredients))).toBeTruthy();
   expect(writes).toContainEqual({table:'meal_recipe_tags', value:{recipe_key:recipeKey({...sample(1), source_ref:'https://example.com/recipe-1'}), tags:['quick', 'soup']}});
-  expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'source_ref', value:'Book 1', payload:{source_ref:'https://example.com/recipe-1', ingredients:editedIngredients, method:'1. Roast the carrots.', servings:5}}});
-  expect(writes).toContainEqual({table:'weekly_meals', update:{field:'source_ref', value:'Book 1', payload:{source_ref:'https://example.com/recipe-1', ingredients:editedIngredients, method:'1. Roast the carrots.'}}});
+  expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'source_ref', value:'Book 1', payload:{title:'Recipe 1', source_ref:'https://example.com/recipe-1', ingredients:editedIngredients, method:'1. Roast the carrots.', servings:5}}});
+  expect(writes).toContainEqual({table:'weekly_meals', update:{field:'source_ref', value:'Book 1', payload:{title:'Recipe 1', source_ref:'https://example.com/recipe-1', ingredients:editedIngredients, method:'1. Roast the carrots.'}}});
   await click(button('Delete', recipeLibrary));
   expect(window.confirm).toHaveBeenCalled();
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.is_deleted)).toBeTruthy();
@@ -739,13 +731,80 @@ test('a temporary switch keeps the queued recipe at the front and restores it af
   tagRows = [{recipe_key:recipeKey(first), tags:['quick']}, {recipe_key:recipeKey(second), tags:['quick']}];
   await render(); await click(button('Switch', day(2)));
   await act(async () => {
-    Simulate.change(document.body.querySelector('[aria-label="Switch recipe title"]'), {target:{value:'Cookbook Risotto'}});
-    Simulate.change(document.body.querySelector('[aria-label="Switch recipe source"]'), {target:{value:'Cookbook p.40'}});
+    Simulate.change(document.body.querySelector('[aria-label="Library recipe for switch"]'), {target:{value:recipeKey(second)}});
   });
   await click(button('Switch meal', document.body));
   expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
-  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Cookbook Risotto');
+  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Recipe 3');
   await click(button('Mark cooked', day(2)));
   expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Recipe 2');
   expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
+});
+
+test('Meal Planner landing page shows today at a glance before all five planners', async () => {
+  await act(async () => { root.render(<MealPlanner/>); });
+  expect(container.querySelector('.todayFood')).not.toBeNull();
+  expect(container.querySelector('.todayFood').textContent).toContain('at a glance');
+  expect([...container.querySelectorAll('.plannerChoiceTitle')].map(node => node.textContent)).toHaveLength(5);
+});
+
+test('Dinners uses seven named weekday slots', async () => {
+  await render('dinner');
+  expect(container.querySelectorAll('[aria-label$=" meal title"]')).toHaveLength(7);
+  expect([...container.querySelectorAll('.meal > .mealSummary .dayHeading')].map(node => node.textContent)).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+});
+
+test('Dinner queues can be paused without changing their recipes', async () => {
+  const queued = {...sample(1), id:'dinner-q1', day_number:1, position:1, created_at:'2026-09-26T08:00:00Z'};
+  queue = [queued]; current = [{...queued, id:'dinner-meal-1', meal_number:1, queue_item_id:'dinner-q1'}];
+  await render('dinner');
+  await click(button('Pause queue', day(1)));
+  expect(writes).toContainEqual({table:'meal_day_categories', update:{field:'day_number', value:1, payload:{is_paused:true}}});
+  expect(writes.find(write => write.table === 'meal_recipe_queue' && write.delete)).toBeUndefined();
+  expect([...container.querySelectorAll('.meal')].find(card => card.querySelector('.dayHeading')?.textContent === 'Monday').textContent).toContain('Queue paused');
+});
+
+test('queued library buttons remove and restore queue membership', async () => {
+  const recipe = {...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false};
+  library = [recipe]; queue = [{...recipe, id:'dinner-q1', day_number:1, position:1, created_at:'2026-09-26T08:00:00Z'}];
+  await render('dinner');
+  const card = container.querySelector('#recipe-library .recipeCard');
+  await click(button('Remove from queue', card));
+  expect(writes).toContainEqual({table:'meal_recipe_queue', delete:{field:'id', value:'dinner-q1', payload:undefined}});
+  expect(card.textContent).toContain('Send to queue');
+});
+
+test('recipe titles are editable in View recipe and propagate to scheduled and queued copies', async () => {
+  const recipe = {...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false, method:''};
+  library = [recipe]; queue = [{...recipe, id:'dinner-q1', day_number:1, position:1, created_at:'2026-09-26T08:00:00Z'}]; current = [{...recipe, id:'dinner-meal-1', meal_number:1, queue_item_id:'dinner-q1'}];
+  await render('dinner');
+  await click(button('View recipe', container.querySelector('#recipe-library')));
+  await change('Title for Recipe 1', 'Carrot Supper');
+  await click(button('Save changes', document.body));
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.title === 'Carrot Supper')).toBeTruthy();
+  expect(writes.find(write => write.table === 'meal_recipe_queue' && write.update?.payload?.title === 'Carrot Supper')).toBeTruthy();
+  expect(writes.find(write => write.table === 'weekly_meals' && write.update?.payload?.title === 'Carrot Supper')).toBeTruthy();
+});
+
+test('Side Dishes and Treats use the selection-based Prep List framework', async () => {
+  await render('sides');
+  expect(container.querySelector('.brand').textContent).toContain('Side Dishes & Supporting Acts');
+  expect(container.querySelector('.prepRibbon')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Filter library by tag"]')).not.toBeNull();
+  await render('treats');
+  expect(container.querySelector('.brand').textContent).toContain('Treats & Snacks');
+  expect(container.querySelector('.prepRibbon')).not.toBeNull();
+});
+
+test('a switched library recipe contributes ingredients to the grocery list', async () => {
+  const queued = {...sample(1), id:'dinner-q1', day_number:1, position:1, created_at:'2026-09-26T08:00:00Z'};
+  const alternative = {...sample(2), recipe_key:recipeKey(sample(2)), ingredients:[{name:'tomato', qty:3, unit:'item'}], has_been_cooked:false, is_deleted:false};
+  queue = [queued]; current = [{...queued, id:'dinner-meal-1', meal_number:1, queue_item_id:'dinner-q1'}]; library = [alternative];
+  await render('dinner');
+  await click(button('Switch', day(1)));
+  await act(async () => { Simulate.change(document.body.querySelector('[aria-label="Library recipe for switch"]'), {target:{value:recipeKey(alternative)}}); });
+  await click(button('Switch meal', document.body));
+  expect(button('Generate grocery list').disabled).toBe(false);
+  await click(button('Generate grocery list'));
+  expect(container.querySelector('#grocery').textContent).toContain('tomato, 3');
 });

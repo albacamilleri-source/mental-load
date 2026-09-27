@@ -7,6 +7,8 @@ const plannerTables = {
   breakfast: { categories: "breakfast_day_categories", meals: "breakfast_weekly_meals", queue: "breakfast_recipe_queue", library: "breakfast_recipe_library", tags: "breakfast_recipe_tags" },
   lunch: { categories: "lunch_day_categories", meals: "lunch_weekly_meals", queue: "lunch_recipe_queue", library: "lunch_recipe_library", tags: "lunch_recipe_tags" },
   kids_lunch: { categories: "kids_lunch_day_categories", meals: "kids_lunch_weekly_meals", queue: "kids_lunch_recipe_queue", library: "kids_lunch_recipe_library", tags: "kids_lunch_recipe_tags" },
+  sides: { categories: "", meals: "", queue: "", library: "side_dish_recipe_library", tags: "side_dish_recipe_tags", selection: true },
+  treats: { categories: "", meals: "", queue: "", library: "treat_recipe_library", tags: "treat_recipe_tags", selection: true },
 } as const;
 
 const corsHeaders = {
@@ -31,13 +33,14 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const sourceUrl = normalizeRecipeUrl(body?.url);
     const requestedDestination = body?.destination === "library" ? "library" : body?.destination === "queue" ? "queue" : "";
-    const mealType = body?.mealType === undefined || body?.mealType === "dinner" ? "dinner" : body?.mealType === "breakfast" ? "breakfast" : body?.mealType === "lunch" ? "lunch" : body?.mealType === "kids_lunch" ? "kids_lunch" : "";
+    const mealType = body?.mealType === undefined || body?.mealType === "dinner" ? "dinner" : body?.mealType === "breakfast" ? "breakfast" : body?.mealType === "lunch" ? "lunch" : body?.mealType === "kids_lunch" ? "kids_lunch" : body?.mealType === "sides" ? "sides" : body?.mealType === "treats" ? "treats" : "";
     const capsule = mealType === "breakfast" || mealType === "lunch" || mealType === "kids_lunch";
-    const destination = capsule && requestedDestination ? "queue" : requestedDestination;
+    const selectionOnly = mealType === "sides" || mealType === "treats" || mealType === "lunch";
+    const destination = selectionOnly && requestedDestination ? "library" : capsule && requestedDestination ? "queue" : requestedDestination;
     const weekOf = String(body?.weekOf || "").trim();
     const dryRun = body?.dryRun === true;
     if (!destination) return json({ error: "Choose Import & queue or Import only." }, 400);
-    if (!mealType) return json({ error: "Choose Dinners, Breakfasts, Adult Lunches or Kids Lunches." }, 400);
+    if (!mealType) return json({ error: "Choose a Mental Load recipe library." }, 400);
     const validPeriod = mealType === "breakfast" ? weekOf === "breakfast-capsule" : mealType === "lunch" ? weekOf === "lunch-capsule" : mealType === "kids_lunch" ? weekOf === "kids-lunch-capsule" : /^\d{4}-W\d{2}$/.test(weekOf);
     if (destination === "queue" && !validPeriod) return json({ error: "The current planning period is missing." }, 400);
     const tables = plannerTables[mealType];
@@ -50,7 +53,7 @@ Deno.serve(async (req: Request) => {
     const client = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authorization } } });
 
     const [categoriesResult, mealsResult, queueResult, existingLibraryResult] = await Promise.all([
-      client.from(tables.categories).select("*").order("day_number"),
+      selectionOnly ? Promise.resolve({ data: [], error: null }) : client.from(tables.categories).select("*").order("day_number"),
       destination === "queue" ? client.from(tables.meals).select("*").eq("week_of", weekOf).order("meal_number") : Promise.resolve({ data: [], error: null }),
       destination === "queue" ? client.from(tables.queue).select("*").order("day_number").order("position").order("created_at") : Promise.resolve({ data: [], error: null }),
       client.from(tables.library).select("*").eq("source_ref", sourceUrl).maybeSingle(),
@@ -58,7 +61,7 @@ Deno.serve(async (req: Request) => {
     const loadError = [categoriesResult, mealsResult, queueResult, existingLibraryResult].find(result => result.error)?.error;
     if (loadError) throw loadError;
     const categories = categoriesResult.data || [];
-    const expectedCategoryCount = mealType === "breakfast" ? 11 : mealType === "lunch" || mealType === "kids_lunch" ? 7 : 6;
+    const expectedCategoryCount = selectionOnly ? 0 : mealType === "breakfast" ? 11 : mealType === "kids_lunch" ? 7 : 7;
     if (categories.length !== expectedCategoryCount) throw new Error("Day categories could not be loaded.");
     const categoryTags = [...new Set(categories.flatMap(category => parseTags(category.accepted_tags)))];
 

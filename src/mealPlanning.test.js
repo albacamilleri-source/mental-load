@@ -24,8 +24,8 @@ test('recipe identity survives week and day duplication but distinguishes source
   expect(recipeKey(meal)).not.toBe(recipeKey({ ...meal, source_ref: 'Book p.43' }));
 });
 test('reuse excludes incompatible days and includes OR matches', () => {
-  expect(matchingDays(['slow cooker'], DEFAULT_CATEGORIES).map(c => c.day_number)).toEqual([1, 2, 3, 4, 5]);
-  expect(matchingDays(['soup'], DEFAULT_CATEGORIES).map(c => c.day_number)).toEqual([1, 2, 3, 5, 6]);
+  expect(matchingDays(['slow cooker'], DEFAULT_CATEGORIES).map(c => c.day_number)).toEqual([1, 2, 3, 4, 5, 7]);
+  expect(matchingDays(['soup'], DEFAULT_CATEGORIES).map(c => c.day_number)).toEqual([1, 2, 3, 5, 6, 7]);
 });
 test('saving enforces required fields and category matching', () => {
   const meal = { title: 'Soup', source_ref: 'Book', meal_number: 6 };
