@@ -134,6 +134,23 @@ test('Adult Lunches can add and remove a recipe from the Prep List', async () =>
   expect(container.querySelector('.prepRibbon').textContent).toContain('Improved Lunch Title');
 });
 
+test('renaming an Adult Lunch recipe keeps its stable key and source record', async () => {
+  const source = 'https://example.com/lunch-to-rename';
+  const storedKey = JSON.stringify(['original lunch title', source]);
+  lunchLibrary = [{...sample(92), title:'Original Lunch Title', source_ref:source, recipe_key:storedKey, has_been_cooked:false, is_deleted:false}];
+  lunchQueue = [{recipe_key:storedKey, selected_at:'2026-09-27T08:00:00Z'}];
+  await render('lunch');
+  const card = [...container.querySelectorAll('#recipe-library .recipeCard')].find(node => node.textContent.includes('Original Lunch Title'));
+  await click(button('View recipe', card));
+  await change('Title for Original Lunch Title', 'Renamed Lunch');
+  await click(button('Save changes', document.body));
+  const saved = writes.find(write => write.table === 'lunch_recipe_library' && write.value?.title === 'Renamed Lunch');
+  expect(saved.value).toMatchObject({recipe_key:storedKey, source_ref:source, is_deleted:false});
+  expect(writes.find(write => write.table === 'lunch_recipe_library' && write.update?.payload?.is_deleted)).toBeUndefined();
+  expect(container.querySelector('#recipe-library').textContent).toContain('Renamed Lunch');
+  expect(container.querySelector('.prepRibbon').textContent).toContain('Renamed Lunch');
+});
+
 test('Kids Lunches uses separate recipes and offers editable side dropdowns for seven days', async () => {
   kidsLunchLibrary = [{...sample(80), recipe_key:recipeKey(sample(80)), has_been_cooked:false, is_deleted:false}];
   kidsLunchSideOptions = [{id:'side-fruit', name:'Fruit', sort_order:1}];
@@ -694,7 +711,7 @@ test('library cards open a modal with editable ingredients, source and method, a
   expect(document.body.querySelector('[aria-label="Recipe details for Recipe 1"]')).toBeNull();
   const editedIngredients = [{name:'chopped carrot', qty:2, unit:'cups'}];
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value.method === '1. Roast the carrots.' && write.value.servings === 5 && write.value.source_ref === 'https://example.com/recipe-1' && JSON.stringify(write.value.ingredients) === JSON.stringify(editedIngredients))).toBeTruthy();
-  expect(writes).toContainEqual({table:'meal_recipe_tags', value:{recipe_key:recipeKey({...sample(1), source_ref:'https://example.com/recipe-1'}), tags:['quick', 'soup']}});
+  expect(writes).toContainEqual({table:'meal_recipe_tags', value:{recipe_key:recipeKey(sample(1)), tags:['quick', 'soup']}});
   expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'source_ref', value:'Book 1', payload:{title:'Recipe 1', source_ref:'https://example.com/recipe-1', ingredients:editedIngredients, method:'1. Roast the carrots.', servings:5}}});
   expect(writes).toContainEqual({table:'weekly_meals', update:{field:'source_ref', value:'Book 1', payload:{title:'Recipe 1', source_ref:'https://example.com/recipe-1', ingredients:editedIngredients, method:'1. Roast the carrots.'}}});
   await click(button('Delete', recipeLibrary));

@@ -819,33 +819,22 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       const oldKey = recipeKey(recipe);
       const title = String(details.title || '').trim();
       const source = String(details.source_ref || '').trim();
-      const key = recipeKey({ title, source_ref: source });
       const collision = libraryRecords.find(row => !row.is_deleted && row.recipe_key !== oldKey && String(row.source_ref || '').trim() === source);
       if (collision) throw new Error(`That source is already used by ${collision.title}.`);
       const existing = libraryRecords.find(row => row.recipe_key === oldKey);
-      const tags = recipeTags[oldKey] || [];
       const payload = {
-        recipe_key: key, title, source_ref: source, ingredients: details.ingredients,
+        recipe_key: oldKey, title, source_ref: source, ingredients: details.ingredients,
         method: String(details.method || '').trim(), servings: details.servings ?? null, extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '',
         cooked_at: existing?.cooked_at || recipe.cooked_at || new Date().toISOString(),
         has_been_cooked: !!(existing?.has_been_cooked || recipe.has_been_cooked), is_deleted: false,
       };
-      if (key !== oldKey) {
-        const { error: tagError } = await from('meal_recipe_tags').upsert({ recipe_key: key, tags });
-        if (tagError) throw tagError;
-      }
       const { data: saved, error } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (error) throw error;
-      if (key !== oldKey && existing) {
-        const { error: oldRecordError } = await from('meal_recipe_library').update({ is_deleted: true }).eq('recipe_key', oldKey);
-        if (oldRecordError) throw oldRecordError;
-      }
       const { error: queueError } = await from('meal_recipe_queue').update({ title, source_ref: source, ingredients: payload.ingredients, method: payload.method, servings: payload.servings }).eq('source_ref', recipe.source_ref);
       if (queueError) throw queueError;
       const { error: scheduleError } = await from('weekly_meals').update({ title, source_ref: source, ingredients: payload.ingredients, method: payload.method }).eq('source_ref', recipe.source_ref);
       if (scheduleError) throw scheduleError;
-      if (key !== oldKey) setRecipeTags(prev => ({ ...prev, [key]: tags }));
-      setLibraryRecords(prev => [saved, ...prev.filter(row => row.recipe_key !== oldKey && row.recipe_key !== key)]);
+      setLibraryRecords(prev => [saved, ...prev.filter(row => row.recipe_key !== oldKey)]);
       setQueueRows(prev => prev.map(row => sameRecipe(row, recipe) ? { ...row, title, source_ref: source, ingredients: payload.ingredients, method: payload.method, servings: payload.servings } : row));
       setMeals(prev => prev.map(row => sameRecipe(row, recipe) ? { ...row, title, source_ref: source, ingredients: payload.ingredients, method: payload.method } : row));
       setGroceryGenerated(false);
@@ -1503,24 +1492,12 @@ export function SelectionPlannerWorkspace({ mealType, onBack, backLabel = 'Meal 
     try {
       const oldKey = recipeKey(recipe);
       const title = details.title.trim(); const source = details.source_ref.trim();
-      const key = recipeKey({ title, source_ref: source });
       const collision = library.find(row => recipeKey(row) !== oldKey && row.source_ref.trim() === source);
       if (collision) throw new Error(`That source is already used by ${collision.title}.`);
-      const payload = { ...recipe, recipe_key: key, title, source_ref: source, ingredients: details.ingredients, method: details.method || '', servings: details.servings ?? null, is_deleted: false };
+      const payload = { ...recipe, recipe_key: oldKey, title, source_ref: source, ingredients: details.ingredients, method: details.method || '', servings: details.servings ?? null, is_deleted: false };
       const { data, error: saveError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (saveError) throw saveError;
-      if (key !== oldKey) {
-        const { error: tagError } = await from('meal_recipe_tags').upsert({ recipe_key: key, tags: tags[oldKey] || [] });
-        if (tagError) throw tagError;
-        if (selectedKeys.includes(oldKey)) {
-          const { error: selectionError } = await from('prep_selections').update({ recipe_key: key }).eq('recipe_key', oldKey);
-          if (selectionError) throw selectionError;
-          setSelectedKeys(current => current.map(value => value === oldKey ? key : value));
-        }
-        await from('meal_recipe_library').update({ is_deleted: true }).eq('recipe_key', oldKey);
-        setTags(current => ({ ...current, [key]: current[oldKey] || [] }));
-      }
-      setLibrary(current => [data, ...current.filter(row => ![oldKey, key].includes(recipeKey(row)))]); setDetailsRecipe(null); setGroceryGenerated(false); return '';
+      setLibrary(current => [data, ...current.filter(row => recipeKey(row) !== oldKey)]); setDetailsRecipe(null); setGroceryGenerated(false); return '';
     } catch (reason) { return reason.message || 'Could not save recipe details.'; }
     finally { setBusy(false); }
   }
