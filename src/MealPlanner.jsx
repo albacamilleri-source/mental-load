@@ -6,6 +6,7 @@ import { parseTags, recipeKey, matchesCategory, mealValidation } from "./mealPla
 import { BREAKFAST_SLOTS, PLANNER_CONFIG } from './plannerConfig';
 import { extractionErrorMessage } from "./extractionError";
 import { chooseQueueDay, frontQueuePosition, nextQueuePosition, queueForDay, queueInsertionBeforeTail, recipeTagsFor } from "./mealQueue";
+import { buildSmartGroceryRecipes, smartGroceryText } from './smartGrocery';
 
 
 const SUPABASE_URL = "https://qvibdnrfywisvfsqgqux.supabase.co";
@@ -1618,6 +1619,90 @@ function TodayAtGlance() {
   return <section className="card todayFood"><div className="todayFoodHeader"><div><div className="plannerMonth">{day} at a glance · {formatMealDate(selectedDate, { year: 'numeric' })}</div><h2 className="sectionTitle">{isToday ? 'Today’s food' : 'Food for this date'}</h2></div><div className="dayAtGlanceControls"><button type="button" className="iconBtn" aria-label="Previous date" onClick={() => moveDate(-1)}>‹</button><input className="input" type="date" aria-label="Choose date for meal overview" value={selectedDate} onChange={event => event.target.value && setSelectedDate(event.target.value)}/><button type="button" className="iconBtn" aria-label="Next date" onClick={() => moveDate(1)}>›</button>{!isToday && <button type="button" className="btn ghost" onClick={() => setSelectedDate(localISODate(new Date()))}>Today</button>}</div></div>{items.length ? <div className="todayFoodGrid">{items.map((item, index) => <div className="todayFoodItem" key={`${item.label}-${index}`}><span>{item.label}</span><strong>{item.title}</strong></div>)}</div> : <div className="empty">Nothing is assigned for {isToday ? 'today' : 'this date'} yet.</div>}</section>;
 }
 
+function defaultGroceryWeek() {
+  const date = new Date();
+  if (date.getDay() === 0) date.setDate(date.getDate() + 1);
+  return isoWeek(date);
+}
+
+export function SmartGroceryList() {
+  const [week, setWeek] = useState(defaultGroceryWeek);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const start = localISODate(mondayForISOWeek(week));
+  const end = addDays(start, 6);
+
+  async function read(query, label) {
+    const response = await query;
+    if (response.error) throw new Error(`Could not load ${label}: ${response.error.message}`);
+    return response.data || [];
+  }
+
+  async function generate() {
+    if (busy) return;
+    setBusy(true); setError(''); setResult(null); setCopied(false);
+    try {
+      const [
+        dinnerMeals, dinnerLibrary, breakfastMeals, breakfastLibrary, kidsLunchMeals, kidsLunchLibrary,
+        kidsLunchSides, sideOptions, adultLunchSelections, adultLunchLibrary,
+        sideSelections, sideLibrary, treatSelections, treatLibrary,
+      ] = await Promise.all([
+        read(sb.from('weekly_meals').select('*').eq('week_of', week).order('meal_number'), 'dinners'),
+        read(sb.from('meal_recipe_library').select('*'), 'the Dinner library'),
+        read(sb.from('breakfast_weekly_meals').select('*').eq('week_of', 'breakfast-capsule').gte('scheduled_for', start).lte('scheduled_for', end).order('meal_number'), 'breakfasts'),
+        read(sb.from('breakfast_recipe_library').select('*'), 'the Breakfast library'),
+        read(sb.from('kids_lunch_weekly_meals').select('*').eq('week_of', 'kids-lunch-capsule').gte('scheduled_for', start).lte('scheduled_for', end).order('meal_number'), 'Kids Lunches'),
+        read(sb.from('kids_lunch_recipe_library').select('*'), 'the Kids Lunch library'),
+        read(sb.from('kids_lunch_day_sides').select('*'), 'Kids Lunch sides'),
+        read(sb.from('kids_lunch_side_options').select('*'), 'Kids Lunch side choices'),
+        read(sb.from('lunch_prep_selections').select('*'), 'the Adult Lunch Prep List'),
+        read(sb.from('lunch_recipe_library').select('*'), 'the Adult Lunch library'),
+        read(sb.from('side_dish_prep_selections').select('*'), 'the Side Dish Prep List'),
+        read(sb.from('side_dish_recipe_library').select('*'), 'the Side Dish library'),
+        read(sb.from('treat_prep_selections').select('*'), 'the Treats Prep List'),
+        read(sb.from('treat_recipe_library').select('*'), 'the Treats library'),
+      ]);
+      const inRange = meal => meal.scheduled_for >= start && meal.scheduled_for <= end;
+      const recipes = buildSmartGroceryRecipes({
+        dinnerMeals: dinnerMeals.filter(meal => meal.week_of === week), dinnerLibrary,
+        dinnerDate: meal => dateForWeekDay(week, meal.meal_number),
+        breakfastMeals: breakfastMeals.filter(inRange), breakfastLibrary,
+        kidsLunchMeals: kidsLunchMeals.filter(inRange), kidsLunchLibrary, kidsLunchSides, sideOptions,
+        adultLunchSelections, adultLunchLibrary, sideSelections, sideLibrary, treatSelections, treatLibrary,
+      });
+      if (!recipes.length) throw new Error('No selected recipes with ingredients were found for this week. Schedule a meal or add a recipe to a Prep List first.');
+      const { data, error: invokeError } = await sb.functions.invoke('meal-grocery-list', { body: { dateFrom: start, dateTo: end, recipes } });
+      if (invokeError) throw new Error(invokeError.message || 'The smart grocery service could not be reached.');
+      if (data?.error) throw new Error(data.error);
+      if (!Array.isArray(data?.sections)) throw new Error('The smart grocery service returned an incomplete list. Please try again.');
+      setResult(data);
+    } catch (caught) {
+      setError(caught.message || 'The grocery list could not be generated. Please try again.');
+    } finally { setBusy(false); }
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(smartGroceryText(result));
+      setCopied(true); setTimeout(() => setCopied(false), 1800);
+    } catch { setError("Couldn't copy automatically. Select the list and copy it manually."); }
+  }
+
+  const itemCount = (result?.sections || []).reduce((total, section) => total + (section.items?.length || 0), 0);
+  return <section className="card smartGrocery" aria-labelledby="smart-grocery-title">
+    <div className="smartGroceryHead"><div><div className="plannerMonth">Breakfast · Lunch · Dinner · Sides · Treats</div><h2 className="sectionTitle" id="smart-grocery-title">One smart grocery list</h2><p className="smartGroceryIntro">AI combines, organises and checks every scheduled meal and Prep List selection.</p></div><div className="weekNav"><button type="button" className="iconBtn" aria-label="Previous grocery week" onClick={() => setWeek(current => shiftWeek(current, -1))}>‹</button><span className="weekLabel">{formatWeekLabel(week)}</span><button type="button" className="iconBtn" aria-label="Next grocery week" onClick={() => setWeek(current => shiftWeek(current, 1))}>›</button></div></div>
+    <button type="button" className="btn smartGroceryGenerate" disabled={busy} onClick={generate}>{busy ? <><span className="spinner"/>Organising and checking…</> : 'Generate complete grocery list'}</button>
+    {error && <div className="saveError smartGroceryError" role="alert">{error}</div>}
+    {result && <div className="smartGroceryResult" aria-live="polite">
+      <div className="rowBetween"><div><h3>Your organised list</h3><div className="small">{itemCount} items from {result.recipeCount || 0} recipes · quantities checked by AI</div></div><button type="button" className="btn secondary" onClick={copy}>{copied ? 'Copied ✓' : 'Copy full list'}</button></div>
+      <div className="grocerySections">{result.sections.filter(section => section.items?.length).map(section => <section className="grocerySection" key={section.name}><h4>{section.name}</h4>{section.items.map((item, index) => <div className="smartGroceryItem" key={`${item.name}-${index}`}><div><strong>{item.name}</strong>{item.note && <span>{item.note}</span>}</div><b>{item.amount}</b>{item.sources?.length > 0 && <small>{item.sources.join(' · ')}</small>}</div>)}</section>)}</div>
+      {result.review?.length > 0 && <section className="groceryReview"><h4>Check these</h4><p>The AI kept these separate so you can make the final call.</p>{result.review.map((item, index) => <div className="groceryReviewItem" key={`${item.issue}-${index}`}><strong>{item.issue}</strong><span>{item.suggestion}</span>{item.sources?.length > 0 && <small>{item.sources.join(' · ')}</small>}</div>)}</section>}
+    </div>}
+  </section>;
+}
+
 export default function MealPlanner({ onDirtyChange, onPathChange } = {}) {
   const [view, setView] = useState(viewFromHash);
   const [dirty, setDirty] = useState(false);
@@ -1663,6 +1748,7 @@ export default function MealPlanner({ onDirtyChange, onPathChange } = {}) {
   return <div className="meal-planner plannerTransition"><div className="app"><div className="shell">
     <header className="plannerHeader plannerHomeHeader"><div className="plannerMonth">Make space for what matters</div><h1 className="brand">Meal Planner<span className="brandDot">.</span></h1><p className="plannerHomeIntro">What would you like to plan?</p></header>
     <TodayAtGlance/>
+    <SmartGroceryList/>
     <div className="plannerChoices">
       <button type="button" className="plannerChoice" onClick={() => navigate('breakfast')} aria-label="Open Breakfasts planner"><span className="plannerChoiceNumber">01 / BREAKFASTS</span><span className="plannerChoiceTitle">Breakfasts <span aria-hidden="true">↗</span></span><span className="plannerChoiceDescription">Your ongoing breakfast rotation, recipes and queues.</span></button>
       <button type="button" className="plannerChoice" onClick={() => navigate('lunch-home')} aria-label="Open Lunches planner"><span className="plannerChoiceNumber">02 / LUNCHES</span><span className="plannerChoiceTitle">Lunches <span aria-hidden="true">↗</span></span><span className="plannerChoiceDescription">Separate Kids and Adult lunch rotations.</span></button>
