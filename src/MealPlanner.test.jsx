@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
-import MealPlanner, { MealPlannerWorkspace, SelectionPlannerWorkspace } from './MealPlanner';
+import MealPlanner, { MealPlannerWorkspace, SelectionPlannerWorkspace, SmartGroceryList } from './MealPlanner';
 import { DEFAULT_CATEGORIES, recipeKey } from './mealPlanning';
 import { BREAKFAST_CATEGORIES, BREAKFAST_SLOTS, KIDS_LUNCH_CATEGORIES, LUNCH_CATEGORIES } from './plannerConfig';
 
@@ -21,7 +21,7 @@ function setupQueries() {
     const query = {
       select: () => query,
       eq: (field, value) => { filters[field] = value; if (action) writes.push({ table, [action]: { field, value, payload } }); return query; },
-      lt: () => { isPast = true; return query; }, order: () => query,
+      lt: () => { isPast = true; return query; }, gte: () => query, lte: () => query, order: () => query,
       upsert: value => { payload = value; writes.push({ table, value }); return query; },
       insert: value => { payload = value; action = 'insert'; writes.push({ table, insert: value }); return query; },
       update: value => { payload = value; action = 'update'; return query; },
@@ -74,6 +74,26 @@ test('Meal Planner opens a choice screen and returns from Breakfasts without lea
   await click(container.querySelector('[aria-label="Open Dinners planner"]'));
   expect(window.location.hash).toBe('#meal-planner/dinners');
   expect(container.querySelector('.plannerHeader .brand').textContent).toContain('Dinners');
+});
+
+test('smart grocery list gathers every module and shows the AI-organised result', async () => {
+  breakfastCurrent = [{...sample(70), week_of:'breakfast-capsule', scheduled_for:'2026-09-28', servings:4, ingredients:[{name:'whole eggs',qty:4,unit:'item'}]}];
+  breakfastLibrary = [{...breakfastCurrent[0], recipe_key:recipeKey(breakfastCurrent[0]), servings:2, is_deleted:false}];
+  mockInvoke.mockResolvedValue({data:{recipeCount:1,inputIngredientCount:1,sections:[{name:'Dairy & Eggs',items:[{name:'Eggs',amount:'8',note:'',sources:['Recipe 70']}]}],review:[{issue:'Confirm egg size',suggestion:'Use the recipe specification',sources:['Recipe 70']}]},error:null});
+  await act(async () => { root.render(<SmartGroceryList/>); });
+  await click(button('Generate complete grocery list'));
+  expect(mockInvoke).toHaveBeenCalledWith('meal-grocery-list', expect.objectContaining({body:expect.objectContaining({dateFrom:'2026-09-28',dateTo:'2026-10-04'})}));
+  const sent = mockInvoke.mock.calls[0][1].body.recipes;
+  expect(sent.find(recipe => recipe.title === 'Recipe 70').ingredients[0].qty).toBe(8);
+  expect(container.textContent).toContain('Dairy & Eggs');
+  expect(container.textContent).toContain('Confirm egg size');
+});
+
+test('smart grocery list explains when there is nothing with ingredients to organise', async () => {
+  await act(async () => { root.render(<SmartGroceryList/>); });
+  await click(button('Generate complete grocery list'));
+  expect(container.querySelector('[role="alert"]').textContent).toContain('No selected recipes with ingredients');
+  expect(mockInvoke).not.toHaveBeenCalled();
 });
 
 test('Meal Planner opens a Lunches submenu with Kids before Adults', async () => {
