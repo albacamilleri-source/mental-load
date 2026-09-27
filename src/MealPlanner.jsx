@@ -64,7 +64,10 @@ function normalizedSourceRef(value) {
 function sameRecipe(left, right) {
   const leftSource = normalizedSourceRef(left?.source_ref);
   const rightSource = normalizedSourceRef(right?.source_ref);
-  return !!leftSource && leftSource === rightSource;
+  if (leftSource && rightSource) return leftSource === rightSource;
+  const leftTitle = String(left?.title || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const rightTitle = String(right?.title || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return !!leftTitle && leftTitle === rightTitle;
 }
 
 function isoWeek(date) {
@@ -1309,8 +1312,10 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       const key = recipeKey(recipe);
       if (deletedKeys.has(key)) return;
       const identity = normalizedSourceRef(recipe.source_ref) || key;
-      const previous = recipes.get(identity);
-      recipes.set(identity, previous ? {
+      const matchingEntry = [...recipes.entries()].find(([, stored]) => sameRecipe(stored, recipe));
+      const mapKey = matchingEntry?.[0] || identity;
+      const previous = matchingEntry?.[1] || recipes.get(identity);
+      recipes.set(mapKey, previous ? {
         ...previous,
         ...recipe,
         ingredients: recipe.ingredients?.length ? recipe.ingredients : previous.ingredients,
