@@ -1,4 +1,6 @@
-export const DEFAULT_CATEGORIES = Array.from({ length: 6 }, (_, i) => ({
+export const DINNER_DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+export const DEFAULT_CATEGORIES = Array.from({ length: 7 }, (_, i) => ({
   day_number: i + 1,
   name: i === 3 ? 'Instant pot or slow cooker' : i === 5 ? 'Soup Sunday' : '',
   accepted_tags: i === 3 ? ['instant pot', 'slow cooker'] : i === 5 ? ['soup'] : [],
