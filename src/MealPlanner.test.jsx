@@ -588,6 +588,28 @@ test('a library recipe can be sent to its matching queue and fills a blank day',
   expect(button('Remove from queue', card).disabled).toBe(false);
 });
 
+test('rapid repeated Send to queue clicks create only one queue entry', async () => {
+  const soup = {...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false};
+  library = [soup];
+  tagRows = [{recipe_key:soup.recipe_key, tags:['soup']}];
+  await render();
+  const send = button('Send to queue', container.querySelector('#recipe-library .recipeCard'));
+  await act(async () => { send.click(); send.click(); await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.insert)).toHaveLength(1);
+});
+
+test('queue membership recognises tracking variants of the same recipe URL', async () => {
+  const recipe = {...sample(1), source_ref:'https://Example.com/recipe/', recipe_key:'stable-recipe', has_been_cooked:false, is_deleted:false};
+  library = [recipe];
+  queue = [{...recipe, source_ref:'https://example.com/recipe?utm_source=newsletter#method', id:'tracked-q1', day_number:2, position:1, created_at:'2026-09-27T08:00:00Z'}];
+  tagRows = [{recipe_key:recipe.recipe_key, tags:[]}];
+  await render();
+  const card = container.querySelector('#recipe-library .recipeCard');
+  expect(card.textContent).toContain('Queued · Day 2');
+  expect(button('Remove from queue', card)).toBeTruthy();
+  expect(container.querySelectorAll('#recipe-library .recipeCard')).toHaveLength(1);
+});
+
 test('a saved meal can be unscheduled and remains in the recipe library', async () => {
   current = [sample(1)];
   await render();
