@@ -158,7 +158,7 @@ test('renaming an Adult Lunch recipe keeps its stable key and source record', as
   expect(container.querySelector('.prepRibbon').textContent).toContain('Renamed Lunch');
 });
 
-test('Kids Lunches uses separate recipes and offers editable side dropdowns for seven days', async () => {
+test('Kids Lunches chooses mains from its library and keeps editable side dropdowns for seven days', async () => {
   kidsLunchLibrary = [{...sample(80), recipe_key:recipeKey(sample(80)), has_been_cooked:false, is_deleted:false}];
   kidsLunchSideOptions = [{id:'side-fruit', name:'Fruit', sort_order:1}];
   kidsLunchDaySides = [{day_number:1, side_one_id:'side-fruit', side_two_id:null}];
@@ -168,7 +168,13 @@ test('Kids Lunches uses separate recipes and offers editable side dropdowns for 
   expect(mockFrom).toHaveBeenCalledWith('kids_lunch_side_options');
   expect(mockFrom).toHaveBeenCalledWith('kids_lunch_day_sides');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 80');
-  expect(container.querySelectorAll('[aria-label$=" meal title"]')).toHaveLength(7);
+  expect(container.querySelectorAll('[aria-label$=" meal title"]')).toHaveLength(0);
+  expect(container.querySelectorAll('[aria-label$=" Main recipe"]')).toHaveLength(7);
+  expect(container.querySelector('[aria-label="Day 1 meal source"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Day 1 recipe tags"]')).toBeNull();
+  await change('Monday Main recipe', recipeKey(kidsLunchLibrary[0]));
+  expect(writes.find(write => write.table === 'kids_lunch_weekly_meals' && write.value?.title === 'Recipe 80')).toBeTruthy();
+  expect([...container.querySelectorAll('.meal')].find(card => card.querySelector('.dayHeading')?.textContent === 'Monday').textContent).toContain('Recipe 80');
   expect(container.querySelectorAll('.kidsLunchSides select')).toHaveLength(14);
   expect(container.querySelector('[aria-label="Monday Side 1"]').value).toBe('side-fruit');
   await change('Monday Side 2', 'side-fruit');
@@ -180,6 +186,18 @@ test('Kids Lunches uses separate recipes and offers editable side dropdowns for 
   await change('Side option 2', 'Yoghurt');
   await click(button('Save side choices', modal));
   expect(writes.find(write => write.table === 'kids_lunch_side_options' && Array.isArray(write.value))).toBeTruthy();
+});
+
+test('Kids Lunch main dropdown only offers library recipes matching that day rule', async () => {
+  kidsLunchCategories[0] = {...kidsLunchCategories[0], name:'Pasta Monday', accepted_tags:['pasta']};
+  const pasta = {...sample(81), title:'Lunchbox Pasta', recipe_key:recipeKey(sample(81)), has_been_cooked:false, is_deleted:false};
+  const soup = {...sample(82), title:'Tomato Soup', recipe_key:recipeKey(sample(82)), has_been_cooked:false, is_deleted:false};
+  kidsLunchLibrary = [pasta, soup];
+  kidsLunchTagRows = [{recipe_key:recipeKey(pasta), tags:['pasta']}, {recipe_key:recipeKey(soup), tags:['soup']}];
+  await render('kids_lunch');
+  const options = [...container.querySelector('[aria-label="Monday Main recipe"]').options].map(option => option.textContent);
+  expect(options).toContain('Lunchbox Pasta');
+  expect(options).not.toContain('Tomato Soup');
 });
 
 test('Adult Lunch URL imports save directly to its selection library', async () => {
