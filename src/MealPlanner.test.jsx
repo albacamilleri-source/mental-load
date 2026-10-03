@@ -200,6 +200,21 @@ test('Kids Lunch main dropdown only offers library recipes matching that day rul
   expect(options).not.toContain('Tomato Soup');
 });
 
+test('unscheduling a Kids Lunch reuses the stored library key for the same source', async () => {
+  const source = 'https://example.com/strawberry-croissant';
+  const storedKey = JSON.stringify(['original croissant title', source]);
+  const scheduled = {...sample(83), meal_number:1, title:'Strawberry Cream Cheese Croissant', source_ref:source, week_of:'kids-lunch-capsule', scheduled_for:'2026-10-05'};
+  kidsLunchCurrent = [scheduled];
+  kidsLunchLibrary = [{...scheduled, recipe_key:storedKey, has_been_cooked:false, is_deleted:false}];
+  kidsLunchTagRows = [{recipe_key:storedKey, tags:['sandwich']}];
+  kidsLunchCategories[0] = {...kidsLunchCategories[0], name:'Sandwich Monday', accepted_tags:['sandwich']};
+  await render('kids_lunch');
+  const monday = [...container.querySelectorAll('.meal')].find(card => card.querySelector('.dayHeading')?.textContent === 'Monday');
+  await click(button('Unschedule', monday));
+  expect(writes.find(write => write.table === 'kids_lunch_recipe_library' && write.value?.is_deleted === false)?.value.recipe_key).toBe(storedKey);
+  expect(monday.textContent).not.toContain('duplicate key value');
+});
+
 test('Adult Lunch URL imports save directly to its selection library', async () => {
   mockInvoke.mockResolvedValue({data: {ok:true, destination:'library', updatedExisting:false, alreadyQueued:false, recipe:{title:'Tomato Wrap'}}, error: null});
   await render('lunch');
