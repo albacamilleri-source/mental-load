@@ -34,13 +34,16 @@ function selectedMealType() {
 
 function syncPlannerActions() {
   const mealType = selectedMealType();
-  const rotating = MEAL_TYPES[mealType].rotating;
-  importQueueButton.textContent = rotating ? 'Import recipe' : 'Import & queue';
-  importOnlyButton.hidden = rotating;
-  initialActions.classList.toggle('single', rotating);
-  plannerHelp.textContent = rotating
+  const type = MEAL_TYPES[mealType];
+  const singleAction = type.autoQueue || type.libraryOnly;
+  importQueueButton.textContent = singleAction ? 'Import recipe' : 'Import & queue';
+  importOnlyButton.hidden = singleAction;
+  initialActions.classList.toggle('single', singleAction);
+  plannerHelp.textContent = type.autoQueue
     ? `${MEAL_TYPES[mealType].label} recipes are saved to their library and queued automatically.`
-    : 'Choose whether to queue the recipe now or save it only to the Dinner library.';
+    : type.libraryOnly
+      ? `Recipes are saved to the ${type.library} library without being scheduled.`
+      : 'Choose whether to queue the recipe now or save it only to the Dinner library.';
 }
 
 async function initialize() {
@@ -93,7 +96,7 @@ async function saveRecipe() {
 }
 
 mealTypeInputs.forEach(input => input.addEventListener('change', syncPlannerActions));
-importQueueButton.addEventListener('click', () => reviewTags('queue'));
+importQueueButton.addEventListener('click', () => reviewTags(MEAL_TYPES[selectedMealType()].libraryOnly ? 'library' : 'queue'));
 importOnlyButton.addEventListener('click', () => reviewTags('library'));
 confirmButton.addEventListener('click', saveRecipe);
 document.querySelector('#cancel-review').addEventListener('click', () => {
