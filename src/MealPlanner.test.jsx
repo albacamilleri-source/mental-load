@@ -10,6 +10,13 @@ const mockInvoke = jest.fn();
 jest.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (...args) => mockFrom(...args), functions: { invoke: (...args) => mockInvoke(...args) } }) }));
 let container, root, current, past, library, queue, tagRows, categories, breakfastCurrent, breakfastPast, breakfastLibrary, breakfastQueue, breakfastTagRows, breakfastCategories, lunchCurrent, lunchPast, lunchLibrary, lunchQueue, lunchTagRows, lunchCategories, kidsLunchCurrent, kidsLunchPast, kidsLunchLibrary, kidsLunchQueue, kidsLunchTagRows, kidsLunchCategories, kidsLunchSideOptions, kidsLunchDaySides, writes, failure, deferWeeklyWrite, resolveWeeklyWrite;
 const sample = (n, tags = []) => ({ id: `meal-${n}`, meal_number: n, title: `Recipe ${n}`, source_ref: `Book ${n}`, week_of: '2026-W36', ingredients: [{name: 'carrot', qty: 1, unit: 'item'}], extracted_at: null, tags });
+const weekAfterToday = () => {
+  const date = new Date(); date.setDate(date.getDate() + 7);
+  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = utc.getUTCDay() || 7; utc.setUTCDate(utc.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+  return `${utc.getUTCFullYear()}-W${String(Math.ceil((((utc - yearStart) / 86400000) + 1) / 7)).padStart(2, '0')}`;
+};
 function setupQueries() {
   const weeklyReadCount = { dinner: 0, breakfast: 0, lunch: 0, kids_lunch: 0 };
   mockFrom.mockImplementation(table => {
@@ -519,16 +526,43 @@ test('load errors do not leave an editable planner with missing category rules',
 });
 
 
-test('marking a saved meal cooked banks the recipe and clears its day', async () => {
-  current = [{...sample(1, ['pasta']), servings:2}];
+test('marking dinner cooked banks it, moves it to the queue tail, and schedules the next recipe in the following week', async () => {
+  const first = {...sample(1, ['pasta']), servings:2, queue_item_id:'dinner-q1'};
+  const second = {...sample(2), id:'dinner-q2', day_number:1, position:2, created_at:'2026-09-10T09:00:00Z'};
+  current = [first];
+  queue = [{...first, id:'dinner-q1', day_number:1, position:1, created_at:'2026-09-10T08:00:00Z'}, second];
   library = [{...sample(1), recipe_key:recipeKey(sample(1)), servings:4, has_been_cooked:false, is_deleted:false}];
-  tagRows = [{recipe_key: recipeKey(current[0]), tags: ['pasta']}];
+  tagRows = [{recipe_key:recipeKey(first), tags:['pasta']}, {recipe_key:recipeKey(second), tags:['pasta']}];
   await render();
   await click(button('Mark cooked', day(1)));
   expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1', servings:4, has_been_cooked: true, is_deleted: false});
   expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
+  expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'id', value:'dinner-q1', payload:{position:3}}});
+  const nextDinner = writes.find(write => write.table === 'weekly_meals' && write.value?.queue_item_id === 'dinner-q2');
+  expect(nextDinner?.value).toMatchObject({title:'Recipe 2', meal_number:1, week_of:weekAfterToday()});
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 1');
+});
+
+test('marking an unqueued dinner cooked adds it to the rotation instead of losing it', async () => {
+  current = [{...sample(1), servings:2}];
+  library = [{...sample(1), recipe_key:recipeKey(sample(1)), servings:2, has_been_cooked:false, is_deleted:false}];
+  tagRows = [{recipe_key:recipeKey(sample(1)), tags:['pasta']}];
+  await render();
+  await click(button('Mark cooked', day(1)));
+  expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toMatchObject({insert:{title:'Recipe 1', day_number:1, position:1}});
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.title === 'Recipe 1' && write.value?.week_of === weekAfterToday())).toBeTruthy();
+});
+
+test('touchscreen recipe cards keep Delete tappable without enabling native drag', async () => {
+  const originalMatchMedia = window.matchMedia;
+  window.matchMedia = jest.fn(() => ({matches:true, addEventListener:jest.fn(), removeEventListener:jest.fn()}));
+  library = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false}];
+  await render();
+  const card = container.querySelector('#recipe-library .recipeCard');
+  expect(card.draggable).toBe(false);
+  await click(button('Delete', card));
+  expect(container.querySelector('#recipe-library').textContent).not.toContain('Recipe 1');
+  window.matchMedia = originalMatchMedia;
 });
 
 test('library recipes are searchable and can be dragged onto a matching empty day', async () => {
