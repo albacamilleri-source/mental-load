@@ -70,6 +70,11 @@ function sameRecipe(left, right) {
   return !!leftTitle && leftTitle === rightTitle;
 }
 
+function findStoredLibraryRecipe(records, recipe) {
+  const key = recipeKey(recipe);
+  return records.find(row => row.recipe_key === key) || records.find(row => sameRecipe(row, recipe));
+}
+
 function supportsNativeRecipeDrag() {
   return typeof window.matchMedia !== 'function' || !window.matchMedia('(pointer: coarse)').matches;
 }
@@ -1148,8 +1153,8 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (!meal?.id || meal.dirty) return;
     setBusy(true); setMealErrors(prev => ({ ...prev, [index]: '' }));
     try {
-      const key = recipeKey(meal);
-      const existing = libraryRecords.find(row => row.recipe_key === key);
+      const existing = findStoredLibraryRecipe(libraryRecords, meal);
+      const key = existing?.recipe_key || recipeKey(meal);
       const queuedRecipe = queueRows.find(row => sameRecipe(row, meal));
       const payload = {
         recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: existing?.servings ?? queuedRecipe?.servings ?? meal.servings ?? null,
@@ -1215,8 +1220,8 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (!meal?.id || meal.dirty) return;
     setBusy(true); setMealErrors(prev => ({ ...prev, [index]: '' }));
     try {
-      const key = recipeKey(meal);
-      const existing = libraryRecords.find(row => row.recipe_key === key);
+      const existing = findStoredLibraryRecipe(libraryRecords, meal);
+      const key = existing?.recipe_key || recipeKey(meal);
       const queuedRecipe = queueRows.find(row => sameRecipe(row, meal));
       const payload = {
         recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: existing?.servings ?? queuedRecipe?.servings ?? meal.servings ?? null,
