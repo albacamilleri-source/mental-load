@@ -186,6 +186,7 @@ function buildMergeSuggestions(ingredients) {
 }
 
 function convertQty(qty, unit) {
+  if (qty == null || qty === '') return { qty:null, unit:String(unit||'').trim() };
   const q = Number(qty);
   if (!Number.isFinite(q)) return { qty:null, unit:String(unit||"").trim() };
   const u = String(unit||"").trim().toLowerCase();
@@ -1381,18 +1382,31 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   }
 
   const groceryMeals = useMemo(() => meals.filter(meal => !meal.dirty && (meal.is_override || !mealValidation(meal, parseTags(meal.tagsText), categories.find(category => category.day_number === meal.meal_number))) && Array.isArray(meal.ingredients) && meal.ingredients.length > 0), [meals, categories]);
-  const allIngredients = useMemo(() => groceryMeals.flatMap(meal => {
-    if (!Array.isArray(meal.ingredients)) return [];
-    const libraryRecipe = libraryRecords.find(recipe => !recipe.is_deleted && sameRecipe(recipe, meal));
-    const queuedRecipe = queueRows.find(recipe => sameRecipe(recipe, meal));
-    const recipeYield = normalizeServings(libraryRecipe?.servings) || normalizeServings(queuedRecipe?.servings) || normalizeServings(meal.servings);
-    const servingsNeeded = normalizeServings(meal.servings) || recipeYield;
-    const scale = recipeYield && servingsNeeded ? servingsNeeded / recipeYield : 1;
-    return meal.ingredients.map(ingredient => ({
-      ...ingredient,
-      qty: ingredient.qty == null || !Number.isFinite(Number(ingredient.qty)) ? ingredient.qty : Number(ingredient.qty) * scale,
-    }));
-  }), [groceryMeals, libraryRecords, queueRows]);
+  const allIngredients = useMemo(() => {
+    const mainIngredients = groceryMeals.flatMap(meal => {
+      if (!Array.isArray(meal.ingredients)) return [];
+      const libraryRecipe = libraryRecords.find(recipe => !recipe.is_deleted && sameRecipe(recipe, meal));
+      const queuedRecipe = queueRows.find(recipe => sameRecipe(recipe, meal));
+      const recipeYield = normalizeServings(libraryRecipe?.servings) || normalizeServings(queuedRecipe?.servings) || normalizeServings(meal.servings);
+      const servingsNeeded = normalizeServings(meal.servings) || recipeYield;
+      const scale = recipeYield && servingsNeeded ? servingsNeeded / recipeYield : 1;
+      return meal.ingredients.map(ingredient => ({
+        ...ingredient,
+        qty: ingredient.qty == null || !Number.isFinite(Number(ingredient.qty)) ? ingredient.qty : Number(ingredient.qty) * scale,
+      }));
+    });
+    if (!config.hasSides) return mainIngredients;
+    const optionNames = new Map(sideOptions.map(option => [option.id, option.name]));
+    const scheduledDays = new Set(meals.filter(meal => !meal.dirty && meal.title?.trim() && (meal.is_override || !mealValidation(meal, parseTags(meal.tagsText), categories.find(category => category.day_number === meal.meal_number)))).map(meal => meal.meal_number));
+    const sideIngredients = [...scheduledDays].flatMap(day => {
+      const sides = daySides[day];
+      return [sides?.side_one_id, sides?.side_two_id].flatMap(id => {
+        const name = optionNames.get(id);
+        return name ? [{ name, qty: null, unit: 'as needed' }] : [];
+      });
+    });
+    return [...mainIngredients, ...sideIngredients];
+  }, [groceryMeals, libraryRecords, queueRows, config.hasSides, meals, categories, sideOptions, daySides]);
   const ready = !loadingWeek && !loadError && !busy && (config.capsule || groceryMeals.length > 0);
   const groceryLines = useMemo(() => aggregateIngredients(allIngredients, mergeSuggestions), [allIngredients, mergeSuggestions]);
   const groceryText = groceryLines.join('\n');

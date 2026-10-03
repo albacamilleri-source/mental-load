@@ -209,6 +209,18 @@ test('Kids Lunch main dropdown only offers library recipes matching that day rul
   expect(options).not.toContain('Tomato Soup');
 });
 
+test('Kids Lunch grocery list includes both selected sides', async () => {
+  const main = {...sample(84), meal_number:1, week_of:'kids-lunch-capsule', scheduled_for:'2026-10-05'};
+  kidsLunchCurrent = [main];
+  kidsLunchSideOptions = [{id:'fruit', name:'Apple slices', sort_order:1}, {id:'cheese', name:'Cheese cubes', sort_order:2}];
+  kidsLunchDaySides = [{day_number:1, side_one_id:'fruit', side_two_id:'cheese'}];
+  await render('kids_lunch');
+  await click(button('Generate grocery list'));
+  const grocery = container.querySelector('#grocery').textContent;
+  expect(grocery).toContain('apple slices, as needed');
+  expect(grocery).toContain('cheese cubes, as needed');
+});
+
 test('unscheduling a Kids Lunch reuses the stored library key for the same source', async () => {
   const source = 'https://example.com/strawberry-croissant';
   const storedKey = JSON.stringify(['original croissant title', source]);
