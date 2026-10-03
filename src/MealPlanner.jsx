@@ -1451,8 +1451,9 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     const draggedTags = recipeTags[draggedRecipeKey] || EMPTY_TAGS;
     const canDrop = !paused && !!draggedRecipeKey && canDropRecipe(meal, draggedTags, category);
     const scheduledDate = config.capsule ? meal.scheduled_for : dateForWeekDay(week, meal.meal_number);
-    const selectedLibraryRecipe = config.hasSides ? libraryRecipes.find(recipe => sameRecipe(recipe, meal)) : null;
-    const matchingLibraryRecipes = config.hasSides ? libraryRecipes.filter(recipe => matchesCategory(recipeTags[recipeKey(recipe)] || [], category)) : EMPTY_TAGS;
+    const usesLibraryPicker = config.libraryPicker || config.hasSides;
+    const selectedLibraryRecipe = usesLibraryPicker ? libraryRecipes.find(recipe => sameRecipe(recipe, meal)) : null;
+    const matchingLibraryRecipes = usesLibraryPicker ? libraryRecipes.filter(recipe => matchesCategory(recipeTags[recipeKey(recipe)] || [], category)) : EMPTY_TAGS;
     const mainRecipeChoices = selectedLibraryRecipe && !matchingLibraryRecipes.some(recipe => recipeKey(recipe) === recipeKey(selectedLibraryRecipe))
       ? [selectedLibraryRecipe, ...matchingLibraryRecipes]
       : matchingLibraryRecipes;
@@ -1464,12 +1465,12 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       <div className="mealBody">
       {paused ? <><div className="plannerNotice">Nothing is scheduled for {dayName(meal.meal_number)}. {queuedNext ? `${queuedNext.title} is still first in this queue.` : 'There are no recipes waiting in this queue.'}</div>{mealErrors[index] && <div className="saveError" role="alert">{mealErrors[index]}</div>}<div className="dayActions"><button className="btn" disabled={busy} onClick={() => setQueuePaused(index, false)}>Resume queue</button></div></> : <>
       {!meal.is_override && category?.accepted_tags.length > 0 && <div className="dayRequirement">Requires {category.accepted_tags.join(' or ')}</div>}
-      {config.hasSides && <div className="kidsLunchMainLabel">Main</div>}
+      {usesLibraryPicker && <div className="kidsLunchMainLabel">Main</div>}
       {config.capsule && <label className="tagField scheduleDateField">Scheduled date<input className="input" type="date" aria-label={`Day ${meal.meal_number} scheduled date`} value={meal.scheduled_for || ''} disabled={busy} onChange={e => updateMealField(index, 'scheduled_for', e.target.value)}/></label>}
-      {config.hasSides ? <div className="kidsLunchMainPicker">
+      {usesLibraryPicker ? <div className="kidsLunchMainPicker">
         <label className="tagField">Main recipe<select className="input" aria-label={`${dayName(meal.meal_number)} Main recipe`} value={selectedLibraryRecipe ? recipeKey(selectedLibraryRecipe) : ''} disabled={busy} onChange={event => chooseLibraryRecipeForDay(index, event.target.value)}><option value="">Choose from your recipe library…</option>{mainRecipeChoices.map(recipe => <option key={recipeKey(recipe)} value={recipeKey(recipe)}>{recipe.title}</option>)}</select></label>
         <label className="tagField">Servings needed<input className="input" type="number" min="1" step="1" aria-label={`Day ${meal.meal_number} servings needed`} value={meal.servings ?? ''} disabled={busy} onChange={e => updateMealField(index, 'servings', normalizeServings(e.target.value))} placeholder="Servings needed"/></label>
-        {!mainRecipeChoices.length && <div className="hint">Add a matching recipe in the Add a recipe section below.</div>}
+        {!mainRecipeChoices.length && <div className="hint">Add a matching recipe in the Add a recipe section above.</div>}
       </div> : <div className="fields">
         <input className="input" aria-label={`Day ${meal.meal_number} meal title`} value={meal.title} disabled={busy} onChange={e => updateMealField(index, 'title', e.target.value)} placeholder="Meal title"/>
         <input className="input" aria-label={`Day ${meal.meal_number} source`} value={meal.source_ref} disabled={busy} onChange={e => updateMealField(index, 'source_ref', e.target.value)} placeholder="Source — e.g. Cookish p.47 or URL"/>
@@ -1479,11 +1480,11 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         <label className="tagField">Side 1<select className="input" aria-label={`${dayName(meal.meal_number)} Side 1`} value={daySides[meal.meal_number]?.side_one_id || ''} disabled={busy} onChange={event => saveDaySide(meal.meal_number, 'side_one_id', event.target.value)}><option value="">Choose a side…</option>{sideOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
         <label className="tagField">Side 2<select className="input" aria-label={`${dayName(meal.meal_number)} Side 2`} value={daySides[meal.meal_number]?.side_two_id || ''} disabled={busy} onChange={event => saveDaySide(meal.meal_number, 'side_two_id', event.target.value)}><option value="">Choose a side…</option>{sideOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
       </div>}
-      {!config.hasSides && <label className="tagField">Recipe tags (comma-separated)<input className="input" aria-label={`Day ${meal.meal_number} recipe tags`} value={meal.tagsText} disabled={busy} onChange={e => updateMealField(index, 'tagsText', e.target.value)} placeholder="e.g. soup, instant pot, vegetarian"/></label>}
+      {!usesLibraryPicker && <label className="tagField">Recipe tags (comma-separated)<input className="input" aria-label={`Day ${meal.meal_number} recipe tags`} value={meal.tagsText} disabled={busy} onChange={e => updateMealField(index, 'tagsText', e.target.value)} placeholder="e.g. soup, instant pot, vegetarian"/></label>}
       {!config.hasSides && tags.length > 0 && <div className="tagChips">{tags.map(tag => <span className="tagChip" key={tag}>{tag}</span>)}</div>}
       {!match && <div className="saveError">Add a recipe tagged {category.accepted_tags.join(' or ')} for this day.</div>}
       {mealErrors[index] && <div className="saveError" role="alert">{mealErrors[index]}</div>}
-      <div className="dayActions"><span className="small">{meal.dirty ? 'Unsaved changes' : meal.id ? 'Saved' : config.hasSides ? 'Choose a main recipe from your library.' : 'Add a title, source and any required tags.'}{meal.ingredients?.length > 0 && ` · ✓ ${meal.ingredients.length} ingredients loaded`}</span>
+      <div className="dayActions"><span className="small">{meal.dirty ? 'Unsaved changes' : meal.id ? 'Saved' : usesLibraryPicker ? 'Choose a main recipe from your library.' : 'Add a title, source and any required tags.'}{meal.ingredients?.length > 0 && ` · ✓ ${meal.ingredients.length} ingredients loaded`}</span>
         <button className="btn ghost" disabled={busy || !match || !meal.title.trim() || !meal.source_ref.trim() || (!meal.dirty && !!meal.id)} onClick={() => saveMeal(index)}>Save meal</button>
         <button className="btn secondary" disabled={busy || !meal.id || meal.dirty} onClick={() => setDetailsRecipe(libraryRecords.find(recipe => !recipe.is_deleted && sameRecipe(recipe, meal)) || meal)}>View recipe</button>
         {!config.hasSides && <button className="btn secondary" disabled={busy || meal.dirty || meal.is_override} onClick={() => setSwitchDay(meal.meal_number)}>Switch</button>}
