@@ -1314,18 +1314,53 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (message) setMealErrors(prev => ({ ...prev, [day - 1]: message }));
   }
   async function deleteLibraryRecipe(recipe) {
-    if (busy || !window.confirm(`Delete ${recipe.title} from the recipe library? Scheduled meals and queues will stay unchanged.`)) return;
+    if (busy || !window.confirm(`Delete ${recipe.title} from the recipe library, its queues and the current schedule?`)) return;
     setBusy(true);
     try {
-      const key = recipeKey(recipe);
+      const stored = findStoredLibraryRecipe(libraryRecords, recipe);
+      const source = stored || recipe;
+      const key = source.recipe_key || recipeKey(source);
+      const queuedCopies = queueRows.filter(row => sameRecipe(row, recipe));
+      const scheduledCopies = meals.filter(meal => meal.id && sameRecipe(meal, recipe));
+
+      for (const queued of queuedCopies) {
+        const { error } = await from('meal_recipe_queue').delete().eq('id', queued.id);
+        if (error) throw error;
+      }
+      for (const scheduled of scheduledCopies) {
+        const { error } = await from('weekly_meals').delete().eq('id', scheduled.id);
+        if (error) throw error;
+      }
+
+      const queuedIds = new Set(queuedCopies.map(row => row.id));
+      const nextQueue = queueRows.filter(row => !queuedIds.has(row.id));
+      const replacements = new Map();
+      for (const scheduled of scheduledCopies) {
+        const day = scheduled.meal_number;
+        const scheduledFor = scheduled.scheduled_for || defaultScheduledFor(day);
+        let nextMeal = { ...emptyMeal(day), week_of: week, scheduled_for: scheduledFor, tagsText: '', dirty: false };
+        const front = categoryFor(day)?.is_paused ? null : queueForDay(nextQueue, day)[0];
+        if (front) {
+          const { data: saved, error } = await from('weekly_meals').upsert(queuedMealPayload(front, day, scheduledFor), { onConflict: 'week_of,meal_number' }).select().single();
+          if (error) throw error;
+          nextMeal = { ...saved, tagsText: recipeTagsFor(front, recipeTags).join(', '), dirty: false };
+        }
+        replacements.set(day, nextMeal);
+      }
+
       const payload = {
-        recipe_key: key, title: recipe.title.trim(), source_ref: recipe.source_ref.trim(), ingredients: recipe.ingredients, method: recipe.method || '', servings: recipe.servings ?? null,
-        extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '', cooked_at: recipe.cooked_at || new Date().toISOString(), has_been_cooked: !!recipe.has_been_cooked, is_deleted: true,
+        recipe_key: key, title: source.title.trim(), source_ref: source.source_ref.trim(), ingredients: source.ingredients, method: source.method || '', servings: source.servings ?? null,
+        extracted_at: source.extracted_at, rating: source.rating, notes: source.notes || '', cooked_at: source.cooked_at || new Date().toISOString(), has_been_cooked: !!source.has_been_cooked, is_deleted: true,
       };
       const { data: deleted, error } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (error) throw error;
       setLibraryRecords(prev => [deleted, ...prev.filter(row => row.recipe_key !== key)]);
-      setToast(`${recipe.title} removed from your library`);
+      setQueueRows(nextQueue);
+      setMeals(prev => prev.map(meal => replacements.get(meal.meal_number) || meal));
+      setPastRows(prev => prev.filter(row => !scheduledCopies.some(meal => meal.id === row.id)));
+      if (detailsRecipe && sameRecipe(detailsRecipe, recipe)) setDetailsRecipe(null);
+      setGroceryGenerated(false);
+      setToast(`${recipe.title} deleted from your library, queues and current schedule`);
     } catch (e) { setToast(e.message || 'Could not delete that recipe.'); }
     finally { setBusy(false); }
   }
