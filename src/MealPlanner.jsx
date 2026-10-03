@@ -698,8 +698,23 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         if (cancelled) return;
         const failed = responses.find(r => r.error);
         if (failed) throw failed.error;
-        const [current, past, tagRows, dayRows, libraryRows, queuedRows, loadedSideOptions = [], loadedDaySides = []] = responses.map(r => r.data || []);
+        const [loadedCurrent, past, tagRows, dayRows, libraryRows, loadedQueueRows, loadedSideOptions = [], loadedDaySides = []] = responses.map(r => r.data || []);
         if (dayRows.length !== config.slotCount) throw new Error('Day categories could not be loaded. Please retry.');
+        const deletedRecipes = libraryRows.filter(recipe => recipe.is_deleted);
+        const deletedQueueRows = loadedQueueRows.filter(row => deletedRecipes.some(recipe => sameRecipe(recipe, row)));
+        const deletedCurrentRows = loadedCurrent.filter(row => deletedRecipes.some(recipe => sameRecipe(recipe, row)));
+        for (const row of deletedQueueRows) {
+          const { error } = await from('meal_recipe_queue').delete().eq('id', row.id);
+          if (error) throw error;
+        }
+        for (const row of deletedCurrentRows) {
+          const { error } = await from('weekly_meals').delete().eq('id', row.id);
+          if (error) throw error;
+        }
+        const deletedQueueIds = new Set(deletedQueueRows.map(row => row.id));
+        const deletedCurrentIds = new Set(deletedCurrentRows.map(row => row.id));
+        const queuedRows = loadedQueueRows.filter(row => !deletedQueueIds.has(row.id));
+        const current = loadedCurrent.filter(row => !deletedCurrentIds.has(row.id));
         const tags = Object.fromEntries(tagRows.map(r => [r.recipe_key, parseTags(r.tags)]));
         const next = Array.from({ length: config.slotCount }, (_, i) => ({ ...emptyMeal(i + 1), week_of: week, scheduled_for: defaultScheduledFor(i + 1), tagsText: '', dirty: false }));
         current.forEach(row => {
