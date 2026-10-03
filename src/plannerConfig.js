@@ -118,8 +118,8 @@ const breakfastDayGroups = [
 ];
 
 export const PLANNER_CONFIG = {
-  dinner: { title: 'Dinners', singular: 'dinner', tables: dinnerTables, defaultCategories: DEFAULT_CATEGORIES, slotCount: 7, dayNames: DINNER_DAY_NAMES, rotateOnCook: true, advanceWeekOnCook: true },
-  breakfast: { title: 'Breakfasts', singular: 'breakfast', tables: breakfastTables, defaultCategories: BREAKFAST_CATEGORIES, slotCount: 11, capsule: true, autoQueue: true, periodKey: 'breakfast-capsule', dayNames: BREAKFAST_SLOTS.map(slot => slot.label), calendarDays: BREAKFAST_SLOTS.map(slot => slot.day_name), dayGroups: breakfastDayGroups },
+  dinner: { title: 'Dinners', singular: 'dinner', tables: dinnerTables, defaultCategories: DEFAULT_CATEGORIES, slotCount: 7, dayNames: DINNER_DAY_NAMES, rotateOnCook: true, advanceWeekOnCook: true, libraryPicker: true },
+  breakfast: { title: 'Breakfasts', singular: 'breakfast', tables: breakfastTables, defaultCategories: BREAKFAST_CATEGORIES, slotCount: 11, capsule: true, autoQueue: true, periodKey: 'breakfast-capsule', dayNames: BREAKFAST_SLOTS.map(slot => slot.label), calendarDays: BREAKFAST_SLOTS.map(slot => slot.day_name), dayGroups: breakfastDayGroups, libraryPicker: true },
   lunch: { title: 'Adult Lunches', singular: 'lunch', tables: { ...selectionTables('lunch') }, selectionMode: true, intakeType: 'lunch' },
   kids_lunch: { title: 'Kids Lunches', singular: 'kids lunch', tables: kidsLunchTables, defaultCategories: KIDS_LUNCH_CATEGORIES, slotCount: 7, capsule: true, autoQueue: true, periodKey: 'kids-lunch-capsule', dayNames: KIDS_LUNCH_SLOTS.map(slot => slot.label), calendarDays: KIDS_LUNCH_SLOTS.map(slot => slot.day_name), dayGroups: KIDS_LUNCH_SLOTS.map(slot => ({ name: slot.day_name, entries: [{ slot: slot.day_number, label: slot.label }] })), hasSides: true },
   sides: { title: 'Side Dishes & Supporting Acts', singular: 'side dish', tables: selectionTables('side_dish'), selectionMode: true, intakeType: 'sides' },

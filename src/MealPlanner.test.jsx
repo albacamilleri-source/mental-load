@@ -56,7 +56,16 @@ async function change(label, value) {
   await act(async () => { Simulate.change(document.body.querySelector(`[aria-label="${label}"]`), { target: { value } }); });
 }
 function button(text, parent = document.body) { return [...parent.querySelectorAll('button')].find(b => b.textContent === text); }
-function day(n) { return container.querySelector(`[aria-label="Day ${n} meal title"]`)?.closest('.meal'); }
+function day(n) {
+  const weekday = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][n - 1];
+  return (container.querySelector(`[aria-label="Day ${n} meal title"]`) || container.querySelector(`[aria-label="${weekday} Main recipe"]`) || container.querySelector(`[aria-label="Day ${n} servings needed"]`))?.closest('.meal');
+}
+function selectedMainTitle(label) {
+  const select = container.querySelector(`[aria-label="${label} Main recipe"]`);
+  return select?.options[select.selectedIndex]?.textContent || '';
+}
+function selectedDinnerTitle(n) { return selectedMainTitle(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][n - 1]); }
+function selectedBreakfastTitle(n) { return selectedMainTitle(BREAKFAST_SLOTS[n - 1].label); }
 async function click(el) { await act(async () => { el.click(); }); }
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -232,28 +241,32 @@ test('Kids Lunch URL imports use the independent Kids queue', async () => {
   expect(mockInvoke).toHaveBeenCalledWith('meal-recipe-intake', {body: {url:'https://example.com/lunchbox-pasta', destination:'queue', weekOf:'kids-lunch-capsule', mealType:'kids_lunch'}});
 });
 
-test('browser navigation does not discard an unsaved Breakfasts draft', async () => {
+test('browser navigation does not discard an unsaved Breakfast servings change', async () => {
+  breakfastCurrent = [{...sample(1), week_of:'breakfast-capsule', scheduled_for:'2026-10-05'}];
+  breakfastLibrary = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false}];
   await act(async () => { root.render(<MealPlanner/>); });
   await click(container.querySelector('[aria-label="Open Breakfasts planner"]'));
-  await change('Day 1 meal title', 'Porridge draft');
+  await change('Day 1 servings needed', '3');
   window.confirm.mockReturnValue(false);
   await act(async () => { window.history.pushState({}, '', '#meal-planner'); window.dispatchEvent(new Event('hashchange')); });
   expect(window.location.hash).toBe('#meal-planner/breakfasts');
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Porridge draft');
+  expect(container.querySelector('[aria-label="Day 1 servings needed"]').value).toBe('3');
 });
 
 test('Breakfasts has its own persistent category rotation and recipe tables', async () => {
   library = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false}];
-  breakfastLibrary = [{...sample(2), recipe_key:recipeKey(sample(2)), has_been_cooked:false, is_deleted:false}];
+  breakfastLibrary = [{...sample(2), title:'Savory eggs', source_ref:'Family notebook', recipe_key:'savory-eggs', has_been_cooked:false, is_deleted:false}];
+  breakfastTagRows = [{recipe_key:'savory-eggs', tags:['savory']}];
   await render('breakfast');
   expect(mockFrom).toHaveBeenCalledWith('breakfast_weekly_meals');
   expect(mockFrom).toHaveBeenCalledWith('breakfast_recipe_library');
   expect(mockFrom).toHaveBeenCalledWith('breakfast_recipe_queue');
   expect(mockFrom).not.toHaveBeenCalledWith('meal_recipe_library');
-  expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 2');
+  expect(container.querySelector('#recipe-library').textContent).toContain('Savory eggs');
   expect(container.querySelector('#recipe-library').textContent).not.toContain('Recipe 1');
   expect(day(8).textContent).toContain('Savory');
-  expect(container.querySelectorAll('[aria-label$=" meal title"]')).toHaveLength(11);
+  expect(container.querySelectorAll('[aria-label$=" Main recipe"]')).toHaveLength(11);
+  expect(container.querySelectorAll('[aria-label$=" meal title"]')).toHaveLength(0);
   expect(container.querySelectorAll('.breakfastDayGroup, .cerealDay, .meal:not(.breakfastAudienceMeal)')).toHaveLength(7);
   expect(container.querySelectorAll('.breakfastDayGroup')).toHaveLength(5);
   expect(container.querySelectorAll('.breakfastAudienceMeal')).toHaveLength(10);
@@ -267,8 +280,7 @@ test('Breakfasts has its own persistent category rotation and recipe tables', as
   expect(button('Save to library')).toBeUndefined();
   expect(button('Generate grocery list').disabled).toBe(false);
   expect(container.querySelector('[aria-label="Day 8 scheduled date"]').value).toBeTruthy();
-  await change('Day 8 meal title', 'Savory eggs'); await change('Day 8 source', 'Family notebook'); await change('Day 8 recipe tags', 'savory');
-  await click(button('Save meal', day(8)));
+  await change('Thursday · Kids Main recipe', 'savory-eggs');
   expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.title === 'Savory eggs')?.value.scheduled_for).toBe(container.querySelector('[aria-label="Day 8 scheduled date"]').value);
   expect(writes.find(write => write.table === 'breakfast_recipe_tags')).toBeTruthy();
   expect(writes.find(write => write.table === 'weekly_meals')).toBeUndefined();
@@ -286,7 +298,7 @@ test('Breakfasts fills from its own queue and saves its own category changes', a
   breakfastQueue = [{...sample(3), id:'breakfast-q1', day_number:2, position:1, created_at:'2026-09-20T08:00:00Z'}];
   breakfastTagRows = [{recipe_key:recipeKey(sample(3)), tags:['pancake']}];
   await render('breakfast');
-  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Recipe 3');
+  expect(selectedBreakfastTitle(2)).toBe('Recipe 3');
   expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q1' && write.value.week_of === 'breakfast-capsule')).toBeTruthy();
   expect(writes.find(write => write.table === 'weekly_meals')).toBeUndefined();
   await click(button('Edit categories'));
@@ -440,17 +452,18 @@ test('breakfast rules select Kids independently while unmatched recipes use a bl
   random.mockRestore();
 });
 
-test('blocks a mismatched meal and saves normalized tags with a matching meal', async () => {
+test('Dinner day dropdowns only offer library recipes matching that day rule', async () => {
+  const stew = {...sample(40), title:'Slow Cooker Stew', recipe_key:recipeKey(sample(40)), has_been_cooked:false, is_deleted:false};
+  const soup = {...sample(41), title:'Tomato Soup', recipe_key:recipeKey(sample(41)), has_been_cooked:false, is_deleted:false};
+  library = [stew, soup];
+  tagRows = [{recipe_key:stew.recipe_key, tags:['slow cooker', 'dinner']}, {recipe_key:soup.recipe_key, tags:['soup']}];
   await render();
-  await change('Day 4 meal title', 'Stew'); await change('Day 4 source', 'Book p.12');
-  expect(button('Save meal', day(4)).disabled).toBe(true);
-  await change('Day 4 recipe tags', ' SLOW COOKER, dinner ');
-  expect(button('Save meal', day(4)).disabled).toBe(false);
-  await click(button('Save meal', day(4)));
-  expect(writes).toHaveLength(2);
-  expect(writes[0].value.tags).toEqual(['slow cooker', 'dinner']);
-  expect(writes[1].value).toMatchObject({meal_number: 4, title: 'Stew', source_ref: 'Book p.12'});
-  expect(day(4).textContent).toContain('Saved');
+  const choices = [...container.querySelector('[aria-label="Thursday Main recipe"]').options].map(option => option.textContent);
+  expect(choices).toContain('Slow Cooker Stew');
+  expect(choices).not.toContain('Tomato Soup');
+  await change('Thursday Main recipe', stew.recipe_key);
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.title === 'Slow Cooker Stew')).toMatchObject({value:{meal_number:4, source_ref:'Book 40'}});
+  expect(selectedDinnerTitle(4)).toBe('Slow Cooker Stew');
 });
 
 test('grocery generation includes valid saved recipes after category edits', async () => {
@@ -490,7 +503,7 @@ test('Use recipe automatically selects a matching empty category without queuein
   expect(container.querySelector('[aria-label="Destination for Recipe 1"]')).toBeNull();
   await click(button('Use recipe'));
   expect(writes[writes.length - 1].value).toMatchObject({meal_number: 6, title: 'Recipe 1'});
-  expect(container.querySelector('[aria-label="Day 6 recipe tags"]').value).toBe('soup');
+  expect(day(6).textContent).toContain('soup');
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
 });
 
@@ -500,7 +513,7 @@ test('Use recipe falls back to a random empty day when no category matches', asy
   tagRows = [{recipe_key:recipeKey(sample(1)), tags:['fish']}];
   await render();
   await click(button('Use recipe', container.querySelector('#recipe-library')));
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 1');
+  expect(selectedDinnerTitle(1)).toBe('Recipe 1');
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toBeUndefined();
   random.mockRestore();
 });
@@ -543,12 +556,13 @@ test('week days are collapsed summaries with the recipe name visible', async () 
   expect(document.body.querySelector('[aria-label="Recipe details for Recipe 1"]')).not.toBeNull();
 });
 
-test('failed saves retain edits and display a retryable error', async () => {
-  await render(); await change('Day 1 meal title', 'Pasta'); await change('Day 1 source', 'Book');
-  failure = 'Connection lost'; await click(button('Save meal', day(1)));
+test('failed Dinner dropdown saves display a retryable error without changing the selection', async () => {
+  const recipe = {...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false};
+  library = [recipe];
+  await render();
+  failure = 'Connection lost'; await change('Monday Main recipe', recipe.recipe_key);
   expect(day(1).textContent).toContain('Connection lost');
-  expect(day(1).textContent).toContain('Unsaved changes');
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Pasta');
+  expect(selectedDinnerTitle(1)).toBe('Choose from your recipe library…');
 });
 
 test('load errors do not leave an editable planner with missing category rules', async () => {
@@ -610,7 +624,7 @@ test('library recipes are searchable and can be dragged onto a matching empty da
   await act(async () => { Simulate.dragStart(card, {dataTransfer: transfer}); });
   await act(async () => { Simulate.dragOver(day(6), {dataTransfer: transfer}); Simulate.drop(day(6), {dataTransfer: transfer}); });
   expect(writes[writes.length - 1].value).toMatchObject({meal_number: 6, title: 'Recipe 1'});
-  expect(container.querySelector('[aria-label="Day 6 recipe tags"]').value).toBe('soup');
+  expect(day(6).textContent).toContain('soup');
 });
 
 test('recipe library combines current, past, queued, and cooked recipes without duplicates', async () => {
@@ -650,7 +664,7 @@ test('a library recipe can be sent to its matching queue and fills a blank day',
   await click(button('Send to queue', card));
   const queueWrite = writes.find(write => write.table === 'meal_recipe_queue' && write.insert);
   expect(queueWrite.insert).toMatchObject({day_number:6, position:1, title:'Recipe 1'});
-  expect(container.querySelector('[aria-label="Day 6 meal title"]').value).toBe('Recipe 1');
+  expect(selectedDinnerTitle(6)).toBe('Recipe 1');
   expect(card.textContent).toContain('Queued · Day 6');
   expect(button('Remove from queue', card).disabled).toBe(false);
 });
@@ -697,7 +711,7 @@ test('a saved meal can be unscheduled and remains in the recipe library', async 
     title: 'Recipe 1', source_ref: 'Book 1', has_been_cooked: false, is_deleted: false,
   });
   expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
+  expect(selectedDinnerTitle(1)).toBe('Choose from your recipe library…');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 1');
 });
 
@@ -711,7 +725,7 @@ test('dragging a scheduled meal to the library unschedules it', async () => {
   expect(recipeLibrary.className).toContain('libraryDropReady');
   await act(async () => { Simulate.dragOver(recipeLibrary, {dataTransfer: transfer}); Simulate.drop(recipeLibrary, {dataTransfer: transfer}); });
   expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('');
+  expect(selectedDinnerTitle(1)).toBe('Choose from your recipe library…');
   expect(recipeLibrary.textContent).toContain('Recipe 1');
 });
 
@@ -723,7 +737,7 @@ test('unscheduling a queued meal removes it from the queue and fills the day wit
   await render();
   await click(button('Unschedule', day(2)));
   expect(writes).toContainEqual({table: 'meal_recipe_queue', delete: {field: 'id', value: 'q1', payload: undefined}});
-  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Recipe 3');
+  expect(selectedDinnerTitle(2)).toBe('Recipe 3');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 2');
 });
 
@@ -777,7 +791,7 @@ test('adds a manual recipe to its matching queue', async () => {
   await change('Manual recipe method', 'Boil until tender.');
   await click(button('Save & queue', modal));
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toMatchObject({insert:{day_number:1,title:'Handwritten Pasta',method:'Boil until tender.',servings:4}});
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Handwritten Pasta');
+  expect(selectedDinnerTitle(1)).toBe('Handwritten Pasta');
 });
 
 test('library cards open a modal with editable ingredients, source and method, and can be removed', async () => {
@@ -850,7 +864,7 @@ test('deleting a recipe removes its queue and current schedule copies, then fill
   expect(writes).toContainEqual({table:'weekly_meals', delete:{field:'id', value:'scheduled-1', payload:undefined}});
   expect(writes.find(write => write.table === 'weekly_meals' && write.value?.queue_item_id === 'q2')).toBeTruthy();
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.recipe_key === storedKey && write.value?.is_deleted)).toBeTruthy();
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 2');
+  expect(selectedDinnerTitle(1)).toBe('Recipe 2');
   expect(recipeLibrary.textContent).not.toContain('Recipe 1');
 });
 
@@ -864,7 +878,7 @@ test('planner load cleans up queue and schedule copies left by recipes deleted p
   await render();
   expect(writes).toContainEqual({table:'meal_recipe_queue', delete:{field:'id', value:'stale-q1', payload:undefined}});
   expect(writes).toContainEqual({table:'weekly_meals', delete:{field:'id', value:'stale-scheduled-1', payload:undefined}});
-  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 2');
+  expect(selectedDinnerTitle(1)).toBe('Recipe 2');
 });
 
 test('modal edits recipe tags while showing cooked and schedule status', async () => {
@@ -919,9 +933,9 @@ test('a temporary switch keeps the queued recipe at the front and restores it af
   });
   await click(button('Switch meal', document.body));
   expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
-  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Recipe 3');
+  expect(selectedDinnerTitle(2)).toBe('Recipe 3');
   await click(button('Mark cooked', day(2)));
-  expect(container.querySelector('[aria-label="Day 2 meal title"]').value).toBe('Recipe 2');
+  expect(selectedDinnerTitle(2)).toBe('Recipe 2');
   expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
 });
 
@@ -948,7 +962,8 @@ test('day at a glance only shows capsule meals scheduled for the selected calend
 
 test('Dinners uses seven named weekday slots', async () => {
   await render('dinner');
-  expect(container.querySelectorAll('[aria-label$=" meal title"]')).toHaveLength(7);
+  expect(container.querySelectorAll('[aria-label$=" Main recipe"]')).toHaveLength(7);
+  expect(container.querySelectorAll('[aria-label$=" meal title"]')).toHaveLength(0);
   expect([...container.querySelectorAll('.meal > .mealSummary .dayHeading')].map(node => node.textContent)).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
 });
 
