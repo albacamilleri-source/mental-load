@@ -854,6 +854,19 @@ test('deleting a recipe removes its queue and current schedule copies, then fill
   expect(recipeLibrary.textContent).not.toContain('Recipe 1');
 });
 
+test('planner load cleans up queue and schedule copies left by recipes deleted previously', async () => {
+  const deletedRecipe = {...sample(1), recipe_key:'deleted-recipe-key', is_deleted:true};
+  const staleQueueRecipe = {...deletedRecipe, id:'stale-q1', day_number:1, position:1, created_at:'2026-09-11T08:00:00Z'};
+  const nextRecipe = {...sample(2), id:'q2', day_number:1, position:2, created_at:'2026-09-11T09:00:00Z'};
+  library = [deletedRecipe];
+  queue = [staleQueueRecipe, nextRecipe];
+  current = [{...deletedRecipe, id:'stale-scheduled-1', meal_number:1, queue_item_id:'stale-q1'}];
+  await render();
+  expect(writes).toContainEqual({table:'meal_recipe_queue', delete:{field:'id', value:'stale-q1', payload:undefined}});
+  expect(writes).toContainEqual({table:'weekly_meals', delete:{field:'id', value:'stale-scheduled-1', payload:undefined}});
+  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 2');
+});
+
 test('modal edits recipe tags while showing cooked and schedule status', async () => {
   const recipe = {...sample(1), recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:false, is_deleted:false};
   library = [recipe];
