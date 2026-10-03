@@ -755,6 +755,18 @@ test('library cards open a modal with editable ingredients, source and method, a
   expect(writes.find(write => write.table === 'weekly_meals' && write.delete)).toBeUndefined();
 });
 
+test('deleting a saved recipe keeps legacy schedule copies out of the library', async () => {
+  const source = 'https://example.com/recipe-to-delete';
+  past = [{...sample(1), source_ref:`${source}?utm_source=old-plan`, recipe_key:'legacy-schedule-key'}];
+  library = [{...sample(1), source_ref:source, recipe_key:'stored-library-key', has_been_cooked:false, is_deleted:false}];
+  await render();
+  const recipeLibrary = container.querySelector('#recipe-library');
+  expect(recipeLibrary.querySelectorAll('.recipeCard')).toHaveLength(1);
+  await click(button('Delete', recipeLibrary));
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.recipe_key === 'stored-library-key' && write.value?.is_deleted)).toBeTruthy();
+  expect(recipeLibrary.textContent).not.toContain('Recipe 1');
+});
+
 test('modal edits recipe tags while showing cooked and schedule status', async () => {
   const recipe = {...sample(1), recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:false, is_deleted:false};
   library = [recipe];
