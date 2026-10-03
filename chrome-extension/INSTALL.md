@@ -7,8 +7,8 @@
 5. Select the unzipped **send-to-mental-load** folder.
 6. Open Chrome’s Extensions menu (the puzzle-piece icon) and pin **Send to Mental Load** for easy access.
 
-On any recipe website, click the extension icon and choose **Breakfast**, **Lunch** or **Dinner** before importing. Breakfast and Lunch recipes are saved to their own library and queued automatically. Dinner offers **Import & queue** and **Import only**.
+On any recipe website, click the extension icon and choose **Breakfast**, **Adult Lunch**, **Dinner**, **Side Dishes** or **Treats & Snacks** before importing. Breakfast recipes are queued automatically. Adult Lunch, Side Dishes, and Treats & Snacks are saved directly to their own libraries. Dinner offers **Import & queue** and **Import only**.
 
-You can also right-click the recipe page and choose the matching Breakfast, Lunch or Dinner action inside **Send to Mental Load**.
+You can also right-click the recipe page and choose the matching library action inside **Send to Mental Load**.
 
 Keep this folder on your computer after installation. Chrome reads the extension from it.

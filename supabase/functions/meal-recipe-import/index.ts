@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { importMealContext } from "./meal-type.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,15 +87,15 @@ Deno.serve(async (req: Request) => {
     const categoryTags = Array.isArray(body?.categoryTags)
       ? body.categoryTags.map((tag: unknown) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 30)
       : [];
-    const mealType = body?.mealType === "breakfast" ? "breakfast" : body?.mealType === "lunch" ? "lunch" : "dinner";
+    const mealContext = importMealContext(body?.mealType);
     const instruction = [
-      `Extract this ${mealType} recipe for a meal-planning queue.`,
+      `Extract this ${mealContext.label} recipe for Mental Load.`,
       "Return the recipe title, the supplied page URL as source_ref, all ingredients needed to cook it, the complete cooking method, its servings yield, and 2-6 concise lowercase tags.",
       "Return servings as a positive whole number when the page states how many people the recipe serves. Return null when it is not stated or only an item yield is given.",
       "Write the method as clear numbered steps in a single text string. Preserve temperatures, timings, and useful preparation details.",
       "Normalize ingredient names, preserve stated quantities, use numeric quantities when stated, and use qty null for 'to taste' or 'as needed'.",
       "For countable items with no unit, use unit 'item'. Exclude equipment and method steps.",
-      categoryTags.length ? `Prefer these existing category tags when they accurately apply: ${categoryTags.join(", ")}.` : mealType === "breakfast" ? "Use practical breakfast tags such as eggs, oats, make ahead, quick, fruit, savory, or vegetarian." : mealType === "lunch" ? "Use practical lunch tags such as sandwich, salad, soup, pasta, leftovers, quick, vegetarian, chicken, or fish." : "Use practical tags such as soup, pasta, instant pot, slow cooker, vegetarian, chicken, fish, or quick.",
+      categoryTags.length ? `Prefer these existing category tags when they accurately apply: ${categoryTags.join(", ")}.` : mealContext.tagGuidance,
       `The source_ref must be exactly: ${url}`,
       `Recipe page content:\n${pageText}`,
     ].join("\n\n");

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Send to Mental Load",
-  "version": "1.2.0",
-  "description": "Save the recipe in your current tab to the Mental Load Breakfast, Lunch or Dinner planner.",
+  "version": "1.3.0",
+  "description": "Save the recipe in your current tab to a Mental Load recipe library.",
   "permissions": ["activeTab", "contextMenus"],
   "host_permissions": ["https://qvibdnrfywisvfsqgqux.supabase.co/*"],
   "action": {

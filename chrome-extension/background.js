@@ -3,7 +3,9 @@ import { sendRecipe, successMessage } from './api.js';
 const ROOT = 'mental-load-root';
 const ACTIONS = {
   'mental-load-breakfast': { mealType: 'breakfast', destination: 'queue', title: 'Breakfast · Import recipe' },
-  'mental-load-lunch': { mealType: 'lunch', destination: 'queue', title: 'Lunch · Import recipe' },
+  'mental-load-lunch': { mealType: 'lunch', destination: 'library', title: 'Adult Lunch · Import recipe' },
+  'mental-load-sides': { mealType: 'sides', destination: 'library', title: 'Side Dishes · Import recipe' },
+  'mental-load-treats': { mealType: 'treats', destination: 'library', title: 'Treats & Snacks · Import recipe' },
   'mental-load-dinner-queue': { mealType: 'dinner', destination: 'queue', title: 'Dinner · Import & queue' },
   'mental-load-dinner-library': { mealType: 'dinner', destination: 'library', title: 'Dinner · Import only' },
 };
@@ -13,6 +15,8 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({ id: ROOT, title: 'Send to Mental Load', contexts: ['page'] });
     chrome.contextMenus.create({ id: 'mental-load-breakfast', parentId: ROOT, title: ACTIONS['mental-load-breakfast'].title, contexts: ['page'] });
     chrome.contextMenus.create({ id: 'mental-load-lunch', parentId: ROOT, title: ACTIONS['mental-load-lunch'].title, contexts: ['page'] });
+    chrome.contextMenus.create({ id: 'mental-load-sides', parentId: ROOT, title: ACTIONS['mental-load-sides'].title, contexts: ['page'] });
+    chrome.contextMenus.create({ id: 'mental-load-treats', parentId: ROOT, title: ACTIONS['mental-load-treats'].title, contexts: ['page'] });
     chrome.contextMenus.create({ id: 'mental-load-separator', parentId: ROOT, type: 'separator', contexts: ['page'] });
     chrome.contextMenus.create({ id: 'mental-load-dinner-queue', parentId: ROOT, title: ACTIONS['mental-load-dinner-queue'].title, contexts: ['page'] });
     chrome.contextMenus.create({ id: 'mental-load-dinner-library', parentId: ROOT, title: ACTIONS['mental-load-dinner-library'].title, contexts: ['page'] });
