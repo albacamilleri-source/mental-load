@@ -1297,7 +1297,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   function generate() {
     if (!ready) return;
     setMergeSuggestions(buildMergeSuggestions(allIngredients)); setGroceryGenerated(true);
-    setTimeout(() => document.getElementById('grocery')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    setTimeout(() => document.getElementById('grocery')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 50);
   }
   async function copyList() {
     try { await navigator.clipboard.writeText(groceryText); setToast('Copied to clipboard'); }
@@ -1305,12 +1305,13 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   }
   const libraryRecipes = useMemo(() => {
     const recipes = new Map();
-    const deletedKeys = new Set(libraryRecords.filter(recipe => recipe.is_deleted).map(recipe => recipe.recipe_key));
+    const deletedRecipes = libraryRecords.filter(recipe => recipe.is_deleted);
+    const deletedKeys = new Set(deletedRecipes.map(recipe => recipe.recipe_key));
     const savedMeals = meals.filter(meal => meal.id && !meal.dirty);
     [...pastRows, ...queueRows, ...savedMeals, ...libraryRecords.filter(recipe => !recipe.is_deleted)].forEach(recipe => {
       if (!recipe?.title?.trim() || !recipe?.source_ref?.trim()) return;
       const key = recipeKey(recipe);
-      if (deletedKeys.has(key)) return;
+      if (deletedKeys.has(key) || deletedRecipes.some(deleted => sameRecipe(deleted, recipe))) return;
       const identity = normalizedSourceRef(recipe.source_ref) || key;
       const matchingEntry = [...recipes.entries()].find(([, stored]) => sameRecipe(stored, recipe));
       const mapKey = matchingEntry?.[0] || identity;
