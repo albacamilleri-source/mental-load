@@ -834,6 +834,26 @@ test('deleting a saved recipe keeps legacy schedule copies out of the library', 
   expect(recipeLibrary.textContent).not.toContain('Recipe 1');
 });
 
+test('deleting a recipe removes its queue and current schedule copies, then fills the day from the next queue item', async () => {
+  const storedKey = 'stored-recipe-key';
+  const deletedRecipe = {...sample(1), recipe_key:storedKey, has_been_cooked:false, is_deleted:false};
+  const queuedDeletedRecipe = {...deletedRecipe, id:'q1', day_number:1, position:1, created_at:'2026-09-11T08:00:00Z'};
+  const nextRecipe = {...sample(2), id:'q2', day_number:1, position:2, created_at:'2026-09-11T09:00:00Z'};
+  library = [deletedRecipe];
+  queue = [queuedDeletedRecipe, nextRecipe];
+  current = [{...deletedRecipe, id:'scheduled-1', meal_number:1, queue_item_id:'q1', is_override:false, override_type:null}];
+  await render();
+  const recipeLibrary = container.querySelector('#recipe-library');
+  const card = [...recipeLibrary.querySelectorAll('.recipeCard')].find(node => node.textContent.includes('Recipe 1'));
+  await click(button('Delete', card));
+  expect(writes).toContainEqual({table:'meal_recipe_queue', delete:{field:'id', value:'q1', payload:undefined}});
+  expect(writes).toContainEqual({table:'weekly_meals', delete:{field:'id', value:'scheduled-1', payload:undefined}});
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.queue_item_id === 'q2')).toBeTruthy();
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.recipe_key === storedKey && write.value?.is_deleted)).toBeTruthy();
+  expect(container.querySelector('[aria-label="Day 1 meal title"]').value).toBe('Recipe 2');
+  expect(recipeLibrary.textContent).not.toContain('Recipe 1');
+});
+
 test('modal edits recipe tags while showing cooked and schedule status', async () => {
   const recipe = {...sample(1), recipe_key:recipeKey(sample(1)), cooked_at:'2026-09-10T20:00:00Z', has_been_cooked:false, is_deleted:false};
   library = [recipe];
