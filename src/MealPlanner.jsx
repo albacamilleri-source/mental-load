@@ -137,6 +137,11 @@ function dateForWeekDay(weekString, dayNumber) {
   return addDays(mondayForISOWeek(weekString), Number(dayNumber) - 1);
 }
 
+function dateForWeekdayName(weekString, dayName) {
+  const dayNumber = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].indexOf(dayName) + 1;
+  return dayNumber > 0 ? dateForWeekDay(weekString, dayNumber) : '';
+}
+
 function nextDateForWeekday(dayName, from = new Date()) {
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const target = weekdays.indexOf(dayName);
@@ -648,6 +653,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     return { queued, nextQueue: [...baseQueue, queued] };
   }
   const [week, setWeek] = useState(config.periodKey || isoWeek(new Date()));
+  const [calendarWeek, setCalendarWeek] = useState(() => isoWeek(new Date()));
   const calendarDayFor = day => config.calendarDays?.[day - 1] || config.dayNames?.[day - 1] || '';
   const defaultScheduledFor = day => config.capsule ? nextDateForWeekday(calendarDayFor(day)) : null;
   const queuedMealPayload = (item, day, scheduledFor = null) => queueMealPayload(item, week, day, config.capsule ? scheduledFor || defaultScheduledFor(day) : null);
@@ -766,7 +772,8 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   const categoryFor = day => categories.find(c => c.day_number === day);
   function changeWeek(delta) {
     if (dirty && !window.confirm('Discard unsaved meal changes and switch weeks?')) return;
-    setWeek(shiftWeek(week, delta));
+    if (config.weekNavigation) setCalendarWeek(current => shiftWeek(current, delta));
+    else setWeek(shiftWeek(week, delta));
   }
   function updateMealField(index, field, value) {
     setMeals(prev => prev.map((m, i) => i === index ? { ...m, [field]: value, dirty: true } : m));
@@ -1478,7 +1485,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     const match = meal.is_override || matchesCategory(tags, category);
     const draggedTags = recipeTags[draggedRecipeKey] || EMPTY_TAGS;
     const canDrop = !completed && !paused && !!draggedRecipeKey && canDropRecipe(meal, draggedTags, category);
-    const scheduledDate = config.capsule ? meal.scheduled_for : dateForWeekDay(week, meal.meal_number);
+    const scheduledDate = config.weekNavigation ? dateForWeekdayName(calendarWeek, calendarDayFor(meal.meal_number)) : config.capsule ? meal.scheduled_for : dateForWeekDay(week, meal.meal_number);
     const usesLibraryPicker = config.libraryPicker || config.hasSides;
     const selectedLibraryRecipe = usesLibraryPicker ? libraryRecipes.find(recipe => sameRecipe(recipe, meal)) : null;
     const matchingLibraryRecipes = usesLibraryPicker ? libraryRecipes.filter(recipe => matchesCategory(recipeTags[recipeKey(recipe)] || [], category)) : EMPTY_TAGS;
@@ -1494,7 +1501,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       {completed ? <><div className="plannerNotice cookedRecordNotice">Cooked on {formatCompletedDate(meal.completed_at)}. This record stays with this week even if the recipe is later removed from your library.</div><div className="dayActions"><button className="btn secondary" disabled={busy} onClick={() => setDetailsRecipe(meal)}>View recipe</button></div></> : paused ? <><div className="plannerNotice">Nothing is scheduled for {dayName(meal.meal_number)}. {queuedNext ? `${queuedNext.title} is still first in this queue.` : 'There are no recipes waiting in this queue.'}</div>{mealErrors[index] && <div className="saveError" role="alert">{mealErrors[index]}</div>}<div className="dayActions"><button className="btn" disabled={busy} onClick={() => setQueuePaused(index, false)}>Resume queue</button></div></> : <>
       {!meal.is_override && category?.accepted_tags.length > 0 && <div className="dayRequirement">Requires {category.accepted_tags.join(' or ')}</div>}
       {usesLibraryPicker && <div className="kidsLunchMainLabel">Main</div>}
-      {config.capsule && <label className="tagField scheduleDateField">Scheduled date<input className="input" type="date" aria-label={`Day ${meal.meal_number} scheduled date`} value={meal.scheduled_for || ''} disabled={busy} onChange={e => updateMealField(index, 'scheduled_for', e.target.value)}/></label>}
+      {config.capsule && !config.weekNavigation && <label className="tagField scheduleDateField">Scheduled date<input className="input" type="date" aria-label={`Day ${meal.meal_number} scheduled date`} value={meal.scheduled_for || ''} disabled={busy} onChange={e => updateMealField(index, 'scheduled_for', e.target.value)}/></label>}
       {usesLibraryPicker ? <div className="kidsLunchMainPicker">
         <label className="tagField">Main recipe<select className="input" aria-label={`${dayName(meal.meal_number)} Main recipe`} value={selectedLibraryRecipe ? recipeKey(selectedLibraryRecipe) : ''} disabled={busy} onChange={event => chooseLibraryRecipeForDay(index, event.target.value)}><option value="">Choose from your recipe library…</option>{mainRecipeChoices.map(recipe => <option key={recipeKey(recipe)} value={recipeKey(recipe)}>{recipe.title}</option>)}</select></label>
         <label className="tagField">Servings needed<input className="input" type="number" min="1" step="1" aria-label={`Day ${meal.meal_number} servings needed`} value={meal.servings ?? ''} disabled={busy} onChange={e => updateMealField(index, 'servings', normalizeServings(e.target.value))} placeholder="Servings needed"/></label>
@@ -1534,7 +1541,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         return renderMealCard(meals[entry.slot - 1], entry.slot - 1, day.name);
       }
       return <details className="breakfastDayGroup" key={day.name}>
-        <summary className="mealSummary"><h3 className="dayHeading">{day.name}</h3><div className="mealDate">{formatMealDate(meals[day.entries.find(entry => !entry.fixed)?.slot - 1]?.scheduled_for)}</div><div className="breakfastDayPreview">{day.entries.map(entry => {
+        <summary className="mealSummary"><h3 className="dayHeading">{day.name}</h3><div className="mealDate">{formatMealDate(config.weekNavigation ? dateForWeekdayName(calendarWeek, day.name) : meals[day.entries.find(entry => !entry.fixed)?.slot - 1]?.scheduled_for)}</div><div className="breakfastDayPreview">{day.entries.map(entry => {
           const title = entry.fixed ? entry.category : meals[entry.slot - 1].title.trim() || 'Empty';
           return <span key={entry.label}>{entry.label} · {title}</span>;
         })}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
@@ -1558,7 +1565,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     {loadError && <div className="plannerNotice" role="alert">{loadError} <button className="btn secondary" onClick={() => setReload(n => n + 1)}>Retry</button></div>}
     <section className="card"><RecipeImporter categories={categories} onImport={importRecipe} onManual={() => setManualOpen(true)} busy={busy} dayNames={config.dayNames} autoQueue={config.autoQueue}/></section>
     <section className="card">
-      <div className="sectionHead"><h2 className="sectionTitle">{config.capsule ? `Your ${config.singular} rotation` : "This week's meals"}</h2>{!config.capsule && <div className="weekNav"><button className="iconBtn" aria-label="Previous week" disabled={busy || loadingWeek} onClick={() => changeWeek(-1)}>‹</button><div className="weekLabel">{formatWeekLabel(week)}</div><button className="iconBtn" aria-label="Next week" disabled={busy || loadingWeek} onClick={() => changeWeek(1)}>›</button></div>}</div>
+      <div className="sectionHead"><h2 className="sectionTitle">{config.weekNavigation ? "This week's breakfasts" : config.capsule ? `Your ${config.singular} rotation` : "This week's meals"}</h2>{(!config.capsule || config.weekNavigation) && <div className="weekNav"><button className="iconBtn" aria-label="Previous week" disabled={busy || loadingWeek} onClick={() => changeWeek(-1)}>‹</button><div className="weekLabel">{formatWeekLabel(config.weekNavigation ? calendarWeek : week)}</div><button className="iconBtn" aria-label="Next week" disabled={busy || loadingWeek} onClick={() => changeWeek(1)}>›</button></div>}</div>
       {loadingWeek ? <div className="empty">{config.capsule ? `Loading ${config.title.toLowerCase()}…` : 'Loading week…'}</div> : !loadError && (config.capsule ? renderCapsuleDays() : meals.map((meal, index) => renderMealCard(meal, index)))}
       <button className="btn generate" onClick={generate} disabled={!ready}>Generate grocery list</button>
       {!ready && <div className="hint">Save at least one {config.singular} with ingredients to generate your list.</div>}
