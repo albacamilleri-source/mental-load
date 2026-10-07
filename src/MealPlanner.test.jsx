@@ -93,12 +93,17 @@ test('Meal Planner opens a choice screen and returns from Breakfasts without lea
 });
 
 test('smart grocery list gathers every module and shows the AI-organised result', async () => {
-  breakfastCurrent = [{...sample(70), week_of:'breakfast-capsule', scheduled_for:'2026-09-28', servings:4, ingredients:[{name:'whole eggs',qty:4,unit:'item'}]}];
+  const weekStart = new Date();
+  if (weekStart.getDay() === 0) weekStart.setDate(weekStart.getDate() + 1);
+  else weekStart.setDate(weekStart.getDate() - (weekStart.getDay() - 1));
+  const iso = value => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
+  breakfastCurrent = [{...sample(70), week_of:'breakfast-capsule', scheduled_for:iso(weekStart), servings:4, ingredients:[{name:'whole eggs',qty:4,unit:'item'}]}];
   breakfastLibrary = [{...breakfastCurrent[0], recipe_key:recipeKey(breakfastCurrent[0]), servings:2, is_deleted:false}];
   mockInvoke.mockResolvedValue({data:{recipeCount:1,inputIngredientCount:1,sections:[{name:'Dairy & Eggs',items:[{name:'Eggs',amount:'8',note:'',sources:['Recipe 70']}]}],review:[{issue:'Confirm egg size',suggestion:'Use the recipe specification',sources:['Recipe 70']}]},error:null});
   await act(async () => { root.render(<SmartGroceryList/>); });
   await click(button('Generate complete grocery list'));
-  expect(mockInvoke).toHaveBeenCalledWith('meal-grocery-list', expect.objectContaining({body:expect.objectContaining({dateFrom:'2026-09-28',dateTo:'2026-10-04'})}));
+  expect(mockInvoke).toHaveBeenCalledWith('meal-grocery-list', expect.objectContaining({body:expect.objectContaining({dateFrom:iso(weekStart),dateTo:iso(weekEnd)})}));
   const sent = mockInvoke.mock.calls[0][1].body.recipes;
   expect(sent.find(recipe => recipe.title === 'Recipe 70').ingredients[0].qty).toBe(8);
   expect(container.textContent).toContain('Dairy & Eggs');
@@ -593,13 +598,42 @@ test('marking dinner cooked banks it, moves it to the queue tail, and schedules 
   library = [{...sample(1), recipe_key:recipeKey(sample(1)), servings:4, has_been_cooked:false, is_deleted:false}];
   tagRows = [{recipe_key:recipeKey(first), tags:['pasta']}, {recipe_key:recipeKey(second), tags:['pasta']}];
   await render();
-  await click(button('Mark cooked', day(1)));
+  const currentWeekCard = day(1);
+  await click(button('Mark cooked', currentWeekCard));
   expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1', servings:4, has_been_cooked: true, is_deleted: false});
-  expect(writes).toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
+  expect(writes).toContainEqual({table: 'weekly_meals', update: {field: 'id', value: 'meal-1', payload: {completed_at: expect.any(String)}}});
+  expect(writes).not.toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
   expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'id', value:'dinner-q1', payload:{position:3}}});
   const nextDinner = writes.find(write => write.table === 'weekly_meals' && write.value?.queue_item_id === 'dinner-q2');
-  expect(nextDinner?.value).toMatchObject({title:'Recipe 2', meal_number:1, week_of:weekAfterToday()});
+  expect(nextDinner?.value).toMatchObject({title:'Recipe 2', meal_number:1, week_of:weekAfterToday(), completed_at:null});
+  expect(currentWeekCard.classList.contains('isCompleted')).toBe(true);
+  expect(currentWeekCard.textContent).toContain('Recipe 1');
+  expect(currentWeekCard.textContent).toContain('Cooked');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 1');
+});
+
+test('deleting a cooked recipe removes it from the library and queue but preserves its dated record', async () => {
+  const first = {...sample(1, ['pasta']), queue_item_id:'dinner-q1'};
+  current = [first];
+  queue = [{...first, id:'dinner-q1', day_number:1, position:1, created_at:'2026-09-10T08:00:00Z'}];
+  library = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false}];
+  tagRows = [{recipe_key:recipeKey(first), tags:['pasta']}];
+  await render();
+  const currentWeekCard = day(1);
+  await click(button('Mark cooked', currentWeekCard));
+  await click(button('Delete', container.querySelector('#recipe-library .recipeCard')));
+  expect(currentWeekCard.classList.contains('isCompleted')).toBe(true);
+  expect(currentWeekCard.textContent).toContain('Recipe 1');
+  expect(writes.filter(write => write.table === 'weekly_meals' && write.delete?.value === 'meal-1')).toHaveLength(0);
+  expect(container.querySelector('#recipe-library').textContent).not.toContain('Recipe 1');
+});
+
+test('a deleted library recipe does not remove an existing cooked dinner record on reload', async () => {
+  current = [{...sample(1), completed_at:'2026-10-07T18:00:00Z'}];
+  library = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:true, is_deleted:true}];
+  await render();
+  expect(container.querySelector('.meal.isCompleted')?.textContent).toContain('Recipe 1');
+  expect(writes.filter(write => write.table === 'weekly_meals' && write.delete)).toHaveLength(0);
 });
 
 test('marking an unqueued dinner cooked adds it to the rotation instead of losing it', async () => {
@@ -933,7 +967,7 @@ test('queue tags can be edited from queue management', async () => {
   expect(writes.find(write => write.table === 'meal_recipe_tags' && write.value.tags?.includes('pasta'))).toBeTruthy();
 });
 
-test('a temporary switch keeps the queued recipe at the front and restores it after cooking', async () => {
+test('a temporary switch keeps the queued recipe at the front and prepares it for the following week after cooking', async () => {
   const first = {...sample(2), id:'q1', day_number:2, position:1, created_at:'2026-09-11T08:00:00Z'};
   const second = {...sample(3), id:'q2', day_number:2, position:2, created_at:'2026-09-11T09:00:00Z'};
   queue = [first, second];
@@ -946,8 +980,11 @@ test('a temporary switch keeps the queued recipe at the front and restores it af
   await click(button('Switch meal', document.body));
   expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
   expect(selectedDinnerTitle(2)).toBe('Recipe 3');
-  await click(button('Mark cooked', day(2)));
-  expect(selectedDinnerTitle(2)).toBe('Recipe 2');
+  const currentWeekCard = day(2);
+  await click(button('Mark cooked', currentWeekCard));
+  expect(currentWeekCard.classList.contains('isCompleted')).toBe(true);
+  expect(currentWeekCard.textContent).toContain('Recipe 3');
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.week_of === weekAfterToday())).toMatchObject({value:{title:'Recipe 2', queue_item_id:'q1', completed_at:null}});
   expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
 });
 
@@ -956,6 +993,23 @@ test('Meal Planner landing page shows today at a glance before all five planners
   expect(container.querySelector('.todayFood')).not.toBeNull();
   expect(container.querySelector('.todayFood').textContent).toContain('at a glance');
   expect([...container.querySelectorAll('.plannerChoiceTitle')].map(node => node.textContent)).toHaveLength(5);
+});
+
+test('today at a glance opens the assigned recipe in a read-only recipe modal', async () => {
+  const today = new Date();
+  const dayIndex = today.getDay() || 7;
+  const utc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  const isoDay = utc.getUTCDay() || 7; utc.setUTCDate(utc.getUTCDate() + 4 - isoDay);
+  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+  const currentWeek = `${utc.getUTCFullYear()}-W${String(Math.ceil((((utc - yearStart) / 86400000) + 1) / 7)).padStart(2, '0')}`;
+  current = [{...sample(dayIndex), title:'Clickable dinner', method:'1. Roast until golden.', week_of:currentWeek, meal_number:dayIndex}];
+  await act(async () => { root.render(<MealPlanner/>); });
+  await click(container.querySelector('[aria-label="View recipe: Clickable dinner"]'));
+  const modal = document.body.querySelector('[aria-label="Recipe details for Clickable dinner"]');
+  expect(modal).not.toBeNull();
+  expect(modal.querySelector('[aria-label="Method for Clickable dinner"]').value).toBe('1. Roast until golden.');
+  expect(button('Save changes', modal)).toBeUndefined();
+  expect(button('Close', modal)).not.toBeNull();
 });
 
 test('day at a glance only shows capsule meals scheduled for the selected calendar date', async () => {
