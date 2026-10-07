@@ -89,7 +89,7 @@ export function buildSmartGroceryRecipes({
   for (const meal of kidsLunchMeals || []) {
     const sides = sidesByDay.get(Number(meal.meal_number));
     if (!sides) continue;
-    for (const id of [sides.side_one_id, sides.side_two_id]) {
+    for (const id of [sides.side_one_id, sides.side_two_id, sides.side_three_id]) {
       const name = optionNames.get(id);
       if (!name) continue;
       recipes.push({

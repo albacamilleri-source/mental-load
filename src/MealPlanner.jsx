@@ -382,11 +382,11 @@ function CategoryEditor({ categories, onSave, busy, dayNames }) {
 }
 
 function SideOptionsEditor({ options, onSave, busy }) {
-  const [draft, setDraft] = useState(() => options.map(option => ({ ...option })));
+  const [draft, setDraft] = useState(() => options.map(option => ({ ...option, side_type: option.side_type || 'optional' })));
   const [error, setError] = useState('');
   function addSide() {
     const id = globalThis.crypto?.randomUUID?.() || `side-${Date.now()}-${draft.length}`;
-    setDraft(current => [...current, { id, name: '', sort_order: current.length + 1 }]);
+    setDraft(current => [...current, { id, name: '', side_type: 'optional', sort_order: current.length + 1 }]);
   }
   async function submit(event) {
     event.preventDefault();
@@ -395,9 +395,12 @@ function SideOptionsEditor({ options, onSave, busy }) {
     setError(await onSave(next) || '');
   }
   return <form onSubmit={submit}>
-    <p className="categoryIntro">These choices appear in both side dropdowns for every Kids lunch day.</p>
+    <p className="categoryIntro">Choose whether each item belongs in the Fruit, Savory, or Optional dropdown.</p>
     <div className="sideOptionList">{draft.map((option, index) => <div className="sideOptionRow" key={option.id}>
       <input className="input" aria-label={`Side option ${index + 1}`} value={option.name} disabled={busy} placeholder="e.g. cucumber sticks" onChange={event => setDraft(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))}/>
+      <select className="input" aria-label={`Side option ${index + 1} type`} value={option.side_type || 'optional'} disabled={busy} onChange={event => setDraft(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, side_type: event.target.value } : item))}>
+        <option value="fruit">Fruit</option><option value="savory">Savory</option><option value="optional">Optional</option>
+      </select>
       <button type="button" className="dangerBtn" aria-label={`Remove side option ${index + 1}`} disabled={busy} onClick={() => setDraft(current => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>
     </div>)}</div>
     <button type="button" className="btn ghost" disabled={busy} onClick={addSide}>+ Add side</button>
@@ -851,7 +854,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   }
   async function saveDaySide(day, field, optionId) {
     if (busy) return;
-    const current = daySides[day] || { day_number: day, side_one_id: null, side_two_id: null };
+    const current = daySides[day] || { day_number: day, side_one_id: null, side_two_id: null, side_three_id: null };
     const next = { ...current, [field]: optionId || null };
     setBusy(true);
     try {
@@ -1420,7 +1423,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     const scheduledDays = new Set(meals.filter(meal => !meal.dirty && meal.title?.trim() && (meal.is_override || !mealValidation(meal, parseTags(meal.tagsText), categories.find(category => category.day_number === meal.meal_number)))).map(meal => meal.meal_number));
     const sideIngredients = [...scheduledDays].flatMap(day => {
       const sides = daySides[day];
-      return [sides?.side_one_id, sides?.side_two_id].flatMap(id => {
+      return [sides?.side_one_id, sides?.side_two_id, sides?.side_three_id].flatMap(id => {
         const name = optionNames.get(id);
         return name ? [{ name, qty: null, unit: 'as needed' }] : [];
       });
@@ -1512,8 +1515,9 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         <label className="tagField">Servings needed<input className="input" type="number" min="1" step="1" aria-label={`Day ${meal.meal_number} servings needed`} value={meal.servings ?? ''} disabled={busy} onChange={e => updateMealField(index, 'servings', normalizeServings(e.target.value))} placeholder="Servings needed"/></label>
       </div>}
       {config.hasSides && <div className="kidsLunchSides">
-        <label className="tagField">Side 1<select className="input" aria-label={`${dayName(meal.meal_number)} Side 1`} value={daySides[meal.meal_number]?.side_one_id || ''} disabled={busy} onChange={event => saveDaySide(meal.meal_number, 'side_one_id', event.target.value)}><option value="">Choose a side…</option>{sideOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
-        <label className="tagField">Side 2<select className="input" aria-label={`${dayName(meal.meal_number)} Side 2`} value={daySides[meal.meal_number]?.side_two_id || ''} disabled={busy} onChange={event => saveDaySide(meal.meal_number, 'side_two_id', event.target.value)}><option value="">Choose a side…</option>{sideOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
+        <label className="tagField">Side 1 · Fruit<select className="input" aria-label={`${dayName(meal.meal_number)} Side 1`} value={daySides[meal.meal_number]?.side_one_id || ''} disabled={busy} onChange={event => saveDaySide(meal.meal_number, 'side_one_id', event.target.value)}><option value="">Choose fruit…</option>{sideOptions.filter(option => option.side_type === 'fruit').map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
+        <label className="tagField">Side 2 · Savory<select className="input" aria-label={`${dayName(meal.meal_number)} Side 2`} value={daySides[meal.meal_number]?.side_two_id || ''} disabled={busy} onChange={event => saveDaySide(meal.meal_number, 'side_two_id', event.target.value)}><option value="">Choose savory side…</option>{sideOptions.filter(option => option.side_type === 'savory').map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
+        <label className="tagField">Side 3 · Optional<select className="input" aria-label={`${dayName(meal.meal_number)} Side 3`} value={daySides[meal.meal_number]?.side_three_id || ''} disabled={busy} onChange={event => saveDaySide(meal.meal_number, 'side_three_id', event.target.value)}><option value="">No optional item</option>{sideOptions.filter(option => option.side_type === 'optional').map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
       </div>}
       {!usesLibraryPicker && <label className="tagField">Recipe tags (comma-separated)<input className="input" aria-label={`Day ${meal.meal_number} recipe tags`} value={meal.tagsText} disabled={busy} onChange={e => updateMealField(index, 'tagsText', e.target.value)} placeholder="e.g. soup, instant pot, vegetarian"/></label>}
       {!config.hasSides && tags.length > 0 && <div className="tagChips">{tags.map(tag => <span className="tagChip" key={tag}>{tag}</span>)}</div>}
