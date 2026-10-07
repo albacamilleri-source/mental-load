@@ -186,6 +186,11 @@ test('Kids Lunches chooses mains from its library and keeps editable side dropdo
   expect(container.querySelectorAll('[aria-label$=" Main recipe"]')).toHaveLength(7);
   expect(container.querySelector('[aria-label="Day 1 meal source"]')).toBeNull();
   expect(container.querySelector('[aria-label="Day 1 recipe tags"]')).toBeNull();
+  expect(container.querySelector('.sectionHead .weekLabel').textContent).toMatch(/^Week of /);
+  expect(container.querySelector('[aria-label="Day 1 scheduled date"]')).toBeNull();
+  const currentMonday = [...container.querySelectorAll('.meal')].find(card => card.querySelector('.dayHeading')?.textContent === 'Monday').querySelector('.mealDate').textContent;
+  await click(container.querySelector('[aria-label="Next week"]'));
+  expect([...container.querySelectorAll('.meal')].find(card => card.querySelector('.dayHeading')?.textContent === 'Monday').querySelector('.mealDate').textContent).not.toBe(currentMonday);
   await change('Monday Main recipe', recipeKey(kidsLunchLibrary[0]));
   expect(writes.find(write => write.table === 'kids_lunch_weekly_meals' && write.value?.title === 'Recipe 80')).toBeTruthy();
   expect([...container.querySelectorAll('.meal')].find(card => card.querySelector('.dayHeading')?.textContent === 'Monday').textContent).toContain('Recipe 80');
