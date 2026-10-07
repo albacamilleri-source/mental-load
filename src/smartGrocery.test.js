@@ -18,13 +18,13 @@ test('collects scheduled meals and active Prep List recipes without deleted reco
   expect(recipes[1]).toMatchObject({ mealType: 'Adult lunch', title: 'Wrap' });
 });
 
-test('includes selected kids lunch sides once for each scheduled day', () => {
+test('includes all three selected kids lunch side types once for each scheduled day', () => {
   const recipes = buildSmartGroceryRecipes({
     kidsLunchMeals: [{ meal_number: 1, title: 'Main', source_ref: 'main', scheduled_for: '2026-09-28', ingredients: [{ name: 'bread', qty: 2, unit: 'slice' }] }],
-    kidsLunchSides: [{ day_number: 1, side_one_id: 'fruit', side_two_id: 'fruit' }],
-    sideOptions: [{ id: 'fruit', name: 'Fresh fruit' }],
+    kidsLunchSides: [{ day_number: 1, side_one_id: 'fruit', side_two_id: 'savory', side_three_id: 'optional' }],
+    sideOptions: [{ id: 'fruit', name: 'Fresh fruit' }, { id: 'savory', name: 'Pretzels' }, { id: 'optional', name: 'Yoghurt pouch' }],
   });
-  expect(recipes.filter(recipe => recipe.mealType === 'Kids lunch side')).toHaveLength(1);
+  expect(recipes.filter(recipe => recipe.mealType === 'Kids lunch side')).toHaveLength(3);
 });
 
 test('formats the organised list and its QA warnings for copying', () => {
