@@ -110,6 +110,19 @@ test('smart grocery list gathers every module and shows the AI-organised result'
   expect(container.textContent).toContain('Confirm egg size');
 });
 
+test('smart grocery list keeps a seven-day range when either date is selected', async () => {
+  breakfastCurrent = [{...sample(71), week_of:'breakfast-capsule', scheduled_for:'2026-10-10', ingredients:[{name:'oats',qty:1,unit:'cup'}]}];
+  breakfastLibrary = [{...breakfastCurrent[0], recipe_key:recipeKey(breakfastCurrent[0]), servings:1, is_deleted:false}];
+  mockInvoke.mockResolvedValue({data:{recipeCount:1,sections:[{name:'Pantry',items:[{name:'Oats',amount:'1 cup',sources:['Recipe 71']}]}],review:[]},error:null});
+  await act(async () => { root.render(<SmartGroceryList/>); });
+  await change('Grocery list start date', '2026-10-07');
+  expect(container.querySelector('[aria-label="Grocery list end date"]').value).toBe('2026-10-13');
+  await change('Grocery list end date', '2026-10-15');
+  expect(container.querySelector('[aria-label="Grocery list start date"]').value).toBe('2026-10-09');
+  await click(button('Generate complete grocery list'));
+  expect(mockInvoke).toHaveBeenCalledWith('meal-grocery-list', expect.objectContaining({body:expect.objectContaining({dateFrom:'2026-10-09',dateTo:'2026-10-15'})}));
+});
+
 test('smart grocery list explains when there is nothing with ingredients to organise', async () => {
   await act(async () => { root.render(<SmartGroceryList/>); });
   await click(button('Generate complete grocery list'));

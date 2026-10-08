@@ -1872,13 +1872,26 @@ function defaultGroceryWeek() {
 }
 
 export function SmartGroceryList() {
-  const [week, setWeek] = useState(defaultGroceryWeek);
+  const [start, setStart] = useState(() => localISODate(mondayForISOWeek(defaultGroceryWeek())));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
-  const start = localISODate(mondayForISOWeek(week));
   const end = addDays(start, 6);
+
+  function changeStart(value) {
+    if (!localDate(value)) return;
+    setStart(value); setError(''); setResult(null); setCopied(false);
+  }
+
+  function changeEnd(value) {
+    if (!localDate(value)) return;
+    changeStart(addDays(value, -6));
+  }
+
+  function shiftWindow(days) {
+    changeStart(addDays(start, days));
+  }
 
   async function read(query, label) {
     const response = await query;
@@ -1895,7 +1908,7 @@ export function SmartGroceryList() {
         kidsLunchSides, sideOptions, adultLunchSelections, adultLunchLibrary,
         sideSelections, sideLibrary, treatSelections, treatLibrary,
       ] = await Promise.all([
-        read(sb.from('weekly_meals').select('*').eq('week_of', week).order('meal_number'), 'dinners'),
+        read(sb.from('weekly_meals').select('*').order('week_of').order('meal_number'), 'dinners'),
         read(sb.from('meal_recipe_library').select('*'), 'the Dinner library'),
         read(sb.from('breakfast_weekly_meals').select('*').eq('week_of', 'breakfast-capsule').gte('scheduled_for', start).lte('scheduled_for', end).order('meal_number'), 'breakfasts'),
         read(sb.from('breakfast_recipe_library').select('*'), 'the Breakfast library'),
@@ -1912,13 +1925,13 @@ export function SmartGroceryList() {
       ]);
       const inRange = meal => meal.scheduled_for >= start && meal.scheduled_for <= end;
       const recipes = buildSmartGroceryRecipes({
-        dinnerMeals: dinnerMeals.filter(meal => meal.week_of === week), dinnerLibrary,
-        dinnerDate: meal => dateForWeekDay(week, meal.meal_number),
+        dinnerMeals: dinnerMeals.filter(meal => { const date = dateForWeekDay(meal.week_of, meal.meal_number); return date >= start && date <= end; }), dinnerLibrary,
+        dinnerDate: meal => dateForWeekDay(meal.week_of, meal.meal_number),
         breakfastMeals: breakfastMeals.filter(inRange), breakfastLibrary,
         kidsLunchMeals: kidsLunchMeals.filter(inRange), kidsLunchLibrary, kidsLunchSides, sideOptions,
         adultLunchSelections, adultLunchLibrary, sideSelections, sideLibrary, treatSelections, treatLibrary,
       });
-      if (!recipes.length) throw new Error('No selected recipes with ingredients were found for this week. Schedule a meal or add a recipe to a Prep List first.');
+      if (!recipes.length) throw new Error('No selected recipes with ingredients were found in this seven-day range. Schedule a meal or add a recipe to a Prep List first.');
       const { data, error: invokeError } = await sb.functions.invoke('meal-grocery-list', { body: { dateFrom: start, dateTo: end, recipes } });
       if (invokeError) throw new Error(invokeError.message || 'The smart grocery service could not be reached.');
       if (data?.error) throw new Error(data.error);
@@ -1938,7 +1951,7 @@ export function SmartGroceryList() {
 
   const itemCount = (result?.sections || []).reduce((total, section) => total + (section.items?.length || 0), 0);
   return <section className="card smartGrocery" aria-labelledby="smart-grocery-title">
-    <div className="smartGroceryHead"><div><div className="plannerMonth">Breakfast · Lunch · Dinner · Sides · Treats</div><h2 className="sectionTitle" id="smart-grocery-title">One smart grocery list</h2><p className="smartGroceryIntro">AI combines, organises and checks every scheduled meal and Prep List selection.</p></div><div className="weekNav"><button type="button" className="iconBtn" aria-label="Previous grocery week" onClick={() => setWeek(current => shiftWeek(current, -1))}>‹</button><span className="weekLabel">{formatWeekLabel(week)}</span><button type="button" className="iconBtn" aria-label="Next grocery week" onClick={() => setWeek(current => shiftWeek(current, 1))}>›</button></div></div>
+    <div className="smartGroceryHead"><div><div className="plannerMonth">Breakfast · Lunch · Dinner · Sides · Treats</div><h2 className="sectionTitle" id="smart-grocery-title">One smart grocery list</h2><p className="smartGroceryIntro">AI combines, organises and checks every scheduled meal and Prep List selection across exactly seven days.</p></div><div className="groceryDateControls"><button type="button" className="iconBtn" aria-label="Previous seven-day grocery window" onClick={() => shiftWindow(-7)}>‹</button><label>Start<input className="input" type="date" aria-label="Grocery list start date" value={start} onChange={event => changeStart(event.target.value)}/></label><span aria-hidden="true">→</span><label>End<input className="input" type="date" aria-label="Grocery list end date" value={end} onChange={event => changeEnd(event.target.value)}/></label><button type="button" className="iconBtn" aria-label="Next seven-day grocery window" onClick={() => shiftWindow(7)}>›</button></div></div>
     <button type="button" className="btn smartGroceryGenerate" disabled={busy} onClick={generate}>{busy ? <><span className="spinner"/>Organising and checking…</> : 'Generate complete grocery list'}</button>
     {error && <div className="saveError smartGroceryError" role="alert">{error}</div>}
     {result && <div className="smartGroceryResult" aria-live="polite">
