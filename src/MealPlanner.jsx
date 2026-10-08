@@ -505,7 +505,7 @@ function SwitchMealModal({ day, library, tagMap, busy, onClose, onSave, rotating
   </form></div>;
 }
 
-function RecipeDetailsModal({ recipe, tags, scheduledDays, queuedDays, busy, cookedBusy, onTagsSaved, onToggleCooked, onClose, onSave, showCookedStatus = true, statusMode = 'cooked', readOnly = false }) {
+function RecipeDetailsModal({ recipe, tags, scheduledDays, queuedDays, busy, cookedBusy, prepBusy = false, onTagsSaved, onToggleCooked, onTogglePrep, onClose, onSave, showCookedStatus = true, showPrepStatus = false, statusMode = 'cooked', readOnly = false }) {
   const [title, setTitle] = useState(recipe.title || '');
   const [source, setSource] = useState(recipe.source_ref || '');
   const [method, setMethod] = useState(recipe.method || '');
@@ -560,7 +560,7 @@ function RecipeDetailsModal({ recipe, tags, scheduledDays, queuedDays, busy, coo
   }
   return <div className="modalBack" role="dialog" aria-modal="true" aria-label={`Recipe details for ${recipe.title}`} onMouseDown={event => { if (event.target === event.currentTarget && !busy && !tagsSaving) onClose(); }}><form className="modal recipeDetailsModal" onSubmit={submit}>
     <div className="modalHead"><div><h2 className="sectionTitle">{recipe.title}</h2><div className="small">Recipe details</div></div><button type="button" className="iconBtn" aria-label="Close recipe details" disabled={busy || tagsSaving} onClick={onClose}>×</button></div>
-    <div className="recipeDetailStatuses">{recipe.servings && <span className="recipeStatus">Yields {recipe.servings} servings</span>}{showCookedStatus && <button type="button" className={`recipeStatus statusButton ${recipe.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy} aria-label={`${recipe.has_been_cooked ? `Mark as not ${statusMode === 'tried' ? 'tried' : 'cooked yet'}` : `Mark as ${statusMode === 'tried' ? 'tried' : 'cooked'}`}: ${recipe.title}`} onClick={async () => { const message = await onToggleCooked(recipe); if (message) setError(message); else setError(''); }}>{cookedBusy ? 'Updating…' : recipe.has_been_cooked ? statusMode === 'tried' ? '✓ Tried' : '✓ Cooked' : statusMode === 'tried' ? 'Not tried yet' : 'Not cooked yet'}</button>}{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}</div>
+    <div className="recipeDetailStatuses">{recipe.servings && <span className="recipeStatus">Yields {recipe.servings} servings</span>}{showCookedStatus && <button type="button" className={`recipeStatus statusButton ${recipe.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy} aria-label={`${recipe.has_been_cooked ? `Mark as not ${statusMode === 'tried' ? 'tried' : 'cooked yet'}` : `Mark as ${statusMode === 'tried' ? 'tried' : 'cooked'}`}: ${recipe.title}`} onClick={async () => { const message = await onToggleCooked(recipe); if (message) setError(message); else setError(''); }}>{cookedBusy ? 'Updating…' : recipe.has_been_cooked ? statusMode === 'tried' ? '✓ Tried' : '✓ Cooked' : statusMode === 'tried' ? 'Not tried yet' : 'Not cooked yet'}</button>}{showPrepStatus && <button type="button" className={`recipeStatus statusButton ${recipe.requires_prep ? 'isPrep' : ''}`} disabled={busy || prepBusy} aria-label={`${recipe.requires_prep ? 'Remove PREP from' : 'Mark PREP'}: ${recipe.title}`} onClick={async () => { const message = await onTogglePrep(recipe); if (message) setError(message); else setError(''); }}>{prepBusy ? 'Updating…' : recipe.requires_prep ? '✓ PREP' : 'Mark PREP'}</button>}{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}</div>
     <label className="tagField">Recipe title<input className="input" aria-label={`Title for ${recipe.title}`} value={title} disabled={busy || readOnly} onChange={event => setTitle(event.target.value)} placeholder="Recipe name"/></label>
     {(!readOnly || tags.length > 0) && <label className="tagField recipeDetailTags">Recipe tags<input className="input" aria-label={`Tags for ${recipe.title} in details`} value={tagsText} disabled={busy || readOnly || tagSaveState === 'saving'} onChange={event => setTagsText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} placeholder="e.g. soup, vegetarian"/></label>}
     {tagSaveState !== 'idle' && <div className={`tagSaveState ${tagSaveState}`} role="status">{tagSaveState === 'pending' ? 'Saving soon…' : tagSaveState === 'saving' ? 'Saving…' : tagSaveState === 'saved' ? '✓ Tags saved' : 'Tag save failed'}</div>}
@@ -581,7 +581,7 @@ function RecipeDetailsModal({ recipe, tags, scheduledDays, queuedDays, busy, coo
   </form></div>;
 }
 
-function RecipeCard({ meal, tags, scheduledDays = [], queuedDays = [], onTagsSaved, onToggleCooked, cookedBusy, onOpenDetails, onUse, onQueue, onDelete, busy, draggable = false, onDragStart, onDragEnd, showCookedStatus = true, statusMode = 'cooked' }) {
+function RecipeCard({ meal, tags, scheduledDays = [], queuedDays = [], onTagsSaved, onToggleCooked, cookedBusy, onTogglePrep, prepBusy = false, onOpenDetails, onUse, onQueue, onDelete, busy, draggable = false, onDragStart, onDragEnd, showCookedStatus = true, showPrepStatus = false, statusMode = 'cooked' }) {
   const [draft, setDraft] = useState(tags.join(', '));
   const [error, setError] = useState('');
   const [using, setUsing] = useState(false);
@@ -615,7 +615,7 @@ function RecipeCard({ meal, tags, scheduledDays = [], queuedDays = [], onTagsSav
   const tagsSaving = changed || saveState === 'saving';
   const canDrag = draggable && supportsNativeRecipeDrag();
   return <div className={`recipeCard${canDrag ? ' draggableRecipe' : ''}`} draggable={canDrag && !busy && !changed} onDragStart={e => canDrag && onDragStart?.(e, meal)} onDragEnd={onDragEnd}>
-    <div className="recipeCardHead"><div><h4>{meal.title}</h4><div className="small">{meal.source_ref}</div></div><div className="recipeCardMeta">{meal.servings && <span className="recipeStatus">Yields {meal.servings} servings</span>}{showCookedStatus && <button type="button" className={`recipeStatus statusButton ${meal.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy || using} aria-label={`${meal.has_been_cooked ? `Mark as not ${statusMode === 'tried' ? 'tried' : 'cooked yet'}` : `Mark as ${statusMode === 'tried' ? 'tried' : 'cooked'}`}: ${meal.title}`} onClick={async () => setError(await onToggleCooked(meal) || '')}>{cookedBusy ? 'Updating…' : meal.has_been_cooked ? statusMode === 'tried' ? '✓ Tried' : '✓ Cooked' : statusMode === 'tried' ? 'Not tried yet' : 'Not cooked yet'}</button>}{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}{canDrag && <span className="dragHint" aria-hidden="true">Drag to a day</span>}</div></div>
+    <div className="recipeCardHead"><div><h4>{meal.title}</h4><div className="small">{meal.source_ref}</div></div><div className="recipeCardMeta">{meal.servings && <span className="recipeStatus">Yields {meal.servings} servings</span>}{showCookedStatus && <button type="button" className={`recipeStatus statusButton ${meal.has_been_cooked ? 'isCooked' : ''}`} disabled={busy || cookedBusy || using} aria-label={`${meal.has_been_cooked ? `Mark as not ${statusMode === 'tried' ? 'tried' : 'cooked yet'}` : `Mark as ${statusMode === 'tried' ? 'tried' : 'cooked'}`}: ${meal.title}`} onClick={async () => setError(await onToggleCooked(meal) || '')}>{cookedBusy ? 'Updating…' : meal.has_been_cooked ? statusMode === 'tried' ? '✓ Tried' : '✓ Cooked' : statusMode === 'tried' ? 'Not tried yet' : 'Not cooked yet'}</button>}{showPrepStatus && <button type="button" className={`recipeStatus statusButton ${meal.requires_prep ? 'isPrep' : ''}`} disabled={busy || prepBusy || using} aria-label={`${meal.requires_prep ? 'Remove PREP from' : 'Mark PREP'}: ${meal.title}`} onClick={async () => setError(await onTogglePrep(meal) || '')}>{prepBusy ? 'Updating…' : meal.requires_prep ? '✓ PREP' : 'Mark PREP'}</button>}{scheduledDays.length > 0 && <span className="recipeStatus isScheduled">Scheduled · {scheduledDays.length === 1 ? 'Day' : 'Days'} {scheduledDays.join(', ')}</span>}{queuedDays.length > 0 && <span className="recipeStatus isQueued">Queued · {queuedDays.length === 1 ? 'Day' : 'Days'} {queuedDays.join(', ')}</span>}{canDrag && <span className="dragHint" aria-hidden="true">Drag to a day</span>}</div></div>
     <label className="tagField">Recipe tags<input className="input" aria-label={`Tags for ${meal.title}`} value={draft} disabled={busy || saveState === 'saving'} onChange={e => setDraft(e.target.value)} placeholder="e.g. soup, vegetarian"/></label>
     <div className="dayActions">
       {saveState !== 'idle' && <span className={`tagSaveState ${saveState}`}>{saveState === 'pending' ? 'Saving soon…' : saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ Tags saved' : 'Save failed'}</span>}
@@ -684,6 +684,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   const [switchDay, setSwitchDay] = useState(null);
   const [detailsRecipe, setDetailsRecipe] = useState(null);
   const [cookedUpdatingKey, setCookedUpdatingKey] = useState('');
+  const [prepUpdatingKey, setPrepUpdatingKey] = useState('');
   const queueMutationsRef = useRef(new Set());
   const useInFlight = useRef(false);
   const [manualOpen, setManualOpen] = useState(false);
@@ -891,7 +892,8 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         recipe_key: oldKey, title, source_ref: source, ingredients: details.ingredients,
         method: String(details.method || '').trim(), servings: details.servings ?? null, extracted_at: recipe.extracted_at, rating: recipe.rating, notes: recipe.notes || '',
         cooked_at: existing?.cooked_at || recipe.cooked_at || new Date().toISOString(),
-        has_been_cooked: !!(existing?.has_been_cooked || recipe.has_been_cooked), is_deleted: false,
+        has_been_cooked: !!(existing?.has_been_cooked || recipe.has_been_cooked),
+        requires_prep: !!(existing?.requires_prep || recipe.requires_prep), is_deleted: false,
       };
       const { data: saved, error } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (error) throw error;
@@ -921,7 +923,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         ingredients: recipe.ingredients || [], method: recipe.method || '', servings: recipe.servings ?? null, extracted_at: recipe.extracted_at || null,
         rating: recipe.rating ?? null, notes: recipe.notes || '',
         cooked_at: cooked ? new Date().toISOString() : existing?.cooked_at || recipe.cooked_at || new Date().toISOString(),
-        has_been_cooked: cooked, is_deleted: false,
+        has_been_cooked: cooked, requires_prep: !!(existing?.requires_prep || recipe.requires_prep), is_deleted: false,
       };
       const { data: saved, error } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
       if (error) throw error;
@@ -929,6 +931,20 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       return '';
     } catch (e) { return e.message || 'Could not update the cooked status. Please retry.'; }
     finally { setCookedUpdatingKey(''); }
+  }
+  async function togglePrepStatus(recipe) {
+    const key = recipeKey(recipe);
+    if (busy || prepUpdatingKey === key) return 'Please wait for the current save.';
+    setPrepUpdatingKey(key);
+    try {
+      const requiresPrep = !recipe.requires_prep;
+      const { data: saved, error } = await from('meal_recipe_library').update({ requires_prep: requiresPrep }).eq('recipe_key', key).select().single();
+      if (error) throw error;
+      setLibraryRecords(previous => previous.map(row => row.recipe_key === key ? { ...row, ...(saved || {}), requires_prep: requiresPrep } : row));
+      setToast(requiresPrep ? `${recipe.title} added to weekly PREP when scheduled` : `${recipe.title} no longer needs PREP`);
+      return '';
+    } catch (error) { return error.message || 'Could not update the PREP status. Please retry.'; }
+    finally { setPrepUpdatingKey(''); }
   }
   async function reconcileQueues(nextQueue) {
     const nextMeals = [...meals];
@@ -1581,14 +1597,14 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     </section>}
     <section className={`card${draggedMealNumber ? ' libraryDropReady' : ''}${libraryDropActive ? ' libraryDropActive' : ''}`} id="recipe-library" onDragOver={event => { if (draggedMealNumber) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setLibraryDropActive(true); } }} onDragLeave={() => setLibraryDropActive(false)} onDrop={event => draggedMealNumber && dropScheduledMeal(event)}>
       <div className="rowBetween"><h2 className="sectionTitle">Recipe library</h2><button className="btn ghost" aria-expanded={libraryOpen} disabled={loadingWeek || !!loadError} onClick={() => setLibraryOpen(v => !v)}>{libraryOpen ? 'Hide library' : 'Browse library'}</button></div>
-      {libraryOpen && !loadingWeek && !loadError && <div className="recipeLibrary"><input className="input search" aria-label="Search recipe library" value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="Search by recipe, source or tag…"/>{filteredLibraryRecipes.length === 0 ? <div className="empty">{librarySearch ? 'No recipes match your search.' : 'Recipes you save or import will appear here.'}</div> : <div className="pastMeals">{filteredLibraryRecipes.map(recipe => <RecipeCard key={recipe.recipe_key} meal={recipe} tags={recipeTags[recipeKey(recipe)] || EMPTY_TAGS} scheduledDays={recipeDays(meals, recipe, 'meal_number')} queuedDays={recipeDays(queueRows, recipe, 'day_number')} onTagsSaved={savePastTags} onToggleCooked={toggleCookedStatus} cookedBusy={cookedUpdatingKey === recipeKey(recipe)} onOpenDetails={setDetailsRecipe} onUse={useLibraryRecipe} onQueue={queueLibraryRecipe} onDelete={deleteLibraryRecipe} busy={busy} draggable onDragStart={startRecipeDrag} onDragEnd={() => { setDraggedRecipeKey(''); setDropTarget(null); }} statusMode={config.capsule ? 'tried' : 'cooked'}/>)}</div>}</div>}
+      {libraryOpen && !loadingWeek && !loadError && <div className="recipeLibrary"><input className="input search" aria-label="Search recipe library" value={librarySearch} onChange={e => setLibrarySearch(e.target.value)} placeholder="Search by recipe, source or tag…"/>{filteredLibraryRecipes.length === 0 ? <div className="empty">{librarySearch ? 'No recipes match your search.' : 'Recipes you save or import will appear here.'}</div> : <div className="pastMeals">{filteredLibraryRecipes.map(recipe => <RecipeCard key={recipe.recipe_key} meal={recipe} tags={recipeTags[recipeKey(recipe)] || EMPTY_TAGS} scheduledDays={recipeDays(meals, recipe, 'meal_number')} queuedDays={recipeDays(queueRows, recipe, 'day_number')} onTagsSaved={savePastTags} onToggleCooked={toggleCookedStatus} cookedBusy={cookedUpdatingKey === recipeKey(recipe)} onTogglePrep={togglePrepStatus} prepBusy={prepUpdatingKey === recipeKey(recipe)} showPrepStatus={mealType === 'kids_lunch'} onOpenDetails={setDetailsRecipe} onUse={useLibraryRecipe} onQueue={queueLibraryRecipe} onDelete={deleteLibraryRecipe} busy={busy} draggable onDragStart={startRecipeDrag} onDragEnd={() => { setDraggedRecipeKey(''); setDropTarget(null); }} statusMode={config.capsule ? 'tried' : 'cooked'}/>)}</div>}</div>}
     </section>
   </div></div>{(toast || queueOpen || settingsOpen || sideOptionsOpen || switchDay !== null || detailsRecipe || manualOpen) && createPortal(<div className="meal-planner">
     {queueOpen && <QueueManager queue={queueRows} categories={categories} tagMap={recipeTags} busy={busy} onClose={() => setQueueOpen(false)} onTagsSaved={savePastTags} onMove={moveQueueItem} onBump={bumpQueueItem} dayNames={config.dayNames} meals={meals} rotating={config.capsule} mealLabel={config.singular}/>}
     {settingsOpen && <div className="modalBack" role="dialog" aria-modal="true" aria-label="Edit day categories"><div className="modal categoryModal" id="category-editor"><div className="modalHead"><h2 className="sectionTitle">Day categories</h2><button type="button" className="iconBtn" aria-label="Close categories" onClick={() => setSettingsOpen(false)}>×</button></div><CategoryEditor categories={categories} onSave={saveCategories} busy={busy} dayNames={config.dayNames}/></div></div>}
     {sideOptionsOpen && <div className="modalBack" role="dialog" aria-modal="true" aria-label="Edit lunch sides"><div className="modal categoryModal"><div className="modalHead"><h2 className="sectionTitle">Kids lunch sides</h2><button type="button" className="iconBtn" aria-label="Close sides" onClick={() => setSideOptionsOpen(false)}>×</button></div><SideOptionsEditor options={sideOptions} onSave={saveSideOptions} busy={busy}/></div></div>}
     {switchDay !== null && <SwitchMealModal day={switchDay} library={libraryRecipes} tagMap={recipeTags} busy={busy} onClose={() => setSwitchDay(null)} onSave={switchMeal} rotating={config.capsule}/>}
-    {currentDetailsRecipe && <RecipeDetailsModal recipe={currentDetailsRecipe} tags={recipeTags[recipeKey(currentDetailsRecipe)] || EMPTY_TAGS} scheduledDays={recipeDays(meals, currentDetailsRecipe, 'meal_number')} queuedDays={recipeDays(queueRows, currentDetailsRecipe, 'day_number')} busy={busy} cookedBusy={cookedUpdatingKey === recipeKey(currentDetailsRecipe)} onTagsSaved={savePastTags} onToggleCooked={toggleCookedStatus} onClose={() => setDetailsRecipe(null)} onSave={saveRecipeDetails} statusMode={config.capsule ? 'tried' : 'cooked'} readOnly={!!detailsRecipe?.completed_at}/>}
+    {currentDetailsRecipe && <RecipeDetailsModal recipe={currentDetailsRecipe} tags={recipeTags[recipeKey(currentDetailsRecipe)] || EMPTY_TAGS} scheduledDays={recipeDays(meals, currentDetailsRecipe, 'meal_number')} queuedDays={recipeDays(queueRows, currentDetailsRecipe, 'day_number')} busy={busy} cookedBusy={cookedUpdatingKey === recipeKey(currentDetailsRecipe)} prepBusy={prepUpdatingKey === recipeKey(currentDetailsRecipe)} onTagsSaved={savePastTags} onToggleCooked={toggleCookedStatus} onTogglePrep={togglePrepStatus} showPrepStatus={mealType === 'kids_lunch'} onClose={() => setDetailsRecipe(null)} onSave={saveRecipeDetails} statusMode={config.capsule ? 'tried' : 'cooked'} readOnly={!!detailsRecipe?.completed_at}/>}
     {manualOpen && <ManualRecipeModal busy={busy} onClose={() => setManualOpen(false)} onSave={saveManualRecipe} autoQueue={config.autoQueue}/>}
     {toast && <div className="toast" role="status">{toast}</div>}
   </div>, document.body)}</div>;
@@ -1777,6 +1793,39 @@ function TodayAtGlance() {
   return <><section className="card todayFood"><div className="todayFoodHeader"><div><div className="plannerMonth">{day} at a glance · {formatMealDate(selectedDate, { year: 'numeric' })}</div><h2 className="sectionTitle">{isToday ? 'Today’s food' : 'Food for this date'}</h2></div><div className="dayAtGlanceControls"><button type="button" className="iconBtn" aria-label="Previous date" onClick={() => moveDate(-1)}>‹</button><input className="input" type="date" aria-label="Choose date for meal overview" value={selectedDate} onChange={event => event.target.value && setSelectedDate(event.target.value)}/><button type="button" className="iconBtn" aria-label="Next date" onClick={() => moveDate(1)}>›</button>{!isToday && <button type="button" className="btn ghost" onClick={() => setSelectedDate(localISODate(new Date()))}>Today</button>}</div></div>{items.length ? <div className="todayFoodGrid">{items.map((item, index) => item.recipe ? <button type="button" className={`todayFoodItem${item.recipe.completed_at ? ' isCompleted' : ''}`} aria-label={`View recipe: ${item.title}`} onClick={() => setDetailsRecipe(item.recipe)} key={`${item.label}-${index}`}><span>{item.label}</span><strong>{item.title}</strong></button> : <div className="todayFoodItem" key={`${item.label}-${index}`}><span>{item.label}</span><strong>{item.title}</strong></div>)}</div> : <div className="empty">Nothing is assigned for {isToday ? 'today' : 'this date'} yet.</div>}</section>{detailsRecipe && createPortal(<div className="meal-planner"><RecipeDetailsModal recipe={detailsRecipe} tags={EMPTY_TAGS} scheduledDays={EMPTY_TAGS} queuedDays={EMPTY_TAGS} busy={false} cookedBusy={false} onTagsSaved={async () => ''} onToggleCooked={async () => ''} onClose={() => setDetailsRecipe(null)} onSave={async () => ''} showCookedStatus={false} readOnly/></div>, document.body)}</>;
 }
 
+function KidsLunchWeeklyPrep() {
+  const [week, setWeek] = useState(defaultGroceryWeek);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [detailsRecipe, setDetailsRecipe] = useState(null);
+  const start = localISODate(mondayForISOWeek(week));
+  const end = addDays(start, 6);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError('');
+    Promise.all([
+      sb.from('kids_lunch_weekly_meals').select('*').eq('week_of', 'kids-lunch-capsule').gte('scheduled_for', start).lte('scheduled_for', end).order('scheduled_for').order('meal_number'),
+      sb.from('kids_lunch_recipe_library').select('*'),
+    ]).then(([mealsResult, libraryResult]) => {
+      if (cancelled) return;
+      if (mealsResult.error) throw mealsResult.error;
+      if (libraryResult.error) throw libraryResult.error;
+      const library = (libraryResult.data || []).filter(recipe => !recipe.is_deleted && recipe.requires_prep);
+      const next = (mealsResult.data || []).filter(meal => meal.scheduled_for >= start && meal.scheduled_for <= end).map(meal => {
+        const recipe = library.find(row => sameRecipe(row, meal));
+        return recipe ? { meal, recipe } : null;
+      }).filter(Boolean).sort((left, right) => String(left.meal.scheduled_for).localeCompare(String(right.meal.scheduled_for)) || Number(left.meal.meal_number) - Number(right.meal.meal_number));
+      setItems(next);
+    }).catch(reason => { if (!cancelled) { setItems([]); setError(reason.message || 'Could not load this week’s PREP recipes.'); } }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [start, end]);
+  return <><section className="card weeklyPrep" aria-labelledby="kids-lunch-prep-title">
+    <div className="weeklyPrepHead"><div><div className="plannerMonth">Kids lunches · scheduled recipes</div><h2 className="sectionTitle" id="kids-lunch-prep-title">PREP this week</h2></div><div className="weekNav"><button type="button" className="iconBtn" aria-label="Previous PREP week" onClick={() => setWeek(current => shiftWeek(current, -1))}>‹</button><span className="weekLabel">{formatWeekLabel(week)}</span><button type="button" className="iconBtn" aria-label="Next PREP week" onClick={() => setWeek(current => shiftWeek(current, 1))}>›</button></div></div>
+    {error ? <div className="saveError" role="alert">{error}</div> : loading ? <div className="empty">Loading this week’s PREP…</div> : items.length ? <div className="weeklyPrepList">{items.map(({ meal, recipe }) => <button type="button" className="weeklyPrepItem" key={`${meal.id || recipeKey(recipe)}-${meal.scheduled_for}`} aria-label={`View PREP recipe: ${recipe.title}`} onClick={() => setDetailsRecipe(recipe)}><span><b>{formatMealDate(meal.scheduled_for, { weekday: 'long' })}</b><small>{formatMealDate(meal.scheduled_for)}</small></span><strong>{recipe.title}</strong><em>PREP</em></button>)}</div> : <div className="empty">No PREP recipes are scheduled for this week.</div>}
+  </section>{detailsRecipe && createPortal(<div className="meal-planner"><RecipeDetailsModal recipe={detailsRecipe} tags={EMPTY_TAGS} scheduledDays={EMPTY_TAGS} queuedDays={EMPTY_TAGS} busy={false} cookedBusy={false} onTagsSaved={async () => ''} onToggleCooked={async () => ''} onClose={() => setDetailsRecipe(null)} onSave={async () => ''} showCookedStatus={false} readOnly/></div>, document.body)}</>;
+}
+
 function defaultGroceryWeek() {
   const date = new Date();
   if (date.getDay() === 0) date.setDate(date.getDate() + 1);
@@ -1906,6 +1955,7 @@ export default function MealPlanner({ onDirtyChange, onPathChange } = {}) {
   return <div className="meal-planner plannerTransition"><div className="app"><div className="shell">
     <header className="plannerHeader plannerHomeHeader"><div className="plannerMonth">Make space for what matters</div><h1 className="brand">Meal Planner<span className="brandDot">.</span></h1><p className="plannerHomeIntro">What would you like to plan?</p></header>
     <TodayAtGlance/>
+    <KidsLunchWeeklyPrep/>
     <SmartGroceryList/>
     <div className="plannerChoices">
       <button type="button" className="plannerChoice" onClick={() => navigate('breakfast')} aria-label="Open Breakfasts planner"><span className="plannerChoiceNumber">01 / BREAKFASTS</span><span className="plannerChoiceTitle">Breakfasts <span aria-hidden="true">↗</span></span><span className="plannerChoiceDescription">Your ongoing breakfast rotation, recipes and queues.</span></button>
