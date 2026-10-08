@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.105.4";
-import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queueInsertionBeforeTail, queueMealPayload, recipeKey } from "./intake-core.js";
+import { chooseQueueDay, nextQueuePosition, normalizePlanningPeriod, normalizeRecipeUrl, parseTags, queueInsertionBeforeTail, queueMealPayload, recipeKey } from "./intake-core.js";
 
 const plannerTables = {
   dinner: { categories: "meal_day_categories", pauses: "meal_day_pauses", meals: "weekly_meals", queue: "meal_recipe_queue", library: "meal_recipe_library", tags: "meal_recipe_tags" },
@@ -52,7 +52,7 @@ Deno.serve(async (req: Request) => {
     const capsule = mealType === "breakfast" || mealType === "lunch" || mealType === "kids_lunch";
     const selectionOnly = mealType === "sides" || mealType === "treats" || mealType === "lunch";
     const destination = selectionOnly && requestedDestination ? "library" : capsule && requestedDestination ? "queue" : requestedDestination;
-    const weekOf = String(body?.weekOf || "").trim();
+    const weekOf = normalizePlanningPeriod(mealType, body?.weekOf);
     const dryRun = body?.dryRun === true;
     if (!destination) return json({ error: "Choose Import & queue or Import only." }, 400);
     if (!mealType) return json({ error: "Choose a Mental Load recipe library." }, 400);
