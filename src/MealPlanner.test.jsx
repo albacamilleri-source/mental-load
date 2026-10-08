@@ -179,7 +179,7 @@ test('Kids Lunches chooses mains from its library and keeps editable side dropdo
     {id:'side-savory', name:'Pretzels', side_type:'savory', sort_order:2},
     {id:'side-optional', name:'Yoghurt pouch', side_type:'optional', sort_order:3},
   ];
-  kidsLunchDaySides = [{day_number:1, side_one_id:'side-fruit', side_two_id:null, side_three_id:null}];
+  kidsLunchDaySides = [{day_number:1, side_one_id:'side-fruit', side_two_id:'removed-savory', side_three_id:null}];
   await render('kids_lunch');
   expect(mockFrom).toHaveBeenCalledWith('kids_lunch_weekly_meals');
   expect(mockFrom).toHaveBeenCalledWith('kids_lunch_recipe_library');
@@ -203,8 +203,9 @@ test('Kids Lunches chooses mains from its library and keeps editable side dropdo
   expect([...container.querySelector('[aria-label="Monday Side 1"]').options].map(option => option.textContent)).toEqual(['Choose fruit…', 'Apple slices']);
   expect([...container.querySelector('[aria-label="Monday Side 2"]').options].map(option => option.textContent)).toEqual(['Choose savory side…', 'Pretzels']);
   expect([...container.querySelector('[aria-label="Monday Side 3"]').options].map(option => option.textContent)).toEqual(['No optional item', 'Yoghurt pouch']);
-  await change('Monday Side 2', 'side-savory');
   await change('Monday Side 3', 'side-optional');
+  expect(writes.filter(write => write.table === 'kids_lunch_day_sides').at(-1)).toMatchObject({value:{side_one_id:'side-fruit',side_two_id:null,side_three_id:'side-optional'}});
+  await change('Monday Side 2', 'side-savory');
   expect(writes.filter(write => write.table === 'kids_lunch_day_sides').at(-1)).toMatchObject({value:{side_one_id:'side-fruit',side_two_id:'side-savory',side_three_id:'side-optional'}});
   await click(button('Edit sides'));
   const modal = document.body.querySelector('[aria-label="Edit lunch sides"]');
@@ -219,6 +220,8 @@ test('Kids Lunches chooses mains from its library and keeps editable side dropdo
     expect.objectContaining({name:'Fresh fruit',side_type:'optional'}),
     expect.objectContaining({name:'Cucumber sticks',side_type:'savory'}),
   ]));
+  expect(writes.filter(write => write.table === 'kids_lunch_day_sides').at(-1)).toMatchObject({value:[expect.objectContaining({side_one_id:null,side_two_id:'side-savory',side_three_id:'side-optional'})]});
+  expect(container.querySelector('[aria-label="Monday Side 1"]').value).toBe('');
 });
 
 test('Kids Lunch library recipes can be marked and unmarked as PREP', async () => {

@@ -409,6 +409,26 @@ function SideOptionsEditor({ options, onSave, busy }) {
   </form>;
 }
 
+const SIDE_SLOT_TYPES = {
+  side_one_id: 'fruit',
+  side_two_id: 'savory',
+  side_three_id: 'optional',
+};
+
+function validDaySides(row, options) {
+  const optionTypes = new Map(options.map(option => [String(option.id), option.side_type || 'optional']));
+  const next = { day_number: Number(row.day_number) };
+  Object.entries(SIDE_SLOT_TYPES).forEach(([field, expectedType]) => {
+    const optionId = row[field];
+    next[field] = optionId && optionTypes.get(String(optionId)) === expectedType ? optionId : null;
+  });
+  return next;
+}
+
+function daySidesChanged(previous, next) {
+  return Object.keys(SIDE_SLOT_TYPES).some(field => (previous?.[field] || null) !== next[field]);
+}
+
 function RecipeImporter({ categories = [], onImport, onManual, busy, dayNames, autoQueue = false, libraryOnly = false }) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
@@ -848,7 +868,15 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         const { error } = await from('side_options').delete().eq('id', option.id);
         if (error) throw error;
       }
-      setSideOptions(next); setSideOptionsOpen(false); setToast('Side choices saved');
+      const sanitizedRows = Object.values(daySides).map(row => validDaySides(row, next));
+      const rowsToClear = sanitizedRows.filter(row => daySidesChanged(daySides[row.day_number], row));
+      if (rowsToClear.length) {
+        const { error } = await from('day_sides').upsert(rowsToClear, { onConflict: 'day_number' });
+        if (error) throw error;
+      }
+      setSideOptions(next);
+      setDaySides(Object.fromEntries(sanitizedRows.map(row => [row.day_number, row])));
+      setSideOptionsOpen(false); setToast('Side choices saved');
       return '';
     } catch (error) { return error.message || 'Could not save side choices. Please retry.'; }
     finally { setBusy(false); }
@@ -856,12 +884,13 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   async function saveDaySide(day, field, optionId) {
     if (busy) return;
     const current = daySides[day] || { day_number: day, side_one_id: null, side_two_id: null, side_three_id: null };
-    const next = { ...current, [field]: optionId || null };
+    const next = validDaySides({ ...current, [field]: optionId || null }, sideOptions);
     setBusy(true);
     try {
       const { data, error } = await from('day_sides').upsert(next, { onConflict: 'day_number' }).select().single();
       if (error) throw error;
       setDaySides(previous => ({ ...previous, [day]: data || next }));
+      setMealErrors(previous => ({ ...previous, [day - 1]: '' }));
       setToast(`${dayName(day)} sides saved`);
     } catch (error) { setMealErrors(previous => ({ ...previous, [day - 1]: error.message || 'Could not save this side. Please retry.' })); }
     finally { setBusy(false); }
