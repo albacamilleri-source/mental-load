@@ -431,7 +431,7 @@ test('marking breakfast made rotates it and preserves a permanent tried status',
   await render('breakfast');
   await click(button('Made · rotate', day(2)));
   const cookedCard = [...container.querySelectorAll('.breakfastDayGroup:first-of-type .breakfastAudienceMeal')].find(card => card.querySelector('.dayHeading')?.textContent === 'Kids');
-  expect(cookedCard.textContent).toContain('✓ Cooked');
+  expect(cookedCard.textContent).toContain('✓ Tried');
   expect(writes).toContainEqual({table:'breakfast_recipe_queue', update:{field:'id', value:'breakfast-q1', payload:{position:3}}});
   const replacement = writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.queue_item_id === 'breakfast-q2');
   expect(replacement.value.week_of).toBe(weekAfterToday());
@@ -690,7 +690,7 @@ test('load errors do not leave an editable planner with missing category rules',
 });
 
 
-test('marking dinner cooked banks it, moves it to the queue tail, and schedules the next recipe in the following week', async () => {
+test('marking dinner made records it as tried, moves it to the queue tail, and schedules the next recipe in the following week', async () => {
   const first = {...sample(1, ['pasta']), servings:2, queue_item_id:'dinner-q1'};
   const second = {...sample(2), id:'dinner-q2', day_number:1, position:2, created_at:'2026-09-10T09:00:00Z'};
   current = [first];
@@ -699,16 +699,16 @@ test('marking dinner cooked banks it, moves it to the queue tail, and schedules 
   tagRows = [{recipe_key:recipeKey(first), tags:['pasta']}, {recipe_key:recipeKey(second), tags:['pasta']}];
   await render();
   const currentWeekCard = day(1);
-  await click(button('Mark cooked', currentWeekCard));
+  await click(button('Made · rotate', currentWeekCard));
   expect(writes.find(write => write.table === 'meal_recipe_library').value).toMatchObject({title: 'Recipe 1', source_ref: 'Book 1', servings:4, has_been_cooked: true, is_deleted: false});
   expect(writes).toContainEqual({table: 'weekly_meals', update: {field: 'id', value: 'meal-1', payload: {completed_at: expect.any(String)}}});
   expect(writes).not.toContainEqual({table: 'weekly_meals', delete: {field: 'id', value: 'meal-1', payload: undefined}});
-  expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'id', value:'dinner-q1', payload:{position:3}}});
+  expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'id', value:'dinner-q1', payload:{day_number:1, position:3}}});
   const nextDinner = writes.find(write => write.table === 'weekly_meals' && write.value?.queue_item_id === 'dinner-q2');
   expect(nextDinner?.value).toMatchObject({title:'Recipe 2', meal_number:1, week_of:weekAfterToday(), completed_at:null});
   expect(currentWeekCard.classList.contains('isCompleted')).toBe(true);
   expect(currentWeekCard.textContent).toContain('Recipe 1');
-  expect(currentWeekCard.textContent).toContain('Cooked');
+  expect(currentWeekCard.textContent).toContain('Tried');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 1');
 });
 
@@ -720,7 +720,7 @@ test('deleting a cooked recipe removes it from the library and queue but preserv
   tagRows = [{recipe_key:recipeKey(first), tags:['pasta']}];
   await render();
   const currentWeekCard = day(1);
-  await click(button('Mark cooked', currentWeekCard));
+  await click(button('Made · rotate', currentWeekCard));
   await click(button('Delete', container.querySelector('#recipe-library .recipeCard')));
   expect(currentWeekCard.classList.contains('isCompleted')).toBe(true);
   expect(currentWeekCard.textContent).toContain('Recipe 1');
@@ -736,14 +736,27 @@ test('a deleted library recipe does not remove an existing cooked dinner record 
   expect(writes.filter(write => write.table === 'weekly_meals' && write.delete)).toHaveLength(0);
 });
 
-test('marking an unqueued dinner cooked adds it to the rotation instead of losing it', async () => {
+test('marking an unqueued dinner made adds it to the rotation instead of losing it', async () => {
   current = [{...sample(1), servings:2}];
   library = [{...sample(1), recipe_key:recipeKey(sample(1)), servings:2, has_been_cooked:false, is_deleted:false}];
   tagRows = [{recipe_key:recipeKey(sample(1)), tags:['pasta']}];
   await render();
-  await click(button('Mark cooked', day(1)));
+  await click(button('Made · rotate', day(1)));
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert)).toMatchObject({insert:{title:'Recipe 1', day_number:1, position:1}});
   expect(writes.find(write => write.table === 'weekly_meals' && write.value?.title === 'Recipe 1' && write.value?.week_of === weekAfterToday())).toBeTruthy();
+});
+
+test('marking dinner made moves an existing queue copy from another day to this day’s tail', async () => {
+  const made = {...sample(1), servings:2};
+  const next = {...sample(2), id:'dinner-q2', day_number:1, position:1, created_at:'2026-09-10T08:00:00Z'};
+  current = [made];
+  queue = [next, {...made, id:'dinner-q1', day_number:2, position:1, created_at:'2026-09-10T09:00:00Z'}];
+  library = [{...made, recipe_key:recipeKey(made), has_been_cooked:false, is_deleted:false}];
+  tagRows = [{recipe_key:recipeKey(made), tags:['pasta']}, {recipe_key:recipeKey(next), tags:['pasta']}];
+  await render();
+  await click(button('Made · rotate', day(1)));
+  expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'id', value:'dinner-q1', payload:{day_number:1, position:2}}});
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.week_of === weekAfterToday())).toMatchObject({value:{title:'Recipe 2', queue_item_id:'dinner-q2'}});
 });
 
 test('touchscreen recipe cards keep Delete tappable without enabling native drag', async () => {
@@ -945,7 +958,7 @@ test('library cards open a modal with editable ingredients, source and method, a
   tagRows = [{recipe_key:recipeKey(sample(1)), tags:['quick']}];
   await render();
   const recipeLibrary = container.querySelector('#recipe-library');
-  expect(recipeLibrary.textContent).toContain('✓ Cooked');
+  expect(recipeLibrary.textContent).toContain('✓ Tried');
   expect(recipeLibrary.textContent).not.toContain('View ingredients');
   expect(recipeLibrary.textContent).not.toContain('carrot · 1');
   await click(button('View recipe', recipeLibrary));
@@ -1036,11 +1049,11 @@ test('modal edits recipe tags while showing cooked and schedule status', async (
   await render();
   const card = container.querySelector('#recipe-library .recipeCard');
   expect(card.textContent).not.toContain('Tags save automatically');
-  await click(card.querySelector('[aria-label="Mark as cooked: Recipe 1"]'));
+  await click(card.querySelector('[aria-label="Mark as tried: Recipe 1"]'));
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.has_been_cooked === true)).toBeTruthy();
   await click(button('View recipe', card));
   const modal = document.body.querySelector('[aria-label="Recipe details for Recipe 1"]');
-  expect(modal.textContent).toContain('✓ Cooked');
+  expect(modal.textContent).toContain('✓ Tried');
   expect(modal.textContent).toContain('Scheduled · Days 1, 2');
   expect(modal.textContent).toContain('Queued · Day 2');
   expect(modal.querySelector('[aria-label="Tags for Recipe 1 in details"]').value).toBe('pasta, vegetarian');
@@ -1051,10 +1064,10 @@ test('modal edits recipe tags while showing cooked and schedule status', async (
   expect(modal.textContent).toContain('Tags saved');
   expect(card.querySelector('[aria-label="Tags for Recipe 1"]').value).toBe('pasta, vegetarian, dinner');
   expect(card.textContent).not.toContain('Saving soon');
-  await click(modal.querySelector('[aria-label="Mark as not cooked yet: Recipe 1"]'));
+  await click(modal.querySelector('[aria-label="Mark as not tried: Recipe 1"]'));
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.has_been_cooked === false)).toBeTruthy();
-  expect(modal.textContent).toContain('Not cooked yet');
-  expect(card.textContent).toContain('Not cooked yet');
+  expect(modal.textContent).toContain('Not tried yet');
+  expect(card.textContent).toContain('Not tried yet');
 });
 
 test('queue tags can be edited from queue management', async () => {
@@ -1081,7 +1094,7 @@ test('a temporary switch keeps the queued recipe at the front and prepares it fo
   expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
   expect(selectedDinnerTitle(2)).toBe('Recipe 3');
   const currentWeekCard = day(2);
-  await click(button('Mark cooked', currentWeekCard));
+  await click(button('Made · rotate', currentWeekCard));
   expect(currentWeekCard.classList.contains('isCompleted')).toBe(true);
   expect(currentWeekCard.textContent).toContain('Recipe 3');
   expect(writes.find(write => write.table === 'weekly_meals' && write.value?.week_of === weekAfterToday())).toMatchObject({value:{title:'Recipe 2', queue_item_id:'q1', completed_at:null}});
