@@ -16,12 +16,12 @@ test('Import only sends the library destination', async () => {
 });
 
 test.each([
-  ['breakfast', 'breakfast-capsule', 'Monday · Kids', 'breakfast'],
-])('%s imports select its isolated planner and capsule queue', async (mealType, weekOf, day, queueName) => {
+  ['breakfast', 'Monday · Kids', 'breakfast'],
+])('%s imports select its isolated weekly planner queue', async (mealType, day, queueName) => {
   const dayNumber = 2;
   const fetcher = jest.fn().mockResolvedValue({ok:true, json:async () => ({ok:true,destination:'queue',dayNumber,alreadyQueued:false})});
   const result = await sendRecipe({url:'https://example.com/recipe',destination:'queue',mealType}, fetcher);
-  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({mealType,weekOf,destination:'queue'});
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({mealType,weekOf:expect.stringMatching(/^\d{4}-W\d{2}$/),destination:'queue'});
   expect(successMessage(result)).toBe(`Recipe added to the ${day} ${queueName} queue.`);
 });
 
@@ -36,8 +36,8 @@ test.each([
   expect(successMessage(result)).toBe(`Recipe saved to the ${library} library.`);
 });
 
-test('planning periods keep Dinner weekly while Breakfast remains a rotating capsule', () => {
-  expect(planningPeriod('breakfast')).toBe('breakfast-capsule');
+test('planning periods scope Dinner and Breakfast to real calendar weeks', () => {
+  expect(planningPeriod('breakfast')).toMatch(/^\d{4}-W\d{2}$/);
   expect(planningPeriod('dinner', new Date(2026, 8, 24))).toMatch(/^2026-W\d{2}$/);
 });
 

@@ -2,7 +2,7 @@ export const INTAKE_ENDPOINT = 'https://qvibdnrfywisvfsqgqux.supabase.co/functio
 export const PUBLIC_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2aWJkbnJmeXdpc3Zmc3FncXV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTE5MTcsImV4cCI6MjA5NDQ2NzkxN30.qPNjcpQpHPV5_SVz3U-JC18CcZ6vxio9vImA3CKg5jk';
 
 export const MEAL_TYPES = {
-  breakfast: { label: 'Breakfasts', library: 'Breakfast', period: 'breakfast-capsule', autoQueue: true, days: ['Monday · Adults', 'Monday · Kids', 'Tuesday · Adults', 'Tuesday · Kids', 'Wednesday · Adults', 'Wednesday · Kids', 'Thursday · Adults', 'Thursday · Kids', 'Friday · Adults', 'Saturday', 'Sunday'] },
+  breakfast: { label: 'Breakfasts', library: 'Breakfast', autoQueue: true, days: ['Monday · Adults', 'Monday · Kids', 'Tuesday · Adults', 'Tuesday · Kids', 'Wednesday · Adults', 'Wednesday · Kids', 'Thursday · Adults', 'Thursday · Kids', 'Friday · Adults', 'Saturday', 'Sunday'] },
   lunch: { label: 'Adult Lunches', library: 'Adult Lunch', libraryOnly: true, days: [] },
   dinner: { label: 'Dinners', library: 'Dinner', days: [] },
   sides: { label: 'Side Dishes', library: 'Side Dishes', libraryOnly: true, days: [] },

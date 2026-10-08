@@ -3,12 +3,12 @@ import { createClient } from "npm:@supabase/supabase-js@2.105.4";
 import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queueInsertionBeforeTail, queueMealPayload, recipeKey } from "./intake-core.js";
 
 const plannerTables = {
-  dinner: { categories: "meal_day_categories", meals: "weekly_meals", queue: "meal_recipe_queue", library: "meal_recipe_library", tags: "meal_recipe_tags" },
-  breakfast: { categories: "breakfast_day_categories", meals: "breakfast_weekly_meals", queue: "breakfast_recipe_queue", library: "breakfast_recipe_library", tags: "breakfast_recipe_tags" },
-  lunch: { categories: "lunch_day_categories", meals: "lunch_weekly_meals", queue: "lunch_recipe_queue", library: "lunch_recipe_library", tags: "lunch_recipe_tags" },
-  kids_lunch: { categories: "kids_lunch_day_categories", meals: "kids_lunch_weekly_meals", queue: "kids_lunch_recipe_queue", library: "kids_lunch_recipe_library", tags: "kids_lunch_recipe_tags" },
-  sides: { categories: "", meals: "", queue: "", library: "side_dish_recipe_library", tags: "side_dish_recipe_tags", selection: true },
-  treats: { categories: "", meals: "", queue: "", library: "treat_recipe_library", tags: "treat_recipe_tags", selection: true },
+  dinner: { categories: "meal_day_categories", pauses: "meal_day_pauses", meals: "weekly_meals", queue: "meal_recipe_queue", library: "meal_recipe_library", tags: "meal_recipe_tags" },
+  breakfast: { categories: "breakfast_day_categories", pauses: "breakfast_day_pauses", meals: "breakfast_weekly_meals", queue: "breakfast_recipe_queue", library: "breakfast_recipe_library", tags: "breakfast_recipe_tags" },
+  lunch: { categories: "lunch_day_categories", pauses: "", meals: "lunch_weekly_meals", queue: "lunch_recipe_queue", library: "lunch_recipe_library", tags: "lunch_recipe_tags" },
+  kids_lunch: { categories: "kids_lunch_day_categories", pauses: "kids_lunch_day_pauses", meals: "kids_lunch_weekly_meals", queue: "kids_lunch_recipe_queue", library: "kids_lunch_recipe_library", tags: "kids_lunch_recipe_tags" },
+  sides: { categories: "", pauses: "", meals: "", queue: "", library: "side_dish_recipe_library", tags: "side_dish_recipe_tags", selection: true },
+  treats: { categories: "", pauses: "", meals: "", queue: "", library: "treat_recipe_library", tags: "treat_recipe_tags", selection: true },
 } as const;
 
 const corsHeaders = {
@@ -23,6 +23,21 @@ function json(data: unknown, status = 200) {
 
 function message(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function scheduledDateFor(mealType: string, weekOf: string, dayNumber: number) {
+  if (mealType !== "breakfast" && mealType !== "kids_lunch") return null;
+  const match = /^(\d{4})-W(\d{2})$/.exec(weekOf);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const week = Number(match[2]);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() || 7) - 1) + (week - 1) * 7);
+  const breakfastWeekdays = [1, 1, 2, 2, 3, 3, 4, 4, 5, 6, 7];
+  const weekday = mealType === "breakfast" ? breakfastWeekdays[dayNumber - 1] : dayNumber;
+  monday.setUTCDate(monday.getUTCDate() + weekday - 1);
+  return monday.toISOString().slice(0, 10);
 }
 
 Deno.serve(async (req: Request) => {
@@ -41,7 +56,7 @@ Deno.serve(async (req: Request) => {
     const dryRun = body?.dryRun === true;
     if (!destination) return json({ error: "Choose Import & queue or Import only." }, 400);
     if (!mealType) return json({ error: "Choose a Mental Load recipe library." }, 400);
-    const validPeriod = mealType === "breakfast" ? weekOf === "breakfast-capsule" : mealType === "lunch" ? weekOf === "lunch-capsule" : mealType === "kids_lunch" ? weekOf === "kids-lunch-capsule" : /^\d{4}-W\d{2}$/.test(weekOf);
+    const validPeriod = /^\d{4}-W\d{2}$/.test(weekOf);
     if (destination === "queue" && !validPeriod) return json({ error: "The current planning period is missing." }, 400);
     const tables = plannerTables[mealType];
 
@@ -52,13 +67,14 @@ Deno.serve(async (req: Request) => {
     const apikey = req.headers.get("apikey") || anonKey;
     const client = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authorization } } });
 
-    const [categoriesResult, mealsResult, queueResult, existingLibraryResult] = await Promise.all([
+    const [categoriesResult, pausesResult, mealsResult, queueResult, existingLibraryResult] = await Promise.all([
       selectionOnly ? Promise.resolve({ data: [], error: null }) : client.from(tables.categories).select("*").order("day_number"),
+      selectionOnly ? Promise.resolve({ data: [], error: null }) : client.from(tables.pauses).select("*").eq("week_of", weekOf),
       destination === "queue" ? client.from(tables.meals).select("*").eq("week_of", weekOf).order("meal_number") : Promise.resolve({ data: [], error: null }),
       destination === "queue" ? client.from(tables.queue).select("*").order("day_number").order("position").order("created_at") : Promise.resolve({ data: [], error: null }),
       client.from(tables.library).select("*").eq("source_ref", sourceUrl).maybeSingle(),
     ]);
-    const loadError = [categoriesResult, mealsResult, queueResult, existingLibraryResult].find(result => result.error)?.error;
+    const loadError = [categoriesResult, pausesResult, mealsResult, queueResult, existingLibraryResult].find(result => result.error)?.error;
     if (loadError) throw loadError;
     const categories = categoriesResult.data || [];
     const expectedCategoryCount = selectionOnly ? 0 : mealType === "breakfast" ? 11 : mealType === "kids_lunch" ? 7 : 7;
@@ -151,9 +167,9 @@ Deno.serve(async (req: Request) => {
     const slot = (mealsResult.data || []).find(meal => Number(meal.meal_number) === dayNumber);
     const blank = !slot || (!String(slot.title || "").trim() && !String(slot.source_ref || "").trim());
     const isFront = !queueRows.some(row => Number(row.day_number) === dayNumber && Number(row.position) < Number(queued.position));
-    const paused = categories.find(category => Number(category.day_number) === dayNumber)?.is_paused === true;
+    const paused = (pausesResult.data || []).some(row => Number(row.day_number) === dayNumber && row.is_paused === true);
     if (blank && isFront && !paused) {
-      const scheduled = await client.from(tables.meals).upsert(queueMealPayload(queued, weekOf, dayNumber), { onConflict: "week_of,meal_number" });
+      const scheduled = await client.from(tables.meals).upsert(queueMealPayload(queued, weekOf, dayNumber, scheduledDateFor(mealType, weekOf, dayNumber)), { onConflict: "week_of,meal_number" });
       if (scheduled.error) throw scheduled.error;
     }
     return json({ ok: true, destination, recipe, dayNumber, updatedExisting: !!existingLibrary, alreadyQueued: false });
