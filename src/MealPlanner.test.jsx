@@ -221,6 +221,41 @@ test('Kids Lunches chooses mains from its library and keeps editable side dropdo
   ]));
 });
 
+test('Kids Lunch library recipes can be marked and unmarked as PREP', async () => {
+  const recipe = {...sample(86), recipe_key:recipeKey(sample(86)), has_been_cooked:false, requires_prep:false, is_deleted:false};
+  kidsLunchLibrary = [recipe];
+  await render('kids_lunch');
+  const card = [...container.querySelectorAll('#recipe-library .recipeCard')].find(node => node.textContent.includes('Recipe 86'));
+  await click(button('Mark PREP', card));
+  expect(writes).toContainEqual({table:'kids_lunch_recipe_library', update:{field:'recipe_key', value:recipe.recipe_key, payload:{requires_prep:true}}});
+  expect(card.textContent).toContain('✓ PREP');
+  await click(button('✓ PREP', card));
+  expect(writes).toContainEqual({table:'kids_lunch_recipe_library', update:{field:'recipe_key', value:recipe.recipe_key, payload:{requires_prep:false}}});
+  expect(card.textContent).toContain('Mark PREP');
+});
+
+test('Meal Planner overview lists only PREP recipes scheduled in the displayed week', async () => {
+  const weekStart = new Date();
+  if (weekStart.getDay() === 0) weekStart.setDate(weekStart.getDate() + 1);
+  else weekStart.setDate(weekStart.getDate() - (weekStart.getDay() - 1));
+  const scheduledFor = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+  const prepMeal = {...sample(87), week_of:'kids-lunch-capsule', scheduled_for:scheduledFor};
+  const ordinaryMeal = {...sample(88), week_of:'kids-lunch-capsule', scheduled_for:scheduledFor};
+  kidsLunchCurrent = [prepMeal, ordinaryMeal];
+  kidsLunchPast = [prepMeal, ordinaryMeal];
+  kidsLunchLibrary = [
+    {...prepMeal, recipe_key:recipeKey(prepMeal), requires_prep:true, is_deleted:false},
+    {...ordinaryMeal, recipe_key:recipeKey(ordinaryMeal), requires_prep:false, is_deleted:false},
+  ];
+  await act(async () => { root.render(<MealPlanner/>); });
+  const prepSection = container.querySelector('.weeklyPrep');
+  expect(prepSection.textContent).toContain('PREP this week');
+  expect(prepSection.textContent).toContain('Recipe 87');
+  expect(prepSection.textContent).not.toContain('Recipe 88');
+  await click(prepSection.querySelector('[aria-label="View PREP recipe: Recipe 87"]'));
+  expect(document.body.querySelector('[aria-label="Recipe details for Recipe 87"]')).not.toBeNull();
+});
+
 test('Kids Lunch main dropdown only offers library recipes matching that day rule', async () => {
   kidsLunchCategories[0] = {...kidsLunchCategories[0], name:'Pasta Monday', accepted_tags:['pasta']};
   const pasta = {...sample(81), title:'Lunchbox Pasta', recipe_key:recipeKey(sample(81)), has_been_cooked:false, is_deleted:false};
