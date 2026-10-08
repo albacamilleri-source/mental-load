@@ -37,6 +37,6 @@ test('recipe URLs are normalized to prevent tracking duplicates', () => {
 });
 
 test('queued recipes carry their cooking method and servings into the scheduled day', () => {
-  const payload = queueMealPayload({id:'q1', title:'Soup', source_ref:'Book', ingredients:[], method:'1. Simmer.', servings:4, notes:''}, '2026-W37', 6);
-  expect(payload).toMatchObject({meal_number:6, method:'1. Simmer.', servings:4, queue_item_id:'q1'});
+  const payload = queueMealPayload({id:'q1', title:'Soup', source_ref:'Book', ingredients:[], method:'1. Simmer.', servings:4, notes:''}, '2026-W37', 6, '2026-09-12');
+  expect(payload).toMatchObject({meal_number:6, method:'1. Simmer.', servings:4, queue_item_id:'q1', scheduled_for:'2026-09-12'});
 });

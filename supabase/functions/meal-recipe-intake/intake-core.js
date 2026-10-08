@@ -58,7 +58,7 @@ export function queueInsertionBeforeTail(items, day) {
   return { position: Number(tail.position), tail };
 }
 
-export function queueMealPayload(item, weekOf, day) {
+export function queueMealPayload(item, weekOf, day, scheduledFor = null) {
   return {
     week_of: weekOf,
     meal_number: day,
@@ -73,5 +73,6 @@ export function queueMealPayload(item, weekOf, day) {
     queue_item_id: item.id,
     is_override: false,
     override_type: null,
+    ...(scheduledFor ? { scheduled_for: scheduledFor } : {}),
   };
 }

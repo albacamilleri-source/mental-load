@@ -417,7 +417,7 @@ const SIDE_SLOT_TYPES = {
 
 function validDaySides(row, options) {
   const optionTypes = new Map(options.map(option => [String(option.id), option.side_type || 'optional']));
-  const next = { day_number: Number(row.day_number) };
+  const next = { ...(row.week_of ? { week_of: row.week_of } : {}), day_number: Number(row.day_number) };
   Object.entries(SIDE_SLOT_TYPES).forEach(([field, expectedType]) => {
     const optionId = row[field];
     next[field] = optionId && optionTypes.get(String(optionId)) === expectedType ? optionId : null;
@@ -675,11 +675,12 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (error) throw error;
     return { queued, nextQueue: [...baseQueue, queued] };
   }
-  const [week, setWeek] = useState(config.periodKey || isoWeek(new Date()));
+  const [week, setWeek] = useState(() => isoWeek(new Date()));
   const [calendarWeek, setCalendarWeek] = useState(() => isoWeek(new Date()));
+  const activeWeek = config.weekNavigation ? calendarWeek : week;
   const calendarDayFor = day => config.calendarDays?.[day - 1] || config.dayNames?.[day - 1] || '';
-  const defaultScheduledFor = day => config.capsule ? nextDateForWeekday(calendarDayFor(day)) : null;
-  const queuedMealPayload = (item, day, scheduledFor = null) => queueMealPayload(item, week, day, config.capsule ? scheduledFor || defaultScheduledFor(day) : null);
+  const defaultScheduledFor = day => config.capsule ? dateForWeekdayName(activeWeek, calendarDayFor(day)) : null;
+  const queuedMealPayload = (item, day, scheduledFor = null) => queueMealPayload(item, activeWeek, day, config.capsule ? scheduledFor || defaultScheduledFor(day) : null);
   const [meals, setMeals] = useState([]);
   const [loadingWeek, setLoadingWeek] = useState(true);
   const [reload, setReload] = useState(0);
@@ -724,20 +725,23 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     async function load() {
       try {
         const requests = [
-          from('weekly_meals').select('*').eq('week_of', week).order('meal_number'),
+          from('weekly_meals').select('*').eq('week_of', activeWeek).order('meal_number'),
           from('weekly_meals').select('*').order('week_of', { ascending: false }).order('meal_number'),
           from('meal_recipe_tags').select('*'),
           from('meal_day_categories').select('*').order('day_number'),
+          from('day_pauses').select('*').eq('week_of', activeWeek).order('day_number'),
           from('meal_recipe_library').select('*').order('cooked_at', { ascending: false }),
           from('meal_recipe_queue').select('*').order('day_number').order('position').order('created_at'),
         ];
-        if (config.hasSides) requests.push(from('side_options').select('*').order('sort_order'), from('day_sides').select('*').order('day_number'));
+        if (config.hasSides) requests.push(from('side_options').select('*').order('sort_order'), from('day_sides').select('*').eq('week_of', activeWeek).order('day_number'));
         const responses = await Promise.all(requests);
         if (cancelled) return;
         const failed = responses.find(r => r.error);
         if (failed) throw failed.error;
-        const [loadedCurrent, past, tagRows, dayRows, libraryRows, loadedQueueRows, loadedSideOptions = [], loadedDaySides = []] = responses.map(r => r.data || []);
+        const [loadedCurrent, past, tagRows, dayRows, pauseRows, libraryRows, loadedQueueRows, loadedSideOptions = [], loadedDaySides = []] = responses.map(r => r.data || []);
         if (dayRows.length !== config.slotCount) throw new Error('Day categories could not be loaded. Please retry.');
+        const pausedDays = new Set(pauseRows.filter(row => row.is_paused).map(row => Number(row.day_number)));
+        const resolvedDayRows = dayRows.map(row => ({ ...row, is_paused: pausedDays.has(Number(row.day_number)) }));
         const deletedRecipes = libraryRows.filter(recipe => recipe.is_deleted);
         const deletedQueueRows = loadedQueueRows.filter(row => deletedRecipes.some(recipe => sameRecipe(recipe, row)));
         const deletedCurrentRows = loadedCurrent.filter(row => !row.completed_at && deletedRecipes.some(recipe => sameRecipe(recipe, row)));
@@ -754,15 +758,15 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         const queuedRows = loadedQueueRows.filter(row => !deletedQueueIds.has(row.id));
         const current = loadedCurrent.filter(row => !deletedCurrentIds.has(row.id));
         const tags = Object.fromEntries(tagRows.map(r => [r.recipe_key, parseTags(r.tags)]));
-        const next = Array.from({ length: config.slotCount }, (_, i) => ({ ...emptyMeal(i + 1), week_of: week, scheduled_for: defaultScheduledFor(i + 1), tagsText: '', dirty: false }));
+        const next = Array.from({ length: config.slotCount }, (_, i) => ({ ...emptyMeal(i + 1), week_of: activeWeek, scheduled_for: defaultScheduledFor(i + 1), tagsText: '', dirty: false }));
         current.forEach(row => {
           if (row.meal_number >= 1 && row.meal_number <= config.slotCount) next[row.meal_number - 1] = { ...row, tagsText: (tags[recipeKey(row)] || []).join(', '), dirty: false };
         });
-        if (config.capsule || week === isoWeek(new Date())) {
+        if (activeWeek >= isoWeek(new Date())) {
           for (let day = 1; day <= config.slotCount; day += 1) {
             const slot = next[day - 1];
             const front = queueForDay(queuedRows, day)[0];
-            if (dayRows.find(category => Number(category.day_number) === day)?.is_paused) continue;
+            if (resolvedDayRows.find(category => Number(category.day_number) === day)?.is_paused) continue;
             if ((!slot.title.trim() && !slot.source_ref.trim()) && front) {
               const { data: saved, error } = await from('weekly_meals').upsert(queuedMealPayload(front, day, slot.scheduled_for), { onConflict: 'week_of,meal_number' }).select().single();
               if (error) throw error;
@@ -770,7 +774,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
             }
           }
         }
-        setMeals(next); setPastRows(past); setLibraryRecords(libraryRows); setQueueRows(queuedRows); setRecipeTags(tags); setCategories(dayRows);
+        setMeals(next); setPastRows(past); setLibraryRecords(libraryRows); setQueueRows(queuedRows); setRecipeTags(tags); setCategories(resolvedDayRows);
         if (config.hasSides) {
           setSideOptions(loadedSideOptions);
           setDaySides(Object.fromEntries(loadedDaySides.map(row => [row.day_number, row])));
@@ -780,7 +784,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     }
     load();
     return () => { cancelled = true; };
-  }, [week, reload]);
+  }, [activeWeek, reload]);
 
   useEffect(() => {
     if (!toast) return;
@@ -796,6 +800,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   const categoryFor = day => categories.find(c => c.day_number === day);
   function changeWeek(delta) {
     if (dirty && !window.confirm('Discard unsaved meal changes and switch weeks?')) return;
+    setLoadingWeek(true);
     if (config.weekNavigation) setCalendarWeek(current => shiftWeek(current, delta));
     else setWeek(shiftWeek(week, delta));
   }
@@ -826,7 +831,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (tagError) throw tagError;
     applyTags(key, tags, meal.meal_number - 1);
     const payload = {
-      week_of: week, meal_number: meal.meal_number, title: meal.title.trim(), source_ref: meal.source_ref.trim(),
+      week_of: activeWeek, meal_number: meal.meal_number, title: meal.title.trim(), source_ref: meal.source_ref.trim(),
       ingredients: meal.ingredients, method: meal.method || '', servings: meal.servings ?? null, extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '',
       queue_item_id: meal.queue_item_id || null, is_override: !!meal.is_override, override_type: meal.override_type || null,
       ...(config.capsule ? { scheduled_for: meal.scheduled_for } : {}),
@@ -868,10 +873,10 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         const { error } = await from('side_options').delete().eq('id', option.id);
         if (error) throw error;
       }
-      const sanitizedRows = Object.values(daySides).map(row => validDaySides(row, next));
+      const sanitizedRows = Object.values(daySides).map(row => validDaySides({ ...row, week_of: activeWeek }, next));
       const rowsToClear = sanitizedRows.filter(row => daySidesChanged(daySides[row.day_number], row));
       if (rowsToClear.length) {
-        const { error } = await from('day_sides').upsert(rowsToClear, { onConflict: 'day_number' });
+        const { error } = await from('day_sides').upsert(rowsToClear, { onConflict: 'week_of,day_number' });
         if (error) throw error;
       }
       setSideOptions(next);
@@ -883,11 +888,11 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   }
   async function saveDaySide(day, field, optionId) {
     if (busy) return;
-    const current = daySides[day] || { day_number: day, side_one_id: null, side_two_id: null, side_three_id: null };
-    const next = validDaySides({ ...current, [field]: optionId || null }, sideOptions);
+    const current = daySides[day] || { week_of: activeWeek, day_number: day, side_one_id: null, side_two_id: null, side_three_id: null };
+    const next = validDaySides({ ...current, week_of: activeWeek, [field]: optionId || null }, sideOptions);
     setBusy(true);
     try {
-      const { data, error } = await from('day_sides').upsert(next, { onConflict: 'day_number' }).select().single();
+      const { data, error } = await from('day_sides').upsert(next, { onConflict: 'week_of,day_number' }).select().single();
       if (error) throw error;
       setDaySides(previous => ({ ...previous, [day]: data || next }));
       setMealErrors(previous => ({ ...previous, [day - 1]: '' }));
@@ -994,7 +999,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       } else if (current.id && current.queue_item_id) {
         const { error } = await from('weekly_meals').delete().eq('id', current.id);
         if (error) throw error;
-        nextMeals[day - 1] = { ...emptyMeal(day), week_of: week, scheduled_for: current.scheduled_for || defaultScheduledFor(day), tagsText: '', dirty: false };
+        nextMeals[day - 1] = { ...emptyMeal(day), week_of: activeWeek, scheduled_for: current.scheduled_for || defaultScheduledFor(day), tagsText: '', dirty: false };
       }
     }
     setQueueRows(nextQueue); setMeals(nextMeals); setGroceryGenerated(false);
@@ -1003,7 +1008,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (busy) return 'Please wait for the current save.';
     setBusy(true);
     try {
-      const { data, error: importError } = await sb.functions.invoke('meal-recipe-intake', { body: { url, destination, weekOf: week, mealType } });
+      const { data, error: importError } = await sb.functions.invoke('meal-recipe-intake', { body: { url, destination, weekOf: activeWeek, mealType } });
       if (importError) throw new Error(await extractionErrorMessage(importError));
       if (!data?.ok || !data?.recipe?.title) throw new Error(data?.error || 'The importer returned an incomplete response.');
       const title = data.recipe.title;
@@ -1251,7 +1256,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         nextQueue = queueRows.filter(row => row.id !== meal.queue_item_id);
       }
       const front = queueForDay(nextQueue, meal.meal_number)[0];
-      let nextMeal = { ...emptyMeal(meal.meal_number), week_of: week, scheduled_for: meal.scheduled_for || defaultScheduledFor(meal.meal_number), tagsText: '', dirty: false };
+      let nextMeal = { ...emptyMeal(meal.meal_number), week_of: activeWeek, scheduled_for: meal.scheduled_for || defaultScheduledFor(meal.meal_number), tagsText: '', dirty: false };
       if (front) {
         const { data: saved, error } = await from('weekly_meals').upsert(queuedMealPayload(front, meal.meal_number, meal.scheduled_for), { onConflict: 'week_of,meal_number' }).select().single();
         if (error) throw error;
@@ -1270,9 +1275,9 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     const day = meal.meal_number;
     setBusy(true); setMealErrors(previous => ({ ...previous, [index]: '' }));
     try {
-      const { error: categoryError } = await from('meal_day_categories').update({ is_paused: paused }).eq('day_number', day);
-      if (categoryError) throw categoryError;
-      let nextMeal = { ...emptyMeal(day), week_of: week, scheduled_for: meal.scheduled_for || defaultScheduledFor(day), tagsText: '', dirty: false };
+      const { error: pauseError } = await from('day_pauses').upsert({ week_of: activeWeek, day_number: day, is_paused: paused }, { onConflict: 'week_of,day_number' });
+      if (pauseError) throw pauseError;
+      let nextMeal = { ...emptyMeal(day), week_of: activeWeek, scheduled_for: meal.scheduled_for || defaultScheduledFor(day), tagsText: '', dirty: false };
       if (paused) {
         if (meal.id) {
           const { error } = await from('weekly_meals').delete().eq('id', meal.id);
@@ -1347,14 +1352,14 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         }
       }
       const front = queueForDay(nextQueue, meal.meal_number)[0];
-      const replacementWeek = config.advanceWeekOnCook && markAsTried ? shiftWeek(week, 1) : week;
+      const replacementWeek = config.advanceWeekOnCook && markAsTried ? shiftWeek(activeWeek, 1) : activeWeek;
       const replacementDate = config.capsule
         ? (markAsTried ? addDays(meal.scheduled_for || defaultScheduledFor(meal.meal_number), 7) : meal.scheduled_for || defaultScheduledFor(meal.meal_number))
         : null;
       let nextMeal = { ...emptyMeal(meal.meal_number), week_of: replacementWeek, scheduled_for: replacementDate, tagsText: '', dirty: false };
       if (front) {
         const replacementPayload = config.advanceWeekOnCook
-          ? { ...queueMealPayload(front, replacementWeek, meal.meal_number), completed_at: null }
+          ? { ...queueMealPayload(front, replacementWeek, meal.meal_number, config.capsule ? replacementDate : null), completed_at: null }
           : queuedMealPayload(front, meal.meal_number, replacementDate);
         const { data: saved, error } = await from('weekly_meals').upsert(replacementPayload, { onConflict: 'week_of,meal_number' }).select().single();
         if (error) throw error;
@@ -1422,7 +1427,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       for (const scheduled of scheduledCopies) {
         const day = scheduled.meal_number;
         const scheduledFor = scheduled.scheduled_for || defaultScheduledFor(day);
-        let nextMeal = { ...emptyMeal(day), week_of: week, scheduled_for: scheduledFor, tagsText: '', dirty: false };
+        let nextMeal = { ...emptyMeal(day), week_of: activeWeek, scheduled_for: scheduledFor, tagsText: '', dirty: false };
         const front = categoryFor(day)?.is_paused ? null : queueForDay(nextQueue, day)[0];
         if (front) {
           const { data: saved, error } = await from('weekly_meals').upsert(queuedMealPayload(front, day, scheduledFor), { onConflict: 'week_of,meal_number' }).select().single();
@@ -1533,7 +1538,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     const match = meal.is_override || matchesCategory(tags, category);
     const draggedTags = recipeTags[draggedRecipeKey] || EMPTY_TAGS;
     const canDrop = !completed && !paused && !!draggedRecipeKey && canDropRecipe(meal, draggedTags, category);
-    const scheduledDate = config.weekNavigation ? dateForWeekdayName(calendarWeek, calendarDayFor(meal.meal_number)) : config.capsule ? meal.scheduled_for : dateForWeekDay(week, meal.meal_number);
+    const scheduledDate = config.capsule ? meal.scheduled_for || dateForWeekdayName(activeWeek, calendarDayFor(meal.meal_number)) : dateForWeekDay(activeWeek, meal.meal_number);
     const usesLibraryPicker = config.libraryPicker || config.hasSides;
     const selectedLibraryRecipe = usesLibraryPicker ? libraryRecipes.find(recipe => sameRecipe(recipe, meal)) : null;
     const matchingLibraryRecipes = usesLibraryPicker ? libraryRecipes.filter(recipe => matchesCategory(recipeTags[recipeKey(recipe)] || [], category)) : EMPTY_TAGS;
@@ -1590,7 +1595,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         return renderMealCard(meals[entry.slot - 1], entry.slot - 1, day.name);
       }
       return <details className="breakfastDayGroup" key={day.name}>
-        <summary className="mealSummary"><h3 className="dayHeading">{day.name}</h3><div className="mealDate">{formatMealDate(config.weekNavigation ? dateForWeekdayName(calendarWeek, day.name) : meals[day.entries.find(entry => !entry.fixed)?.slot - 1]?.scheduled_for)}</div><div className="breakfastDayPreview">{day.entries.map(entry => {
+        <summary className="mealSummary"><h3 className="dayHeading">{day.name}</h3><div className="mealDate">{formatMealDate(config.weekNavigation ? dateForWeekdayName(activeWeek, day.name) : meals[day.entries.find(entry => !entry.fixed)?.slot - 1]?.scheduled_for)}</div><div className="breakfastDayPreview">{day.entries.map(entry => {
           const title = entry.fixed ? entry.category : meals[entry.slot - 1].title.trim() || 'Empty';
           return <span key={entry.label}>{entry.label} · {title}</span>;
         })}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
@@ -1614,7 +1619,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     {loadError && <div className="plannerNotice" role="alert">{loadError} <button className="btn secondary" onClick={() => setReload(n => n + 1)}>Retry</button></div>}
     <section className="card"><RecipeImporter categories={categories} onImport={importRecipe} onManual={() => setManualOpen(true)} busy={busy} dayNames={config.dayNames} autoQueue={config.autoQueue}/></section>
     <section className="card">
-      <div className="sectionHead"><h2 className="sectionTitle">{config.weekNavigation ? `This week's ${config.title.toLowerCase()}` : config.capsule ? `Your ${config.singular} rotation` : "This week's meals"}</h2>{(!config.capsule || config.weekNavigation) && <div className="weekNav"><button className="iconBtn" aria-label="Previous week" disabled={busy || loadingWeek} onClick={() => changeWeek(-1)}>‹</button><div className="weekLabel">{formatWeekLabel(config.weekNavigation ? calendarWeek : week)}</div><button className="iconBtn" aria-label="Next week" disabled={busy || loadingWeek} onClick={() => changeWeek(1)}>›</button></div>}</div>
+      <div className="sectionHead"><h2 className="sectionTitle">{config.weekNavigation ? `This week's ${config.title.toLowerCase()}` : config.capsule ? `Your ${config.singular} rotation` : "This week's meals"}</h2>{(!config.capsule || config.weekNavigation) && <div className="weekNav"><button className="iconBtn" aria-label="Previous week" disabled={busy || loadingWeek} onClick={() => changeWeek(-1)}>‹</button><div className="weekLabel">{formatWeekLabel(activeWeek)}</div><button className="iconBtn" aria-label="Next week" disabled={busy || loadingWeek} onClick={() => changeWeek(1)}>›</button></div>}</div>
       {loadingWeek ? <div className="empty">{config.capsule ? `Loading ${config.title.toLowerCase()}…` : 'Loading week…'}</div> : !loadError && (config.capsule ? renderCapsuleDays() : meals.map((meal, index) => renderMealCard(meal, index)))}
       <button className="btn generate" onClick={generate} disabled={!ready}>Generate grocery list</button>
       {!ready && <div className="hint">Save at least one {config.singular} with ingredients to generate your list.</div>}
@@ -1806,8 +1811,8 @@ function TodayAtGlance() {
     let cancelled = false;
     const breakfastSlots = BREAKFAST_SLOTS.filter(slot => slot.day_name === day).map(slot => slot.day_number);
     Promise.all([
-      sb.from('breakfast_weekly_meals').select('*').eq('week_of', 'breakfast-capsule').eq('scheduled_for', selectedDate).order('meal_number'),
-      sb.from('kids_lunch_weekly_meals').select('*').eq('week_of', 'kids-lunch-capsule').eq('scheduled_for', selectedDate).order('meal_number'),
+      sb.from('breakfast_weekly_meals').select('*').eq('week_of', isoWeek(date)).eq('scheduled_for', selectedDate).order('meal_number'),
+      sb.from('kids_lunch_weekly_meals').select('*').eq('week_of', isoWeek(date)).eq('scheduled_for', selectedDate).order('meal_number'),
       sb.from('weekly_meals').select('*').eq('week_of', isoWeek(date)).eq('meal_number', dayIndex).order('meal_number'),
     ]).then(results => {
       if (cancelled) return;
@@ -1834,9 +1839,9 @@ function WeeklyMealPrep() {
     let cancelled = false;
     setLoading(true); setError('');
     Promise.all([
-      sb.from('breakfast_weekly_meals').select('*').eq('week_of', 'breakfast-capsule').gte('scheduled_for', start).lte('scheduled_for', end).order('scheduled_for').order('meal_number'),
+      sb.from('breakfast_weekly_meals').select('*').eq('week_of', week).gte('scheduled_for', start).lte('scheduled_for', end).order('scheduled_for').order('meal_number'),
       sb.from('breakfast_recipe_library').select('*'),
-      sb.from('kids_lunch_weekly_meals').select('*').eq('week_of', 'kids-lunch-capsule').gte('scheduled_for', start).lte('scheduled_for', end).order('scheduled_for').order('meal_number'),
+      sb.from('kids_lunch_weekly_meals').select('*').eq('week_of', week).gte('scheduled_for', start).lte('scheduled_for', end).order('scheduled_for').order('meal_number'),
       sb.from('kids_lunch_recipe_library').select('*'),
     ]).then(([breakfastMealsResult, breakfastLibraryResult, lunchMealsResult, lunchLibraryResult]) => {
       if (cancelled) return;
@@ -1910,9 +1915,9 @@ export function SmartGroceryList() {
       ] = await Promise.all([
         read(sb.from('weekly_meals').select('*').order('week_of').order('meal_number'), 'dinners'),
         read(sb.from('meal_recipe_library').select('*'), 'the Dinner library'),
-        read(sb.from('breakfast_weekly_meals').select('*').eq('week_of', 'breakfast-capsule').gte('scheduled_for', start).lte('scheduled_for', end).order('meal_number'), 'breakfasts'),
+        read(sb.from('breakfast_weekly_meals').select('*').gte('scheduled_for', start).lte('scheduled_for', end).order('meal_number'), 'breakfasts'),
         read(sb.from('breakfast_recipe_library').select('*'), 'the Breakfast library'),
-        read(sb.from('kids_lunch_weekly_meals').select('*').eq('week_of', 'kids-lunch-capsule').gte('scheduled_for', start).lte('scheduled_for', end).order('meal_number'), 'Kids Lunches'),
+        read(sb.from('kids_lunch_weekly_meals').select('*').gte('scheduled_for', start).lte('scheduled_for', end).order('meal_number'), 'Kids Lunches'),
         read(sb.from('kids_lunch_recipe_library').select('*'), 'the Kids Lunch library'),
         read(sb.from('kids_lunch_day_sides').select('*'), 'Kids Lunch sides'),
         read(sb.from('kids_lunch_side_options').select('*'), 'Kids Lunch side choices'),
