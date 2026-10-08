@@ -3481,20 +3481,48 @@ const TYPE_COLORS = {
   "Stroller walk": "var(--josh)",
 };
 
-function ThingsToDoScreen() {
+export function ThingsToDoScreen() {
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [setting, setSetting] = useState("All");
   const [type, setType] = useState("All");
+  const [adding, setAdding] = useState(false);
+  const [placeName, setPlaceName] = useState("");
+  const [placeType, setPlaceType] = useState("Activity");
+  const [placeSetting, setPlaceSetting] = useState("Outdoor");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    sb.from("places").select("*").order("name").then(({ data }) => {
+    sb.from("places").select("*").order("name").then(({ data, error: loadError }) => {
       setPlaces(data || []);
+      setError(loadError ? "Could not load the places list. Please retry." : "");
       setLoading(false);
     });
   }, []);
 
+  const closePlaceForm = () => {
+    setAdding(false); setPlaceName(""); setPlaceType("Activity"); setPlaceSetting("Outdoor"); setError("");
+  };
+
+  const addPlace = async event => {
+    event.preventDefault();
+    const name = placeName.trim();
+    if (!name || saving) return;
+    setSaving(true); setError("");
+    const newPlace = { name, type: placeType.trim() || null, setting: placeSetting };
+    const { data, error: saveError } = await sb.from("places").insert(newPlace).select("*").single();
+    if (saveError) {
+      setError(saveError.message || "Could not save this place. Please retry.");
+      setSaving(false);
+      return;
+    }
+    setPlaces(current => [...current, data || { ...newPlace, id: `place-${Date.now()}` }].sort((left, right) => left.name.localeCompare(right.name)));
+    setSaving(false); closePlaceForm();
+  };
+
   const types = ["All", ...Array.from(new Set(places.map(p => p.type).filter(Boolean))).sort()];
+  const placeTypes = Array.from(new Set([...PLACE_TYPES.slice(1), ...types.slice(1)])).sort();
 
   const filtered = places.filter(p => {
     const settingMatch = setting === "All" || p.setting === setting || p.setting === "Both";
@@ -3504,10 +3532,25 @@ function ThingsToDoScreen() {
 
   return (
     <div className="fade" style={{ padding: "0 0 100px" }}>
-      <div style={{ padding: "72px 20px 18px" }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Things To Do<span style={{ color: "var(--sage)" }}>.</span></div>
-        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>{filtered.length} places</div>
+      <div style={{ padding: "72px 20px 18px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Things To Do<span style={{ color: "var(--sage)" }}>.</span></div>
+          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>{filtered.length} places</div>
+        </div>
+        <button type="button" aria-label="Add a place to Things To Do" onClick={() => { setAdding(true); setError(""); }} disabled={adding} style={{ border: "1px solid transparent", borderRadius: 10, padding: "10px 14px", background: adding ? "var(--surface2)" : "var(--sage)", color: adding ? "var(--muted)" : "white", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>+ Add place</button>
       </div>
+
+      {adding && <form aria-label="New place" onSubmit={addPlace} style={{ margin: "0 20px 16px", padding: 16, borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", display: "grid", gap: 10 }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 21, color: "var(--text)" }}>New place</div>
+        <label style={{ color: "var(--muted)", fontSize: 11 }}>Place name<input autoFocus required aria-label="Place name" value={placeName} onChange={event => setPlaceName(event.target.value)} placeholder="e.g. Playmobil FunPark" style={{ width: "100%", padding: "12px 13px", marginTop: 4, borderRadius: 10, border: "1px solid var(--border)", background: "var(--paper)", color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}/></label>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 10 }}>
+          <label style={{ color: "var(--muted)", fontSize: 11 }}>Type<select aria-label="Place type" value={placeType} onChange={event => setPlaceType(event.target.value)} style={{ width: "100%", padding: "12px 13px", marginTop: 4, borderRadius: 10, border: "1px solid var(--border)", background: "var(--paper)", color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}>{placeTypes.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
+          <label style={{ color: "var(--muted)", fontSize: 11 }}>Setting<select aria-label="Place setting" value={placeSetting} onChange={event => setPlaceSetting(event.target.value)} style={{ width: "100%", padding: "12px 13px", marginTop: 4, borderRadius: 10, border: "1px solid var(--border)", background: "var(--paper)", color: "var(--text)", fontSize: 14, boxSizing: "border-box" }}>{["Indoor", "Outdoor", "Both"].map(option => <option key={option} value={option}>{option}</option>)}</select></label>
+        </div>
+        {error && <div role="alert" style={{ color: "var(--danger)", fontSize: 12 }}>{error}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}><button type="button" disabled={saving} onClick={closePlaceForm} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontWeight: 600 }}>Cancel</button><button type="submit" disabled={saving || !placeName.trim()} style={{ border: "1px solid transparent", borderRadius: 10, padding: "10px 14px", background: "var(--sage)", color: "white", fontSize: 13, fontWeight: 600, opacity: saving || !placeName.trim() ? .5 : 1 }}>{saving ? "Saving…" : "Save place"}</button></div>
+      </form>}
+      {!adding && error && <div role="alert" style={{ margin: "0 20px 14px", color: "var(--danger)", fontSize: 12 }}>{error}</div>}
 
       {/* Indoor/Outdoor toggle */}
       <div style={{ padding: "0 20px 12px", display: "flex", gap: 6 }}>
@@ -3622,69 +3665,20 @@ const KIDS_TIME_OPTIONS = [
 export function KidsTimeScreen() {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState(false);
-  const [label, setLabel] = useState("");
-  const [icon, setIcon] = useState("⭐");
-  const [description, setDescription] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
 
   useEffect(() => {
-    sb.from("kids_time_options").select("*").order("sort_order").then(({ data, error: loadError }) => {
+    sb.from("kids_time_options").select("*").order("sort_order").then(({ data }) => {
       setOptions(data || []);
-      setError(loadError ? "Could not load the Kids Time activities. Please retry." : "");
       setLoading(false);
     });
   }, []);
 
-  const closeForm = () => {
-    setAdding(false); setLabel(""); setIcon("⭐"); setDescription(""); setError("");
-  };
-
-  const addActivity = async event => {
-    event.preventDefault();
-    const name = label.trim();
-    if (!name || saving) return;
-    setSaving(true); setError("");
-    const newActivity = {
-      label: name,
-      icon: icon.trim() || "⭐",
-      description: description.trim() || null,
-      sort_order: options.reduce((highest, option) => Math.max(highest, Number(option.sort_order) || 0), 0) + 1,
-    };
-    const { data, error: saveError } = await sb.from("kids_time_options").insert(newActivity).select("*").single();
-    if (saveError) {
-      setError(saveError.message || "Could not save this activity. Please retry.");
-      setSaving(false);
-      return;
-    }
-    setOptions(current => [...current, data || { ...newActivity, id: `kids-time-${Date.now()}` }]);
-    setSaving(false); closeForm();
-  };
-
-  const fieldStyle = { width: "100%", padding: "12px 13px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--paper)", color: "var(--text)", fontSize: 14, boxSizing: "border-box" };
-  const buttonStyle = { border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontWeight: 600, cursor: "pointer" };
-
   return (
     <div className="fade" style={{ padding: "0 0 100px" }}>
-      <div style={{ padding: "72px 20px 28px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
-        <div>
-          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Kids Time<span style={{ color: "var(--sage)" }}>.</span></div>
-          <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>Time with the little ones</div>
-        </div>
-        <button type="button" aria-label="Add a Kids Time activity" onClick={() => { setAdding(true); setError(""); }} disabled={adding} style={{ ...buttonStyle, background: adding ? "var(--surface2)" : "var(--sage)", color: adding ? "var(--muted)" : "white", borderColor: "transparent" }}>+ Add activity</button>
+      <div style={{ padding: "72px 20px 28px" }}>
+        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Kids Time<span style={{ color: "var(--sage)" }}>.</span></div>
+        <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>Time with the little ones</div>
       </div>
-      {adding && <form aria-label="New Kids Time activity" onSubmit={addActivity} style={{ margin: "0 20px 14px", padding: 16, borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", display: "grid", gap: 10 }}>
-        <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 21, color: "var(--text)" }}>New activity</div>
-        <label style={{ color: "var(--muted)", fontSize: 11 }}>Activity name<input autoFocus required aria-label="Kids Time activity name" value={label} onChange={event => setLabel(event.target.value)} placeholder="e.g. Build a den" style={{ ...fieldStyle, marginTop: 4 }}/></label>
-        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: 10 }}>
-          <label style={{ color: "var(--muted)", fontSize: 11 }}>Icon<input aria-label="Kids Time activity icon" value={icon} onChange={event => setIcon(event.target.value)} placeholder="⭐" style={{ ...fieldStyle, marginTop: 4, textAlign: "center" }}/></label>
-          <label style={{ color: "var(--muted)", fontSize: 11 }}>Description<input aria-label="Kids Time activity description" value={description} onChange={event => setDescription(event.target.value)} placeholder="A short reminder or idea" style={{ ...fieldStyle, marginTop: 4 }}/></label>
-        </div>
-        {error && <div role="alert" style={{ color: "var(--danger)", fontSize: 12 }}>{error}</div>}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}><button type="button" disabled={saving} onClick={closeForm} style={buttonStyle}>Cancel</button><button type="submit" disabled={saving || !label.trim()} style={{ ...buttonStyle, background: "var(--sage)", color: "white", borderColor: "transparent", opacity: saving || !label.trim() ? .5 : 1 }}>{saving ? "Saving…" : "Save activity"}</button></div>
-      </form>}
-      {!adding && error && <div role="alert" style={{ margin: "0 20px 14px", color: "var(--danger)", fontSize: 12 }}>{error}</div>}
       {loading ? <SkeletonCard rows={3} /> : (
         <div style={{ padding: "0 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {options.map(opt => (
