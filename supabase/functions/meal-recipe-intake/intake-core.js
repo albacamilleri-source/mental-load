@@ -3,6 +3,22 @@ export function parseTags(value) {
   return [...new Set(values.map(tag => String(tag).trim().toLowerCase()).filter(Boolean))];
 }
 
+export function currentIsoWeek(date = new Date()) {
+  const value = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = value.getUTCDay() || 7;
+  value.setUTCDate(value.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(value.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((value - yearStart) / 86400000) + 1) / 7);
+  return `${value.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+export function normalizePlanningPeriod(mealType, value, date = new Date()) {
+  const period = String(value || '').trim();
+  const legacy = (mealType === 'breakfast' && period === 'breakfast-capsule')
+    || (mealType === 'kids_lunch' && period === 'kids-lunch-capsule');
+  return legacy ? currentIsoWeek(date) : period;
+}
+
 export function normalizeRecipeUrl(value) {
   const url = new URL(String(value || '').trim());
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Enter a valid http(s) recipe URL.');

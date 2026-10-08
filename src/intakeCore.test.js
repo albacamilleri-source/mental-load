@@ -1,4 +1,4 @@
-import { chooseQueueDay, nextQueuePosition, normalizeRecipeUrl, parseTags, queueInsertionBeforeTail, queueMealPayload } from '../supabase/functions/meal-recipe-intake/intake-core';
+import { chooseQueueDay, nextQueuePosition, normalizePlanningPeriod, normalizeRecipeUrl, parseTags, queueInsertionBeforeTail, queueMealPayload } from '../supabase/functions/meal-recipe-intake/intake-core';
 
 const categories = [
   {day_number:1, accepted_tags:['pasta']},
@@ -39,4 +39,11 @@ test('recipe URLs are normalized to prevent tracking duplicates', () => {
 test('queued recipes carry their cooking method and servings into the scheduled day', () => {
   const payload = queueMealPayload({id:'q1', title:'Soup', source_ref:'Book', ingredients:[], method:'1. Simmer.', servings:4, notes:''}, '2026-W37', 6, '2026-09-12');
   expect(payload).toMatchObject({meal_number:6, method:'1. Simmer.', servings:4, queue_item_id:'q1', scheduled_for:'2026-09-12'});
+});
+
+test('legacy unpacked extensions are translated to the current calendar week', () => {
+  const date = new Date(Date.UTC(2026, 9, 8));
+  expect(normalizePlanningPeriod('breakfast', 'breakfast-capsule', date)).toBe('2026-W41');
+  expect(normalizePlanningPeriod('kids_lunch', 'kids-lunch-capsule', date)).toBe('2026-W41');
+  expect(normalizePlanningPeriod('dinner', '2026-W42', date)).toBe('2026-W42');
 });
