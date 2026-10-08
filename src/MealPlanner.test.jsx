@@ -237,7 +237,19 @@ test('Kids Lunch library recipes can be marked and unmarked as PREP', async () =
   expect(card.textContent).toContain('Mark PREP');
 });
 
-test('Meal Planner overview lists only PREP recipes scheduled in the displayed week', async () => {
+test('Breakfast library recipes can be marked and unmarked as PREP', async () => {
+  const recipe = {...sample(89), recipe_key:recipeKey(sample(89)), has_been_cooked:false, requires_prep:false, is_deleted:false};
+  breakfastLibrary = [recipe];
+  await render('breakfast');
+  const card = [...container.querySelectorAll('#recipe-library .recipeCard')].find(node => node.textContent.includes('Recipe 89'));
+  await click(button('Mark PREP', card));
+  expect(writes).toContainEqual({table:'breakfast_recipe_library', update:{field:'recipe_key', value:recipe.recipe_key, payload:{requires_prep:true}}});
+  expect(card.textContent).toContain('✓ PREP');
+  await click(button('✓ PREP', card));
+  expect(writes).toContainEqual({table:'breakfast_recipe_library', update:{field:'recipe_key', value:recipe.recipe_key, payload:{requires_prep:false}}});
+});
+
+test('Meal Planner overview lists scheduled Breakfast and Kids Lunch PREP recipes for the displayed week', async () => {
   const weekStart = new Date();
   if (weekStart.getDay() === 0) weekStart.setDate(weekStart.getDate() + 1);
   else weekStart.setDate(weekStart.getDate() - (weekStart.getDay() - 1));
@@ -250,10 +262,16 @@ test('Meal Planner overview lists only PREP recipes scheduled in the displayed w
     {...prepMeal, recipe_key:recipeKey(prepMeal), requires_prep:true, is_deleted:false},
     {...ordinaryMeal, recipe_key:recipeKey(ordinaryMeal), requires_prep:false, is_deleted:false},
   ];
+  const breakfastPrep = {...sample(89), week_of:'breakfast-capsule', scheduled_for:scheduledFor, meal_number:1};
+  breakfastCurrent = [breakfastPrep];
+  breakfastPast = [breakfastPrep];
+  breakfastLibrary = [{...breakfastPrep, recipe_key:recipeKey(breakfastPrep), requires_prep:true, is_deleted:false}];
   await act(async () => { root.render(<MealPlanner/>); });
   const prepSection = container.querySelector('.weeklyPrep');
   expect(prepSection.textContent).toContain('PREP this week');
   expect(prepSection.textContent).toContain('Recipe 87');
+  expect(prepSection.textContent).toContain('Recipe 89');
+  expect(prepSection.textContent).toContain('Breakfast · adults');
   expect(prepSection.textContent).not.toContain('Recipe 88');
   await click(prepSection.querySelector('[aria-label="View PREP recipe: Recipe 87"]'));
   expect(document.body.querySelector('[aria-label="Recipe details for Recipe 87"]')).not.toBeNull();
