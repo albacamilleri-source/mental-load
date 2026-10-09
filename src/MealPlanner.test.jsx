@@ -43,6 +43,7 @@ function setupQueries() {
         if (failure) return Promise.resolve({ error: {message: failure} }).then(resolve, reject);
         const source = kind === 'prep' ? {current:[],past:[],library:[],queue:prepCompletions,tagRows:[],categories:[],pauses:[]} : kind === 'breakfast' ? {current:breakfastCurrent,past:breakfastPast,library:breakfastLibrary,queue:breakfastQueue,tagRows:breakfastTagRows,categories:breakfastCategories,pauses:breakfastDayPauses} : kind === 'kids_lunch' ? {current:kidsLunchCurrent,past:kidsLunchPast,library:kidsLunchLibrary,queue:kidsLunchQueue,tagRows:kidsLunchTagRows,categories:kidsLunchCategories,pauses:kidsLunchDayPauses,sideOptions:kidsLunchSideOptions,daySides:kidsLunchDaySides} : kind === 'lunch' ? {current:lunchCurrent,past:lunchPast,library:lunchLibrary,queue:lunchQueue,tagRows:lunchTagRows,categories:lunchCategories,pauses:[]} : {current,past,library,queue,tagRows,categories,pauses:dayPauses};
         let data = logicalTable === 'weekly_meals' ? (isPast ? source.past : source.current) : logicalTable === 'day_pauses' ? source.pauses : logicalTable === 'meal_recipe_tags' ? source.tagRows : logicalTable === 'meal_day_categories' ? source.categories : logicalTable === 'meal_recipe_library' ? source.library : logicalTable === 'side_options' ? source.sideOptions : logicalTable === 'day_sides' ? source.daySides : source.queue;
+        if (maybeSingle && logicalTable === 'weekly_meals') data = [...source.current, ...source.past].find(row => Object.entries(filters).every(([field, value]) => row[field] === value)) || null;
         if (maybeSingle && logicalTable === 'meal_recipe_queue') data = source.queue.find(row => Object.entries(filters).every(([field, value]) => row[field] === value)) || null;
         if (payload && logicalTable === 'weekly_meals') data = { id: 'saved', ...payload };
         if (payload && logicalTable === 'weekly_prep_completions') data = payload;
@@ -722,6 +723,22 @@ test('marking dinner made records it as tried, moves it to the queue tail, and s
   expect(currentWeekCard.textContent).toContain('Recipe 1');
   expect(currentWeekCard.textContent).toContain('Tried');
   expect(container.querySelector('#recipe-library').textContent).toContain('Recipe 1');
+});
+
+test('marking dinner made preserves a recipe already planned for that day next week', async () => {
+  const first = {...sample(1, ['pasta']), queue_item_id:'dinner-q1'};
+  const second = {...sample(2), id:'dinner-q2', day_number:1, position:2, created_at:'2026-09-10T09:00:00Z'};
+  const planned = {...sample(9), id:'next-week-planned', meal_number:1, week_of:weekAfterToday(), queue_item_id:'dinner-q9'};
+  current = [first];
+  past = [planned];
+  queue = [{...first, id:'dinner-q1', day_number:1, position:1, created_at:'2026-09-10T08:00:00Z'}, second];
+  library = [{...sample(1), recipe_key:recipeKey(sample(1)), has_been_cooked:false, is_deleted:false}];
+  tagRows = [{recipe_key:recipeKey(first), tags:['pasta']}, {recipe_key:recipeKey(second), tags:['pasta']}];
+  await render();
+  await click(button('Made · rotate', day(1)));
+  expect(writes).toContainEqual({table:'meal_recipe_queue', update:{field:'id', value:'dinner-q1', payload:{day_number:1, position:3}}});
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.week_of === weekAfterToday())).toBeUndefined();
+  expect(document.body.textContent).toContain('next week’s dinner kept as planned');
 });
 
 test('deleting a cooked recipe removes it from the library and queue but preserves its dated record', async () => {
