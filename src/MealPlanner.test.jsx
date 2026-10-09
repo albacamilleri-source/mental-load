@@ -8,7 +8,7 @@ import { BREAKFAST_CATEGORIES, BREAKFAST_SLOTS, KIDS_LUNCH_CATEGORIES, LUNCH_CAT
 const mockFrom = jest.fn();
 const mockInvoke = jest.fn();
 jest.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: (...args) => mockFrom(...args), functions: { invoke: (...args) => mockInvoke(...args) } }) }));
-let container, root, current, past, library, queue, tagRows, categories, dayPauses, breakfastCurrent, breakfastPast, breakfastLibrary, breakfastQueue, breakfastTagRows, breakfastCategories, breakfastDayPauses, lunchCurrent, lunchPast, lunchLibrary, lunchQueue, lunchTagRows, lunchCategories, kidsLunchCurrent, kidsLunchPast, kidsLunchLibrary, kidsLunchQueue, kidsLunchTagRows, kidsLunchCategories, kidsLunchDayPauses, kidsLunchSideOptions, kidsLunchDaySides, writes, failure, deferWeeklyWrite, resolveWeeklyWrite;
+let container, root, current, past, library, queue, tagRows, categories, dayPauses, breakfastCurrent, breakfastPast, breakfastLibrary, breakfastQueue, breakfastTagRows, breakfastCategories, breakfastDayPauses, lunchCurrent, lunchPast, lunchLibrary, lunchQueue, lunchTagRows, lunchCategories, kidsLunchCurrent, kidsLunchPast, kidsLunchLibrary, kidsLunchQueue, kidsLunchTagRows, kidsLunchCategories, kidsLunchDayPauses, kidsLunchSideOptions, kidsLunchDaySides, prepCompletions, writes, failure, deferWeeklyWrite, resolveWeeklyWrite;
 const sample = (n, tags = []) => ({ id: `meal-${n}`, meal_number: n, title: `Recipe ${n}`, source_ref: `Book ${n}`, week_of: '2026-W36', ingredients: [{name: 'carrot', qty: 1, unit: 'item'}], extracted_at: null, tags });
 const isoWeekFor = date => {
   const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -24,8 +24,8 @@ const weekAfterToday = () => {
 function setupQueries() {
   const weeklyReadCount = { dinner: 0, breakfast: 0, lunch: 0, kids_lunch: 0 };
   mockFrom.mockImplementation(table => {
-    const kind = table.startsWith('breakfast_') ? 'breakfast' : table.startsWith('kids_lunch_') ? 'kids_lunch' : table.startsWith('lunch_') ? 'lunch' : 'dinner';
-    const logicalTable = kind === 'breakfast' ? ({breakfast_weekly_meals:'weekly_meals',breakfast_day_pauses:'day_pauses',breakfast_recipe_tags:'meal_recipe_tags',breakfast_day_categories:'meal_day_categories',breakfast_recipe_library:'meal_recipe_library',breakfast_recipe_queue:'meal_recipe_queue'}[table] || table) : kind === 'kids_lunch' ? ({kids_lunch_weekly_meals:'weekly_meals',kids_lunch_day_pauses:'day_pauses',kids_lunch_recipe_tags:'meal_recipe_tags',kids_lunch_day_categories:'meal_day_categories',kids_lunch_recipe_library:'meal_recipe_library',kids_lunch_recipe_queue:'meal_recipe_queue',kids_lunch_side_options:'side_options',kids_lunch_day_sides:'day_sides'}[table] || table) : kind === 'lunch' ? ({lunch_weekly_meals:'weekly_meals',lunch_recipe_tags:'meal_recipe_tags',lunch_day_categories:'meal_day_categories',lunch_recipe_library:'meal_recipe_library',lunch_recipe_queue:'meal_recipe_queue'}[table] || table) : table === 'meal_day_pauses' ? 'day_pauses' : table;
+    const kind = table === 'weekly_prep_completions' ? 'prep' : table.startsWith('breakfast_') ? 'breakfast' : table.startsWith('kids_lunch_') ? 'kids_lunch' : table.startsWith('lunch_') ? 'lunch' : 'dinner';
+    const logicalTable = kind === 'prep' ? 'weekly_prep_completions' : kind === 'breakfast' ? ({breakfast_weekly_meals:'weekly_meals',breakfast_day_pauses:'day_pauses',breakfast_recipe_tags:'meal_recipe_tags',breakfast_day_categories:'meal_day_categories',breakfast_recipe_library:'meal_recipe_library',breakfast_recipe_queue:'meal_recipe_queue'}[table] || table) : kind === 'kids_lunch' ? ({kids_lunch_weekly_meals:'weekly_meals',kids_lunch_day_pauses:'day_pauses',kids_lunch_recipe_tags:'meal_recipe_tags',kids_lunch_day_categories:'meal_day_categories',kids_lunch_recipe_library:'meal_recipe_library',kids_lunch_recipe_queue:'meal_recipe_queue',kids_lunch_side_options:'side_options',kids_lunch_day_sides:'day_sides'}[table] || table) : kind === 'lunch' ? ({lunch_weekly_meals:'weekly_meals',lunch_recipe_tags:'meal_recipe_tags',lunch_day_categories:'meal_day_categories',lunch_recipe_library:'meal_recipe_library',lunch_recipe_queue:'meal_recipe_queue'}[table] || table) : table === 'meal_day_pauses' ? 'day_pauses' : table;
     if (logicalTable === 'weekly_meals') weeklyReadCount[kind] += 1;
     let isPast = logicalTable === 'weekly_meals' && weeklyReadCount[kind] === 2, payload, action = '', maybeSingle = false;
     const filters = {};
@@ -41,10 +41,11 @@ function setupQueries() {
       maybeSingle: () => { maybeSingle = true; return query; },
       then: (resolve, reject) => {
         if (failure) return Promise.resolve({ error: {message: failure} }).then(resolve, reject);
-        const source = kind === 'breakfast' ? {current:breakfastCurrent,past:breakfastPast,library:breakfastLibrary,queue:breakfastQueue,tagRows:breakfastTagRows,categories:breakfastCategories,pauses:breakfastDayPauses} : kind === 'kids_lunch' ? {current:kidsLunchCurrent,past:kidsLunchPast,library:kidsLunchLibrary,queue:kidsLunchQueue,tagRows:kidsLunchTagRows,categories:kidsLunchCategories,pauses:kidsLunchDayPauses,sideOptions:kidsLunchSideOptions,daySides:kidsLunchDaySides} : kind === 'lunch' ? {current:lunchCurrent,past:lunchPast,library:lunchLibrary,queue:lunchQueue,tagRows:lunchTagRows,categories:lunchCategories,pauses:[]} : {current,past,library,queue,tagRows,categories,pauses:dayPauses};
+        const source = kind === 'prep' ? {current:[],past:[],library:[],queue:prepCompletions,tagRows:[],categories:[],pauses:[]} : kind === 'breakfast' ? {current:breakfastCurrent,past:breakfastPast,library:breakfastLibrary,queue:breakfastQueue,tagRows:breakfastTagRows,categories:breakfastCategories,pauses:breakfastDayPauses} : kind === 'kids_lunch' ? {current:kidsLunchCurrent,past:kidsLunchPast,library:kidsLunchLibrary,queue:kidsLunchQueue,tagRows:kidsLunchTagRows,categories:kidsLunchCategories,pauses:kidsLunchDayPauses,sideOptions:kidsLunchSideOptions,daySides:kidsLunchDaySides} : kind === 'lunch' ? {current:lunchCurrent,past:lunchPast,library:lunchLibrary,queue:lunchQueue,tagRows:lunchTagRows,categories:lunchCategories,pauses:[]} : {current,past,library,queue,tagRows,categories,pauses:dayPauses};
         let data = logicalTable === 'weekly_meals' ? (isPast ? source.past : source.current) : logicalTable === 'day_pauses' ? source.pauses : logicalTable === 'meal_recipe_tags' ? source.tagRows : logicalTable === 'meal_day_categories' ? source.categories : logicalTable === 'meal_recipe_library' ? source.library : logicalTable === 'side_options' ? source.sideOptions : logicalTable === 'day_sides' ? source.daySides : source.queue;
         if (maybeSingle && logicalTable === 'meal_recipe_queue') data = source.queue.find(row => Object.entries(filters).every(([field, value]) => row[field] === value)) || null;
         if (payload && logicalTable === 'weekly_meals') data = { id: 'saved', ...payload };
+        if (payload && logicalTable === 'weekly_prep_completions') data = payload;
         if (payload && logicalTable === 'meal_recipe_library') data = payload;
         if (payload && logicalTable === 'meal_recipe_queue' && action === 'insert') data = { id: `queue-${writes.length}`, created_at: '2026-09-11T08:00:00Z', ...payload };
         if (payload && (logicalTable === 'side_options' || logicalTable === 'day_sides')) data = payload;
@@ -75,7 +76,7 @@ beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   window.confirm = jest.fn(() => true);
   container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); dayPauses = []; breakfastCurrent = []; breakfastPast = []; breakfastLibrary = []; breakfastQueue = []; breakfastTagRows = []; breakfastCategories = BREAKFAST_CATEGORIES.map(c => ({...c, accepted_tags: [...c.accepted_tags]})); breakfastDayPauses = []; lunchCurrent = []; lunchPast = []; lunchLibrary = []; lunchQueue = []; lunchTagRows = []; lunchCategories = LUNCH_CATEGORIES.map(c => ({...c, accepted_tags: [...c.accepted_tags]})); kidsLunchCurrent = []; kidsLunchPast = []; kidsLunchLibrary = []; kidsLunchQueue = []; kidsLunchTagRows = []; kidsLunchCategories = KIDS_LUNCH_CATEGORIES.map(c => ({...c, accepted_tags: [...c.accepted_tags]})); kidsLunchDayPauses = []; kidsLunchSideOptions = []; kidsLunchDaySides = []; writes = []; failure = ''; deferWeeklyWrite = false; resolveWeeklyWrite = null; mockInvoke.mockReset(); setupQueries();
+  current = []; past = []; library = []; queue = []; tagRows = []; categories = DEFAULT_CATEGORIES.map(c => ({...c})); dayPauses = []; breakfastCurrent = []; breakfastPast = []; breakfastLibrary = []; breakfastQueue = []; breakfastTagRows = []; breakfastCategories = BREAKFAST_CATEGORIES.map(c => ({...c, accepted_tags: [...c.accepted_tags]})); breakfastDayPauses = []; lunchCurrent = []; lunchPast = []; lunchLibrary = []; lunchQueue = []; lunchTagRows = []; lunchCategories = LUNCH_CATEGORIES.map(c => ({...c, accepted_tags: [...c.accepted_tags]})); kidsLunchCurrent = []; kidsLunchPast = []; kidsLunchLibrary = []; kidsLunchQueue = []; kidsLunchTagRows = []; kidsLunchCategories = KIDS_LUNCH_CATEGORIES.map(c => ({...c, accepted_tags: [...c.accepted_tags]})); kidsLunchDayPauses = []; kidsLunchSideOptions = []; kidsLunchDaySides = []; prepCompletions = []; writes = []; failure = ''; deferWeeklyWrite = false; resolveWeeklyWrite = null; mockInvoke.mockReset(); setupQueries();
   window.history.replaceState({}, '', '/mental-load/#meal-planner'); window.scrollTo = jest.fn();
 });
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); });
@@ -241,32 +242,32 @@ test('Kids Lunches chooses mains from its library and keeps editable side dropdo
   expect(container.querySelector('[aria-label="Monday Side 1"]').value).toBe('');
 });
 
-test('Kids Lunch library recipes can be marked and unmarked as PREP', async () => {
+test('Kids Lunch library recipes can be marked and unmarked as requiring prep', async () => {
   const recipe = {...sample(86), recipe_key:recipeKey(sample(86)), has_been_cooked:false, requires_prep:false, is_deleted:false};
   kidsLunchLibrary = [recipe];
   await render('kids_lunch');
   const card = [...container.querySelectorAll('#recipe-library .recipeCard')].find(node => node.textContent.includes('Recipe 86'));
-  await click(button('Mark PREP', card));
+  await click(button('Mark as requires prep', card));
   expect(writes).toContainEqual({table:'kids_lunch_recipe_library', update:{field:'recipe_key', value:recipe.recipe_key, payload:{requires_prep:true}}});
-  expect(card.textContent).toContain('✓ PREP');
-  await click(button('✓ PREP', card));
+  expect(card.textContent).toContain('✓ Requires prep');
+  await click(button('✓ Requires prep', card));
   expect(writes).toContainEqual({table:'kids_lunch_recipe_library', update:{field:'recipe_key', value:recipe.recipe_key, payload:{requires_prep:false}}});
-  expect(card.textContent).toContain('Mark PREP');
+  expect(card.textContent).toContain('Mark as requires prep');
 });
 
-test('Breakfast library recipes can be marked and unmarked as PREP', async () => {
+test('Breakfast library recipes can be marked and unmarked as requiring prep', async () => {
   const recipe = {...sample(89), recipe_key:recipeKey(sample(89)), has_been_cooked:false, requires_prep:false, is_deleted:false};
   breakfastLibrary = [recipe];
   await render('breakfast');
   const card = [...container.querySelectorAll('#recipe-library .recipeCard')].find(node => node.textContent.includes('Recipe 89'));
-  await click(button('Mark PREP', card));
+  await click(button('Mark as requires prep', card));
   expect(writes).toContainEqual({table:'breakfast_recipe_library', update:{field:'recipe_key', value:recipe.recipe_key, payload:{requires_prep:true}}});
-  expect(card.textContent).toContain('✓ PREP');
-  await click(button('✓ PREP', card));
+  expect(card.textContent).toContain('✓ Requires prep');
+  await click(button('✓ Requires prep', card));
   expect(writes).toContainEqual({table:'breakfast_recipe_library', update:{field:'recipe_key', value:recipe.recipe_key, payload:{requires_prep:false}}});
 });
 
-test('Meal Planner overview lists scheduled Breakfast and Kids Lunch PREP recipes for the displayed week', async () => {
+test('Meal Planner overview lists scheduled prep recipes and records weekly completion separately', async () => {
   const weekStart = new Date();
   if (weekStart.getDay() === 0) weekStart.setDate(weekStart.getDate() + 1);
   else weekStart.setDate(weekStart.getDate() - (weekStart.getDay() - 1));
@@ -283,14 +284,25 @@ test('Meal Planner overview lists scheduled Breakfast and Kids Lunch PREP recipe
   breakfastCurrent = [breakfastPrep];
   breakfastPast = [breakfastPrep];
   breakfastLibrary = [{...breakfastPrep, recipe_key:recipeKey(breakfastPrep), requires_prep:true, is_deleted:false}];
+  const dinnerPrep = {...sample(90), week_of:isoWeekFor(weekStart), meal_number:2};
+  current = [dinnerPrep];
+  past = [dinnerPrep];
+  library = [{...dinnerPrep, recipe_key:recipeKey(dinnerPrep), requires_prep:true, is_deleted:false}];
   await act(async () => { root.render(<MealPlanner/>); });
   const prepSection = container.querySelector('.weeklyPrep');
-  expect(prepSection.textContent).toContain('PREP this week');
+  expect(prepSection.textContent).toContain('Prep this week');
   expect(prepSection.textContent).toContain('Recipe 87');
   expect(prepSection.textContent).toContain('Recipe 89');
+  expect(prepSection.textContent).toContain('Recipe 90');
   expect(prepSection.textContent).toContain('Breakfast · adults');
+  expect(prepSection.textContent).toContain('Dinner');
   expect(prepSection.textContent).not.toContain('Recipe 88');
-  await click(prepSection.querySelector('[aria-label="View PREP recipe: Recipe 87"]'));
+  const firstTick = prepSection.querySelector('.weeklyPrepTick input');
+  await click(firstTick);
+  expect(writes.find(write => write.table === 'weekly_prep_completions' && write.value)).toMatchObject({value:{week_of:isoWeekFor(weekStart),completed_at:expect.any(String)}});
+  expect(firstTick.checked).toBe(true);
+  expect(firstTick.closest('label').textContent).toContain('Prepped');
+  await click(prepSection.querySelector('[aria-label="View prep recipe: Recipe 87"]'));
   expect(document.body.querySelector('[aria-label="Recipe details for Recipe 87"]')).not.toBeNull();
 });
 
