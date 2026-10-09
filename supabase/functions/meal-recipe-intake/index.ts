@@ -101,12 +101,13 @@ Deno.serve(async (req: Request) => {
     const method = String(extraction?.method || existingLibraryResult.data?.method || "").trim();
     const extractedServings = Number(extraction?.servings);
     const servings = Number.isInteger(extractedServings) && extractedServings > 0 ? extractedServings : existingLibraryResult.data?.servings ?? null;
+    const requiresPrep = existingLibraryResult.data ? existingLibraryResult.data.requires_prep === true : extraction?.requires_prep === true;
     const tags = body?.tags === undefined ? parseTags(extraction?.tags) : parseTags(body.tags);
     if (!title || !ingredients.length) return json({ error: "The importer could not find a complete recipe on that page.", code: "INCOMPLETE_RECIPE" }, 422);
     const now = new Date().toISOString();
     const existingLibrary = existingLibraryResult.data;
     const key = existingLibrary?.recipe_key || recipeKey({ title, source_ref: sourceUrl });
-    const recipe = { recipe_key: key, title, source_ref: sourceUrl, ingredients, method, servings, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "", tags };
+    const recipe = { recipe_key: key, title, source_ref: sourceUrl, ingredients, method, servings, requires_prep: requiresPrep, extracted_at: now, rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "", tags };
 
     let dayNumber: number | null = null;
     const queueRows = queueResult.data || [];
@@ -127,6 +128,7 @@ Deno.serve(async (req: Request) => {
       rating: existingLibrary?.rating ?? null, notes: existingLibrary?.notes || "",
       cooked_at: existingLibrary?.cooked_at || now,
       has_been_cooked: existingLibrary?.has_been_cooked === true,
+      requires_prep: requiresPrep,
       is_deleted: false,
     };
     const libraryWrite = existingLibrary

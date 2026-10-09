@@ -27,9 +27,10 @@ const recipeSchema = {
     },
     method: { type: "string" },
     servings: { type: ["integer", "null"] },
+    requires_prep: { type: "boolean" },
     tags: { type: "array", items: { type: "string" } },
   },
-  required: ["title", "source_ref", "ingredients", "method", "servings", "tags"],
+  required: ["title", "source_ref", "ingredients", "method", "servings", "requires_prep", "tags"],
   additionalProperties: false,
 };
 
@@ -90,8 +91,9 @@ Deno.serve(async (req: Request) => {
     const mealContext = importMealContext(body?.mealType);
     const instruction = [
       `Extract this ${mealContext.label} recipe for Mental Load.`,
-      "Return the recipe title, the supplied page URL as source_ref, all ingredients needed to cook it, the complete cooking method, its servings yield, and 2-6 concise lowercase tags.",
+      "Return the recipe title, the supplied page URL as source_ref, all ingredients needed to cook it, the complete cooking method, its servings yield, whether it requires advance prep, and 2-6 concise lowercase tags.",
       "Return servings as a positive whole number when the page states how many people the recipe serves. Return null when it is not stated or only an item yield is given.",
+      "Set requires_prep true only when useful work can be completed before the scheduled day without harming the result, such as overnight chilling, soaking, marinating, proving, freezing, or meaningful batch assembly. Ordinary same-day chopping and cooking do not count. If unclear, use false.",
       "Write the method as clear numbered steps in a single text string. Preserve temperatures, timings, and useful preparation details.",
       "Normalize ingredient names, preserve stated quantities, use numeric quantities when stated, and use qty null for 'to taste' or 'as needed'.",
       "For countable items with no unit, use unit 'item'. Exclude equipment and method steps.",
