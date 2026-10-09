@@ -1361,7 +1361,17 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         ? (markAsTried ? addDays(meal.scheduled_for || defaultScheduledFor(meal.meal_number), 7) : meal.scheduled_for || defaultScheduledFor(meal.meal_number))
         : null;
       let nextMeal = { ...emptyMeal(meal.meal_number), week_of: replacementWeek, scheduled_for: replacementDate, tagsText: '', dirty: false };
-      if (front) {
+      let keptExistingPlan = false;
+      if (front && config.advanceWeekOnCook && markAsTried) {
+        const { data: existingPlan, error: existingPlanError } = await from('weekly_meals')
+          .select('*')
+          .eq('week_of', replacementWeek)
+          .eq('meal_number', meal.meal_number)
+          .maybeSingle();
+        if (existingPlanError) throw existingPlanError;
+        keptExistingPlan = !!existingPlan;
+      }
+      if (front && !keptExistingPlan) {
         const replacementPayload = config.advanceWeekOnCook
           ? { ...queueMealPayload(front, replacementWeek, meal.meal_number, config.capsule ? replacementDate : null), completed_at: null }
           : queuedMealPayload(front, meal.meal_number, replacementDate);
@@ -1372,7 +1382,12 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       setLibraryRecords(prev => [banked, ...prev.filter(r => r.recipe_key !== key)]);
       setQueueRows(nextQueue);
       setMeals(prev => prev.map((m, i) => i === index ? completedAt ? { ...m, completed_at: completedAt, dirty: false } : nextMeal : m));
-      setGroceryGenerated(false); setToast(config.capsule ? markAsTried ? `${meal.title} made · next ${config.singular} scheduled` : `${meal.title} skipped · next ${config.singular} scheduled` : config.advanceWeekOnCook ? `${meal.title} made · next dinner scheduled for the following week` : `${meal.title} marked as cooked`);
+      setGroceryGenerated(false);
+      setToast(keptExistingPlan
+        ? `${meal.title} made · next week’s ${config.singular} kept as planned`
+        : config.capsule
+          ? markAsTried ? `${meal.title} made · next ${config.singular} scheduled` : `${meal.title} skipped · next ${config.singular} scheduled`
+          : config.advanceWeekOnCook ? `${meal.title} made · next dinner scheduled for the following week` : `${meal.title} marked as cooked`);
     } catch (e) { setMealErrors(prev => ({ ...prev, [index]: e.message || 'Could not record and rotate this recipe. Please retry.' })); }
     finally { setBusy(false); }
   }
