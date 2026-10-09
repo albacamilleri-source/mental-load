@@ -3697,6 +3697,7 @@ export function KidsTimeScreen() {
 // ─── CONNECT SCREEN ───────────────────────────────────────────────────────────
 const CONTACTS = [
   { id: "sharon",  name: "Sharon",  role: "Friend",  notes: "Works reduced hours. Afternoon meets. Weekend playdates.", phone: "35699367867" },
+  { id: "karen",   name: "Karen",   role: "Gian’s mum", notes: "After-school playdates.", phone: "35679040481" },
   { id: "vany",    name: "Vany",    role: "BFF",     notes: "BFF. Check-ins. Voice notes.", phone: "35699396772" },
   { id: "cristina",name: "Cristina",role: "BFF",     notes: "BFF. Random musings. Photos.", phone: "35679595179" },
   { id: "josh",    name: "Josh",    role: "Husband", notes: "Love of your life. Send some love.", phone: "35677108584" },
@@ -3706,6 +3707,7 @@ const CONTACTS = [
 
 const AVATAR_COLORS = {
   sharon:  { bg: "rgba(212,168,160,0.18)", color: "var(--danger)"  },
+  karen:   { bg: "rgba(196,168,130,0.18)", color: "var(--morning)" },
   vany:    { bg: "rgba(122,106,168,0.12)", color: "var(--admin)"   },
   cristina:{ bg: "rgba(124,158,138,0.14)", color: "var(--josh)"    },
   josh:    { bg: "rgba(196,168,130,0.18)", color: "var(--morning)" },
