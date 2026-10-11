@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { TasksScreen } from "./App";
+import { TasksScreen, toISODate } from "./App";
 
 const mockFrom = jest.fn();
 const mockRemoveChannel = jest.fn();
@@ -73,4 +73,10 @@ test("commits a pending Next Action completion when leaving before Undo expires"
 
   expect(writes).toContainEqual({ table: "next_actions", action: "update", payload: { done: true } });
   expect(writes).toContainEqual(expect.objectContaining({ table: "history_items", action: "insert" }));
+});
+
+test("normalizes native, Make and screenshot-processor due dates to one homepage date", () => {
+  expect(toISODate("11/10/2026")).toBe("2026-10-11");
+  expect(toISODate("2026-10-11")).toBe("2026-10-11");
+  expect(toISODate("2026-10-11T08:30:00Z")).toBe("2026-10-11");
 });

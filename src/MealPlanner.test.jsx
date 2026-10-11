@@ -922,6 +922,7 @@ test('unscheduling a queued meal removes it from the queue and fills the day wit
   const second = {...sample(3), id:'q2', day_number:2, position:2, created_at:'2026-09-11T09:00:00Z'};
   queue = [first, second];
   current = [{...first, id:'meal-2', meal_number:2, queue_item_id:'q1', is_override:false, override_type:null}];
+  library = [{...second, recipe_key:recipeKey(second), has_been_cooked:false, is_deleted:false}];
   await render();
   await click(button('Unschedule', day(2)));
   expect(writes).toContainEqual({table: 'meal_recipe_queue', delete: {field: 'id', value: 'q1', payload: undefined}});
@@ -1117,7 +1118,10 @@ test('a temporary switch keeps the queued recipe at the front and prepares it fo
   tagRows = [{recipe_key:recipeKey(first), tags:['quick']}, {recipe_key:recipeKey(second), tags:['quick']}];
   await render(); await click(button('Switch', day(2)));
   await act(async () => {
-    Simulate.change(document.body.querySelector('[aria-label="Library recipe for switch"]'), {target:{value:recipeKey(second)}});
+    await Promise.resolve();
+    const select = document.body.querySelector('[aria-label="Library recipe for switch"]');
+    const option = [...select.options].find(item => item.textContent === 'Recipe 3');
+    Simulate.change(select, {target:{value:option.value}});
   });
   await click(button('Switch meal', document.body));
   expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
@@ -1128,6 +1132,35 @@ test('a temporary switch keeps the queued recipe at the front and prepares it fo
   expect(currentWeekCard.textContent).toContain('Recipe 3');
   expect(writes.find(write => write.table === 'weekly_meals' && write.value?.week_of === weekAfterToday())).toMatchObject({value:{title:'Recipe 2', queue_item_id:'q1', completed_at:null}});
   expect(writes.filter(write => write.table === 'meal_recipe_queue' && write.delete)).toHaveLength(0);
+});
+
+test('Switch can choose a recipe from a different meal library', async () => {
+  const currentDinner = {...sample(1), id:'dinner-meal-1', meal_number:1};
+  const breakfastRecipe = {...sample(72), title:'Breakfast Burrito', source_ref:'Breakfast book', recipe_key:'breakfast-burrito', ingredients:[{name:'egg', qty:2, unit:'item'}], is_deleted:false};
+  current = [currentDinner];
+  breakfastLibrary = [breakfastRecipe];
+  await render('dinner');
+  await click(button('Switch', day(1)));
+  const select = document.body.querySelector('[aria-label="Library recipe for switch"]');
+  await act(async () => { await Promise.resolve(); });
+  const option = [...select.options].find(item => item.textContent === 'Breakfast Burrito');
+  expect(option.parentElement.label).toBe('Breakfasts');
+  await act(async () => { Simulate.change(select, {target:{value:option.value}}); });
+  await click(button('Switch meal', document.body));
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.title === 'Breakfast Burrito')).toMatchObject({value:{is_override:true,override_type:'library:breakfast'}});
+  await click(button('Made · rotate', day(1)));
+  expect(writes).toContainEqual({table:'breakfast_recipe_library', update:{field:'recipe_key', value:'breakfast-burrito', payload:{has_been_cooked:true,cooked_at:expect.any(String)}}});
+  expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert?.title === 'Breakfast Burrito')).toBeUndefined();
+});
+
+test('a day can be assigned generic leftovers without adding a library recipe', async () => {
+  await render('dinner');
+  await change('Monday Main recipe', '__leftovers__');
+  expect(writes.find(write => write.table === 'weekly_meals' && write.value?.title === 'Leftovers')).toMatchObject({value:{source_ref:'Leftovers',is_override:true,override_type:'leftovers'}});
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.title === 'Leftovers')).toBeUndefined();
+  expect(selectedDinnerTitle(1)).toBe('Leftovers');
+  await click(button('Unschedule', day(1)));
+  expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.title === 'Leftovers')).toBeUndefined();
 });
 
 test('Meal Planner landing page shows today at a glance before all five planners', async () => {
@@ -1232,7 +1265,7 @@ test('a switched library recipe contributes ingredients to the grocery list', as
   queue = [queued]; current = [{...queued, id:'dinner-meal-1', meal_number:1, queue_item_id:'dinner-q1'}]; library = [alternative];
   await render('dinner');
   await click(button('Switch', day(1)));
-  await act(async () => { Simulate.change(document.body.querySelector('[aria-label="Library recipe for switch"]'), {target:{value:recipeKey(alternative)}}); });
+  await act(async () => { Simulate.change(document.body.querySelector('[aria-label="Library recipe for switch"]'), {target:{value:`dinner:${recipeKey(alternative)}`}}); });
   await click(button('Switch meal', document.body));
   expect(button('Generate grocery list').disabled).toBe(false);
   await click(button('Generate grocery list'));

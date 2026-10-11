@@ -7,11 +7,14 @@ import { BREAKFAST_SLOTS, PLANNER_CONFIG } from './plannerConfig';
 import { extractionErrorMessage } from "./extractionError";
 import { chooseQueueDay, frontQueuePosition, nextQueuePosition, queueForDay, queueInsertionBeforeTail, recipeTagsFor } from "./mealQueue";
 import { buildSmartGroceryRecipes, smartGroceryText } from './smartGrocery';
+import { loadMealPlanTasks, mealTaskKey, MEAL_LIBRARY_SOURCES } from './mealTasks';
 
 
 const SUPABASE_URL = "https://qvibdnrfywisvfsqgqux.supabase.co";
 const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2aWJkbnJmeXdpc3Zmc3FncXV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4OTE5MTcsImV4cCI6MjA5NDQ2NzkxN30.qPNjcpQpHPV5_SVz3U-JC18CcZ6vxio9vImA3CKg5jk";
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+const LEFTOVERS_KEY = '__leftovers__';
+const LEFTOVERS_RECIPE = { title: 'Leftovers', source_ref: 'Leftovers', ingredients: [], method: '', servings: null, recipe_key: LEFTOVERS_KEY };
 
 const emptyMeal = (meal_number) => ({
   id: null,
@@ -509,21 +512,25 @@ function QueueManager({ queue, categories, tagMap, busy, onClose, onTagsSaved, o
   </div></div>;
 }
 
-function SwitchMealModal({ day, library, tagMap, busy, onClose, onSave, rotating = false }) {
+function SwitchMealModal({ day, library, busy, onClose, onSave, rotating = false }) {
   const [libraryKey, setLibraryKey] = useState('');
   const [error, setError] = useState('');
   async function submit(e) {
     e.preventDefault();
-    const recipe = library.find(row => recipeKey(row) === libraryKey);
+    const recipe = library.find(row => row.switch_key === libraryKey);
     if (!recipe) { setError('Choose a recipe first.'); return; }
-    const message = await onSave(recipe, 'library', recipeTagsFor(recipe, tagMap));
+    const message = await onSave(recipe, `library:${recipe.library_key}`, recipe.switch_tags || []);
+    if (message) setError(message); else onClose();
+  }
+  async function useLeftovers() {
+    const message = await onSave(LEFTOVERS_RECIPE, 'leftovers', []);
     if (message) setError(message); else onClose();
   }
   return <div className="modalBack" role="dialog" aria-modal="true" aria-label={`Switch Day ${day}`}><form className="modal switchModal" onSubmit={submit}>
-    <div className="modalHead"><div><h2 className="sectionTitle">Switch Day {day}</h2><div className="small">The queued recipe stays first in line until this temporary meal is {rotating ? 'marked made' : 'cooked'}.</div></div><button type="button" className="iconBtn" aria-label="Close switch meal" onClick={onClose}>×</button></div>
-    <label className="tagField">Library recipe<select className="input" aria-label="Library recipe for switch" value={libraryKey} onChange={e => setLibraryKey(e.target.value)}><option value="">Choose a recipe…</option>{library.map(row => <option key={row.recipe_key} value={recipeKey(row)}>{row.title}</option>)}</select></label>
+    <div className="modalHead"><div><h2 className="sectionTitle">Switch Day {day}</h2><div className="small">Choose from any recipe library. The queued recipe stays first in line until this temporary meal is {rotating ? 'marked made' : 'cooked'}.</div></div><button type="button" className="iconBtn" aria-label="Close switch meal" onClick={onClose}>×</button></div>
+    <label className="tagField">Recipe<select className="input" aria-label="Library recipe for switch" value={libraryKey} onChange={e => setLibraryKey(e.target.value)}><option value="">Choose a recipe…</option>{MEAL_LIBRARY_SOURCES.map(source => { const rows = library.filter(row => row.library_key === source.key); return rows.length ? <optgroup key={source.key} label={source.label}>{rows.map(row => <option key={row.switch_key} value={row.switch_key}>{row.title}</option>)}</optgroup> : null; })}</select></label>
     {error && <div className="saveError" role="alert">{error}</div>}
-    <div className="actions"><button type="button" className="btn secondary" onClick={onClose}>Cancel</button><button className="btn" disabled={busy}>Switch meal</button></div>
+    <div className="actions"><button type="button" className="btn secondary" onClick={onClose}>Cancel</button><button type="button" className="btn secondary" disabled={busy} onClick={useLeftovers}>Use leftovers</button><button className="btn" disabled={busy || !libraryKey}>Switch meal</button></div>
   </form></div>;
 }
 
@@ -705,6 +712,8 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   const [queueRows, setQueueRows] = useState([]);
   const [queueOpen, setQueueOpen] = useState(false);
   const [switchDay, setSwitchDay] = useState(null);
+  const [switchLibraryRecords, setSwitchLibraryRecords] = useState([]);
+  const [switchLibraryLoading, setSwitchLibraryLoading] = useState(false);
   const [detailsRecipe, setDetailsRecipe] = useState(null);
   const [cookedUpdatingKey, setCookedUpdatingKey] = useState('');
   const [prepUpdatingKey, setPrepUpdatingKey] = useState('');
@@ -793,6 +802,31 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     const timer = setTimeout(() => setToast(''), 2800);
     return () => clearTimeout(timer);
   }, [toast]);
+  useEffect(() => {
+    if (switchDay === null || switchLibraryRecords.length) return;
+    let cancelled = false;
+    setSwitchLibraryLoading(true);
+    Promise.all(MEAL_LIBRARY_SOURCES.flatMap(source => [sb.from(source.table).select('*').eq('is_deleted', false), sb.from(source.tagsTable).select('*')]))
+      .then(results => {
+        if (cancelled) return;
+        const failed = results.find(result => result.error);
+        if (failed) throw failed.error;
+        const records = MEAL_LIBRARY_SOURCES.flatMap((source, index) => {
+          const tags = Object.fromEntries((results[index * 2 + 1].data || []).map(row => [row.recipe_key, parseTags(row.tags)]));
+          return (results[index * 2].data || []).filter(row => !row.is_deleted).map(row => ({
+            ...row,
+            library_key: source.key,
+            library_label: source.label,
+            switch_key: `${source.key}:${recipeKey(row)}`,
+            switch_tags: tags[recipeKey(row)] || [],
+          }));
+        });
+        setSwitchLibraryRecords(records.sort((left, right) => left.library_label.localeCompare(right.library_label) || left.title.localeCompare(right.title)));
+      })
+      .catch(error => { if (!cancelled) setToast(error.message || 'Could not load all recipe libraries.'); })
+      .finally(() => { if (!cancelled) setSwitchLibraryLoading(false); });
+    return () => { cancelled = true; };
+  }, [switchDay, switchLibraryRecords.length]);
   useEffect(() => {
     const warn = e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
     window.addEventListener('beforeunload', warn);
@@ -1152,8 +1186,8 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     } catch (e) { setToast(e.message || 'Could not reorder that queue.'); }
     finally { setBusy(false); }
   }
-  async function switchMeal(recipe, type, tags) {
-    const day = switchDay;
+  async function switchMeal(recipe, type, tags, selectedDay = switchDay) {
+    const day = selectedDay;
     const current = meals[day - 1];
     if (!day || busy || current?.dirty || current?.is_override) return 'Save the current meal before switching.';
     setBusy(true);
@@ -1193,6 +1227,11 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
   }
   async function chooseLibraryRecipeForDay(index, key) {
     if (busy || loadingWeek || loadError || !key) return;
+    if (key === LEFTOVERS_KEY) {
+      const message = await switchMeal(LEFTOVERS_RECIPE, 'leftovers', [], meals[index]?.meal_number);
+      if (message) setMealErrors(previous => ({ ...previous, [index]: message }));
+      return;
+    }
     const recipe = libraryRecipes.find(row => recipeKey(row) === key);
     const current = meals[index];
     if (!recipe || (current.id && sameRecipe(current, recipe))) return;
@@ -1239,7 +1278,8 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (!meal?.id || meal.dirty) return;
     setBusy(true); setMealErrors(prev => ({ ...prev, [index]: '' }));
     try {
-      const existing = findStoredLibraryRecipe(libraryRecords, meal);
+      const isTemporaryOverride = !!meal.is_override;
+      const existing = isTemporaryOverride ? null : findStoredLibraryRecipe(libraryRecords, meal);
       const key = existing?.recipe_key || recipeKey(meal);
       const queuedRecipe = queueRows.find(row => sameRecipe(row, meal));
       const payload = {
@@ -1247,8 +1287,12 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         extracted_at: meal.extracted_at, rating: meal.rating, notes: meal.notes || '', cooked_at: existing?.cooked_at || new Date().toISOString(),
         has_been_cooked: !!existing?.has_been_cooked, is_deleted: false,
       };
-      const { data: savedToLibrary, error: libraryError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
-      if (libraryError) throw libraryError;
+      let savedToLibrary = null;
+      if (!isTemporaryOverride) {
+        const { data, error: libraryError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
+        if (libraryError) throw libraryError;
+        savedToLibrary = data;
+      }
       const { error: deleteError } = await from('weekly_meals').delete().eq('id', meal.id);
       if (deleteError) throw deleteError;
       let nextQueue = queueRows;
@@ -1264,10 +1308,10 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         if (error) throw error;
         nextMeal = { ...saved, tagsText: recipeTagsFor(front, recipeTags).join(', '), dirty: false };
       }
-      setLibraryRecords(prev => [savedToLibrary, ...prev.filter(row => row.recipe_key !== key)]);
+      if (savedToLibrary) setLibraryRecords(prev => [savedToLibrary, ...prev.filter(row => row.recipe_key !== key)]);
       setQueueRows(nextQueue);
       setMeals(prev => prev.map((row, mealIndex) => mealIndex === index ? nextMeal : row));
-      setGroceryGenerated(false); setToast(`${meal.title} unscheduled and kept in your library`);
+      setGroceryGenerated(false); setToast(isTemporaryOverride ? `${meal.title} unscheduled` : `${meal.title} unscheduled and kept in your library`);
     } catch (e) { setMealErrors(prev => ({ ...prev, [index]: e.message || 'Could not unschedule this recipe. Please retry.' })); }
     finally { setBusy(false); }
   }
@@ -1306,8 +1350,11 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     if (!meal?.id || meal.dirty) return;
     setBusy(true); setMealErrors(prev => ({ ...prev, [index]: '' }));
     try {
-      const existing = findStoredLibraryRecipe(libraryRecords, meal);
-      const key = existing?.recipe_key || recipeKey(meal);
+      const isLeftovers = meal.override_type === 'leftovers';
+      const isTemporaryOverride = !!meal.is_override;
+      const existing = isTemporaryOverride ? null : findStoredLibraryRecipe(libraryRecords, meal);
+      const overrideStored = isTemporaryOverride ? switchLibraryRecords.find(row => sameRecipe(row, meal)) : null;
+      const key = existing?.recipe_key || overrideStored?.recipe_key || recipeKey(meal);
       const queuedRecipe = queueRows.find(row => sameRecipe(row, meal));
       const payload = {
         recipe_key: key, title: meal.title.trim(), source_ref: meal.source_ref.trim(), ingredients: meal.ingredients, method: meal.method || '', servings: existing?.servings ?? queuedRecipe?.servings ?? meal.servings ?? null,
@@ -1315,8 +1362,17 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         cooked_at: markAsTried ? new Date().toISOString() : existing?.cooked_at || meal.cooked_at || new Date().toISOString(),
         has_been_cooked: config.capsule ? !!existing?.has_been_cooked || markAsTried : true, is_deleted: false,
       };
-      const { data: banked, error: bankError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
-      if (bankError) throw bankError;
+      let banked = null;
+      if (!isLeftovers && isTemporaryOverride && meal.override_type?.startsWith('library:')) {
+        const source = MEAL_LIBRARY_SOURCES.find(item => item.key === meal.override_type.slice('library:'.length));
+        const { data, error: bankError } = await sb.from(source?.table || config.tables.meal_recipe_library).update({ has_been_cooked: true, cooked_at: payload.cooked_at }).eq('recipe_key', key).select().single();
+        if (bankError) throw bankError;
+        banked = data;
+      } else if (!isLeftovers && !isTemporaryOverride) {
+        const { data, error: bankError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
+        if (bankError) throw bankError;
+        banked = data;
+      }
       const completedAt = config.advanceWeekOnCook && markAsTried ? new Date().toISOString() : null;
       if (completedAt) {
         const { error: completedError } = await from('weekly_meals').update({ completed_at: completedAt }).eq('id', meal.id);
@@ -1326,7 +1382,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         if (deleteError) throw deleteError;
       }
       let nextQueue = queueRows;
-      if (config.rotateOnCook) {
+      if (config.rotateOnCook && !isTemporaryOverride) {
         const rotationItem = queueRows.find(row => row.id === meal.queue_item_id)
           || queueRows.find(row => Number(row.day_number) === Number(meal.meal_number) && sameRecipe(row, meal))
           || queuedRecipe;
@@ -1343,7 +1399,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
           const queued = await insertQueuedRecipe(queuePayload, meal.meal_number);
           nextQueue = queued.nextQueue;
         }
-      } else if (meal.queue_item_id) {
+      } else if (!isTemporaryOverride && meal.queue_item_id) {
         if (config.capsule) {
           const rotatedPosition = nextQueuePosition(queueRows, meal.meal_number);
           const { error: queueError } = await from('meal_recipe_queue').update({ position: rotatedPosition }).eq('id', meal.queue_item_id);
@@ -1379,7 +1435,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         if (error) throw error;
         nextMeal = { ...saved, tagsText: recipeTagsFor(front, recipeTags).join(', '), dirty: false };
       }
-      setLibraryRecords(prev => [banked, ...prev.filter(r => r.recipe_key !== key)]);
+      if (banked && (!isTemporaryOverride || overrideStored?.library_key === mealType)) setLibraryRecords(prev => [banked, ...prev.filter(r => r.recipe_key !== key)]);
       setQueueRows(nextQueue);
       setMeals(prev => prev.map((m, i) => i === index ? completedAt ? { ...m, completed_at: completedAt, dirty: false } : nextMeal : m));
       setGroceryGenerated(false);
@@ -1560,6 +1616,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     const scheduledDate = config.capsule ? meal.scheduled_for || dateForWeekdayName(activeWeek, calendarDayFor(meal.meal_number)) : dateForWeekDay(activeWeek, meal.meal_number);
     const usesLibraryPicker = config.libraryPicker || config.hasSides;
     const selectedLibraryRecipe = usesLibraryPicker ? libraryRecipes.find(recipe => sameRecipe(recipe, meal)) : null;
+    const selectedMainValue = meal.override_type === 'leftovers' ? LEFTOVERS_KEY : selectedLibraryRecipe ? recipeKey(selectedLibraryRecipe) : '';
     const matchingLibraryRecipes = usesLibraryPicker ? libraryRecipes.filter(recipe => matchesCategory(recipeTags[recipeKey(recipe)] || [], category)) : EMPTY_TAGS;
     const mainRecipeChoices = selectedLibraryRecipe && !matchingLibraryRecipes.some(recipe => recipeKey(recipe) === recipeKey(selectedLibraryRecipe))
       ? [selectedLibraryRecipe, ...matchingLibraryRecipes]
@@ -1568,14 +1625,14 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       onDragOver={e => { if (canDrop) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setDropTarget(meal.meal_number); } }}
       onDragLeave={() => setDropTarget(target => target === meal.meal_number ? null : target)}
       onDrop={e => canDrop && dropRecipe(e, meal.meal_number)}>
-      <summary className="mealSummary"><div><h3 className="dayHeading">{heading || config.dayNames?.[meal.meal_number - 1] || `Day ${meal.meal_number}`}</h3><div className="mealDate">{formatMealDate(scheduledDate)}</div><div className="dayCategory">{completed ? config.completionStatus === 'tried' ? 'Tried record' : 'Cooked record' : paused ? 'Queue paused' : meal.is_override ? `Temporary ${meal.override_type || 'manual'} switch` : category?.name || 'Any recipe'}</div></div><div className={`mealSummaryValue${meal.title.trim() ? '' : ' isEmpty'}`}>{completed ? <><span className="completedLabel">✓ {config.completionStatus === 'tried' ? 'Tried' : 'Cooked'}</span>{meal.title.trim()}</> : paused ? 'Paused' : meal.title.trim() || 'Empty'}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
+      <summary className="mealSummary"><div><h3 className="dayHeading">{heading || config.dayNames?.[meal.meal_number - 1] || `Day ${meal.meal_number}`}</h3><div className="mealDate">{formatMealDate(scheduledDate)}</div><div className="dayCategory">{completed ? config.completionStatus === 'tried' ? 'Tried record' : 'Cooked record' : paused ? 'Queue paused' : meal.override_type === 'leftovers' ? 'Leftovers' : meal.is_override ? 'Temporary library switch' : category?.name || 'Any recipe'}</div></div><div className={`mealSummaryValue${meal.title.trim() ? '' : ' isEmpty'}`}>{completed ? <><span className="completedLabel">✓ {config.completionStatus === 'tried' ? 'Tried' : 'Cooked'}</span>{meal.title.trim()}</> : paused ? 'Paused' : meal.title.trim() || 'Empty'}<span className="mealChevron" aria-hidden="true">⌄</span></div></summary>
       <div className="mealBody">
       {completed ? <><div className="plannerNotice cookedRecordNotice">{config.completionStatus === 'tried' ? 'Made' : 'Cooked'} on {formatCompletedDate(meal.completed_at)}. This record stays with this week even if the recipe is later removed from your library.</div><div className="dayActions"><button className="btn secondary" disabled={busy} onClick={() => setDetailsRecipe(meal)}>View recipe</button></div></> : paused ? <><div className="plannerNotice">Nothing is scheduled for {dayName(meal.meal_number)}. {queuedNext ? `${queuedNext.title} is still first in this queue.` : 'There are no recipes waiting in this queue.'}</div>{mealErrors[index] && <div className="saveError" role="alert">{mealErrors[index]}</div>}<div className="dayActions"><button className="btn" disabled={busy} onClick={() => setQueuePaused(index, false)}>Resume queue</button></div></> : <>
       {!meal.is_override && category?.accepted_tags.length > 0 && <div className="dayRequirement">Requires {category.accepted_tags.join(' or ')}</div>}
       {usesLibraryPicker && <div className="kidsLunchMainLabel">Main</div>}
       {config.capsule && !config.weekNavigation && <label className="tagField scheduleDateField">Scheduled date<input className="input" type="date" aria-label={`Day ${meal.meal_number} scheduled date`} value={meal.scheduled_for || ''} disabled={busy} onChange={e => updateMealField(index, 'scheduled_for', e.target.value)}/></label>}
       {usesLibraryPicker ? <div className="kidsLunchMainPicker">
-        <label className="tagField">Main recipe<select className="input" aria-label={`${dayName(meal.meal_number)} Main recipe`} value={selectedLibraryRecipe ? recipeKey(selectedLibraryRecipe) : ''} disabled={busy} onChange={event => chooseLibraryRecipeForDay(index, event.target.value)}><option value="">Choose from your recipe library…</option>{mainRecipeChoices.map(recipe => <option key={recipeKey(recipe)} value={recipeKey(recipe)}>{recipe.title}</option>)}</select></label>
+        <label className="tagField">Main recipe<select className="input" aria-label={`${dayName(meal.meal_number)} Main recipe`} value={selectedMainValue} disabled={busy} onChange={event => chooseLibraryRecipeForDay(index, event.target.value)}><option value="">Choose from your recipe library…</option><option value={LEFTOVERS_KEY}>Leftovers</option>{mainRecipeChoices.map(recipe => <option key={recipeKey(recipe)} value={recipeKey(recipe)}>{recipe.title}</option>)}</select></label>
         <label className="tagField">Servings needed<input className="input" type="number" min="1" step="1" aria-label={`Day ${meal.meal_number} servings needed`} value={meal.servings ?? ''} disabled={busy} onChange={e => updateMealField(index, 'servings', normalizeServings(e.target.value))} placeholder="Servings needed"/></label>
         {!mainRecipeChoices.length && <div className="hint">Add a matching recipe in the Add a recipe section above.</div>}
       </div> : <div className="fields">
@@ -1656,7 +1713,7 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
     {queueOpen && <QueueManager queue={queueRows} categories={categories} tagMap={recipeTags} busy={busy} onClose={() => setQueueOpen(false)} onTagsSaved={savePastTags} onMove={moveQueueItem} onBump={bumpQueueItem} dayNames={config.dayNames} meals={meals} rotating={config.capsule} mealLabel={config.singular}/>}
     {settingsOpen && <div className="modalBack" role="dialog" aria-modal="true" aria-label="Edit day categories"><div className="modal categoryModal" id="category-editor"><div className="modalHead"><h2 className="sectionTitle">Day categories</h2><button type="button" className="iconBtn" aria-label="Close categories" onClick={() => setSettingsOpen(false)}>×</button></div><CategoryEditor categories={categories} onSave={saveCategories} busy={busy} dayNames={config.dayNames}/></div></div>}
     {sideOptionsOpen && <div className="modalBack" role="dialog" aria-modal="true" aria-label="Edit lunch sides"><div className="modal categoryModal"><div className="modalHead"><h2 className="sectionTitle">Kids lunch sides</h2><button type="button" className="iconBtn" aria-label="Close sides" onClick={() => setSideOptionsOpen(false)}>×</button></div><SideOptionsEditor options={sideOptions} onSave={saveSideOptions} busy={busy}/></div></div>}
-    {switchDay !== null && <SwitchMealModal day={switchDay} library={libraryRecipes} tagMap={recipeTags} busy={busy} onClose={() => setSwitchDay(null)} onSave={switchMeal} rotating={config.capsule}/>}
+    {switchDay !== null && <SwitchMealModal day={switchDay} library={switchLibraryRecords} busy={busy || switchLibraryLoading} onClose={() => setSwitchDay(null)} onSave={switchMeal} rotating={config.capsule}/>}
     {currentDetailsRecipe && <RecipeDetailsModal recipe={currentDetailsRecipe} tags={recipeTags[recipeKey(currentDetailsRecipe)] || EMPTY_TAGS} scheduledDays={recipeDays(meals, currentDetailsRecipe, 'meal_number')} queuedDays={recipeDays(queueRows, currentDetailsRecipe, 'day_number')} busy={busy} cookedBusy={cookedUpdatingKey === recipeKey(currentDetailsRecipe)} prepBusy={prepUpdatingKey === recipeKey(currentDetailsRecipe)} onTagsSaved={savePastTags} onToggleCooked={toggleCookedStatus} onTogglePrep={togglePrepStatus} showPrepStatus onClose={() => setDetailsRecipe(null)} onSave={saveRecipeDetails} statusMode={config.completionStatus || (config.capsule ? 'tried' : 'cooked')} readOnly={!!detailsRecipe?.completed_at}/>}
     {manualOpen && <ManualRecipeModal busy={busy} onClose={() => setManualOpen(false)} onSave={saveManualRecipe} autoQueue={config.autoQueue}/>}
     {toast && <div className="toast" role="status">{toast}</div>}
@@ -1846,6 +1903,59 @@ function TodayAtGlance() {
   return <><section className="card todayFood"><div className="todayFoodHeader"><div><div className="plannerMonth">{day} at a glance · {formatMealDate(selectedDate, { year: 'numeric' })}</div><h2 className="sectionTitle">{isToday ? 'Today’s food' : 'Food for this date'}</h2></div><div className="dayAtGlanceControls"><button type="button" className="iconBtn" aria-label="Previous date" onClick={() => moveDate(-1)}>‹</button><input className="input" type="date" aria-label="Choose date for meal overview" value={selectedDate} onChange={event => event.target.value && setSelectedDate(event.target.value)}/><button type="button" className="iconBtn" aria-label="Next date" onClick={() => moveDate(1)}>›</button>{!isToday && <button type="button" className="btn ghost" onClick={() => setSelectedDate(localISODate(new Date()))}>Today</button>}</div></div>{items.length ? <div className="todayFoodGrid">{items.map((item, index) => item.recipe ? <button type="button" className={`todayFoodItem${item.recipe.completed_at ? ' isCompleted' : ''}`} aria-label={`View recipe: ${item.title}`} onClick={() => setDetailsRecipe(item.recipe)} key={`${item.label}-${index}`}><span>{item.label}</span><strong>{item.title}</strong></button> : <div className="todayFoodItem" key={`${item.label}-${index}`}><span>{item.label}</span><strong>{item.title}</strong></div>)}</div> : <div className="empty">Nothing is assigned for {isToday ? 'today' : 'this date'} yet.</div>}</section>{detailsRecipe && createPortal(<div className="meal-planner"><RecipeDetailsModal recipe={detailsRecipe} tags={EMPTY_TAGS} scheduledDays={EMPTY_TAGS} queuedDays={EMPTY_TAGS} busy={false} cookedBusy={false} onTagsSaved={async () => ''} onToggleCooked={async () => ''} onClose={() => setDetailsRecipe(null)} onSave={async () => ''} showCookedStatus={false} readOnly/></div>, document.body)}</>;
 }
 
+function DefrostToday() {
+  const targetDate = addDays(localISODate(new Date()), 2);
+  const [items, setItems] = useState([]);
+  const [completions, setCompletions] = useState([]);
+  const [busyKeys, setBusyKeys] = useState(new Set());
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [detailsRecipe, setDetailsRecipe] = useState(null);
+  const isCompleted = item => completions.some(row => row.meal_type === item.mealType && row.week_of === item.weekOf && Number(row.meal_number) === item.mealNumber && row.recipe_key === item.recipeKey);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError('');
+    Promise.all([
+      loadMealPlanTasks(sb, targetDate, targetDate),
+      sb.from('weekly_defrost_completions').select('*').eq('scheduled_for', targetDate),
+    ]).then(([snapshot, completionResult]) => {
+      if (cancelled) return;
+      if (completionResult.error) throw completionResult.error;
+      setItems(snapshot.defrost); setCompletions(completionResult.data || []);
+    }).catch(reason => { if (!cancelled) setError(reason.message || 'Could not load the defrost checklist.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [targetDate]);
+
+  async function toggleCompleted(item) {
+    const key = mealTaskKey(item);
+    if (busyKeys.has(key)) return;
+    setBusyKeys(current => new Set(current).add(key)); setError('');
+    try {
+      if (isCompleted(item)) {
+        const { error: removeError } = await sb.from('weekly_defrost_completions').delete()
+          .eq('meal_type', item.mealType).eq('week_of', item.weekOf).eq('meal_number', item.mealNumber).eq('recipe_key', item.recipeKey);
+        if (removeError) throw removeError;
+        setCompletions(current => current.filter(row => !(row.meal_type === item.mealType && row.week_of === item.weekOf && Number(row.meal_number) === item.mealNumber && row.recipe_key === item.recipeKey)));
+      } else {
+        const payload = { meal_type: item.mealType, week_of: item.weekOf, meal_number: item.mealNumber, scheduled_for: item.scheduledFor, recipe_key: item.recipeKey, completed_at: new Date().toISOString() };
+        const { data, error: saveError } = await sb.from('weekly_defrost_completions').upsert(payload, { onConflict: 'meal_type,week_of,meal_number,recipe_key' }).select().single();
+        if (saveError) throw saveError;
+        setCompletions(current => [...current.filter(row => !(row.meal_type === item.mealType && row.week_of === item.weekOf && Number(row.meal_number) === item.mealNumber && row.recipe_key === item.recipeKey)), data || payload]);
+      }
+    } catch (reason) { setError(reason.message || 'Could not update this defrost item. Please retry.'); }
+    finally { setBusyKeys(current => { const next = new Set(current); next.delete(key); return next; }); }
+  }
+
+  if (!loading && !error && !items.length) return null;
+  return <><section className="card weeklyPrep defrostToday" aria-labelledby="defrost-today-title">
+    <div className="weeklyPrepHead"><div><div className="plannerMonth">For {formatMealDate(targetDate, { weekday: 'long' })}</div><h2 className="sectionTitle" id="defrost-today-title">Defrost today</h2><p className="small">Meat and fish scheduled in two days appear here automatically.</p></div></div>
+    {error && <div className="saveError" role="alert">{error}</div>}
+    {loading ? <div className="empty">Checking meals in two days…</div> : <div className="weeklyPrepList">{items.map(item => { const done = isCompleted(item); return <div className={`weeklyPrepItem${done ? ' isDone' : ''}`} key={mealTaskKey(item)}><button type="button" className="weeklyPrepRecipe" aria-label={`View defrost recipe: ${item.recipe.title}`} onClick={() => setDetailsRecipe(item.recipe)}><span><b>{item.label}</b><small>{formatMealDate(item.scheduledFor)}</small></span><strong>{item.recipe.title}</strong></button><label className="prepTick weeklyPrepTick"><input type="checkbox" checked={done} disabled={busyKeys.has(mealTaskKey(item))} onChange={() => toggleCompleted(item)}/><span>{done ? 'Defrosted' : 'To defrost'}</span></label></div>; })}</div>}
+  </section>{detailsRecipe && createPortal(<div className="meal-planner"><RecipeDetailsModal recipe={detailsRecipe} tags={EMPTY_TAGS} scheduledDays={EMPTY_TAGS} queuedDays={EMPTY_TAGS} busy={false} cookedBusy={false} onTagsSaved={async () => ''} onToggleCooked={async () => ''} onClose={() => setDetailsRecipe(null)} onSave={async () => ''} showCookedStatus={false} readOnly/></div>, document.body)}</>;
+}
+
 function WeeklyMealPrep() {
   const [week, setWeek] = useState(defaultGroceryWeek);
   const [items, setItems] = useState([]);
@@ -1863,36 +1973,12 @@ function WeeklyMealPrep() {
     let cancelled = false;
     setLoading(true); setError('');
     Promise.all([
-      sb.from('breakfast_weekly_meals').select('*').eq('week_of', week).gte('scheduled_for', start).lte('scheduled_for', end).order('scheduled_for').order('meal_number'),
-      sb.from('breakfast_recipe_library').select('*'),
-      sb.from('kids_lunch_weekly_meals').select('*').eq('week_of', week).gte('scheduled_for', start).lte('scheduled_for', end).order('scheduled_for').order('meal_number'),
-      sb.from('kids_lunch_recipe_library').select('*'),
-      sb.from('weekly_meals').select('*').eq('week_of', week).order('meal_number'),
-      sb.from('meal_recipe_library').select('*'),
+      loadMealPlanTasks(sb, start, end),
       sb.from('weekly_prep_completions').select('*').eq('week_of', week).order('scheduled_for'),
-    ]).then(([breakfastMealsResult, breakfastLibraryResult, lunchMealsResult, lunchLibraryResult, dinnerMealsResult, dinnerLibraryResult, completionResult]) => {
+    ]).then(([snapshot, completionResult]) => {
       if (cancelled) return;
-      const results = [breakfastMealsResult, breakfastLibraryResult, lunchMealsResult, lunchLibraryResult, dinnerMealsResult, dinnerLibraryResult, completionResult];
-      const failed = results.find(result => result.error);
-      if (failed) throw failed.error;
-      const prepItems = (meals, library, mealType, labelFor, dateForMeal = meal => meal.scheduled_for) => {
-        const prepLibrary = (library || []).filter(recipe => !recipe.is_deleted && recipe.requires_prep);
-        return (meals || []).filter(meal => !meal.completed_at).map(meal => {
-          const scheduledFor = dateForMeal(meal);
-          const recipe = prepLibrary.find(row => sameRecipe(row, meal));
-          return recipe && scheduledFor >= start && scheduledFor <= end
-            ? { meal: { ...meal, scheduled_for: scheduledFor }, recipe, mealType, label: labelFor(meal) }
-            : null;
-        }).filter(Boolean);
-      };
-      const breakfast = prepItems(breakfastMealsResult.data, breakfastLibraryResult.data, 'breakfast', meal => {
-        const slot = BREAKFAST_SLOTS.find(item => item.day_number === Number(meal.meal_number));
-        return slot?.audience === 'shared' ? 'Breakfast' : `Breakfast · ${slot?.audience || 'shared'}`;
-      });
-      const lunches = prepItems(lunchMealsResult.data, lunchLibraryResult.data, 'kids_lunch', () => 'Kids lunch');
-      const dinners = prepItems(dinnerMealsResult.data, dinnerLibraryResult.data, 'dinner', () => 'Dinner', meal => dateForWeekDay(meal.week_of || week, meal.meal_number));
-      const next = [...breakfast, ...lunches, ...dinners].sort((left, right) => String(left.meal.scheduled_for).localeCompare(String(right.meal.scheduled_for)) || left.label.localeCompare(right.label));
-      setItems(next); setCompletions(completionResult.data || []);
+      if (completionResult.error) throw completionResult.error;
+      setItems(snapshot.prep); setCompletions(completionResult.data || []);
     }).catch(reason => { if (!cancelled) { setItems([]); setCompletions([]); setError(reason.message || 'Could not load this week’s prep recipes.'); } }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [week, start, end]);
@@ -2066,6 +2152,7 @@ export default function MealPlanner({ onDirtyChange, onPathChange } = {}) {
   return <div className="meal-planner plannerTransition"><div className="app"><div className="shell">
     <header className="plannerHeader plannerHomeHeader"><div className="plannerMonth">Make space for what matters</div><h1 className="brand">Meal Planner<span className="brandDot">.</span></h1><p className="plannerHomeIntro">What would you like to plan?</p></header>
     <TodayAtGlance/>
+    <DefrostToday/>
     <WeeklyMealPrep/>
     <SmartGroceryList/>
     <div className="plannerChoices">
