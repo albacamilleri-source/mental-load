@@ -1,6 +1,6 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
-import { ThingsToDoScreen } from "./App";
+import { PlacesToGoScreen } from "./App";
 
 const mockFrom = jest.fn();
 jest.mock("./MealPlanner", () => ({ __esModule: true, default: () => null }));
@@ -38,13 +38,13 @@ beforeEach(async () => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   inserted = null; saveError = ""; mockFrom.mockImplementation(queryFor);
   container = document.createElement("div"); document.body.appendChild(container); root = createRoot(container);
-  await act(async () => root.render(<ThingsToDoScreen/>));
+  await act(async () => root.render(<PlacesToGoScreen/>));
 });
 
 afterEach(async () => { await act(async () => root.unmount()); container.remove(); jest.restoreAllMocks(); });
 
-test("adds a place from the Things To Do screen and displays it immediately", async () => {
-  await act(async () => container.querySelector('[aria-label="Add a place to Things To Do"]').click());
+test("adds a place from the Places to Go screen and displays it immediately", async () => {
+  await act(async () => container.querySelector('[aria-label="Add a place to Places to Go"]').click());
   await act(async () => {
     change("Place name", "Playmobil FunPark");
     change("Place type", "Play Area");
@@ -58,7 +58,7 @@ test("adds a place from the Things To Do screen and displays it immediately", as
 
 test("keeps the place form open and shows a useful save error", async () => {
   saveError = "Database unavailable";
-  await act(async () => container.querySelector('[aria-label="Add a place to Things To Do"]').click());
+  await act(async () => container.querySelector('[aria-label="Add a place to Places to Go"]').click());
   await act(async () => change("Place name", "New park"));
   await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "Save place").click());
   expect(container.querySelector('[role="alert"]').textContent).toContain("Database unavailable");

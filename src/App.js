@@ -3447,7 +3447,7 @@ function CalendarScreen() {
 
 
 
-// ─── THINGS TO DO SCREEN ──────────────────────────────────────────────────────
+// ─── PLACES TO GO SCREEN ──────────────────────────────────────────────────────
 const PLACES = [
   { name: "Aquarium", type: "Activity", setting: "Indoor" },
   { name: "Playtopia", type: "Activity", setting: "Indoor" },
@@ -3521,7 +3521,7 @@ const TYPE_COLORS = {
   "Stroller walk": "var(--josh)",
 };
 
-export function ThingsToDoScreen() {
+export function PlacesToGoScreen() {
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [setting, setSetting] = useState("All");
@@ -3574,10 +3574,10 @@ export function ThingsToDoScreen() {
     <div className="fade" style={{ padding: "0 0 100px" }}>
       <div style={{ padding: "72px 20px 18px", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Things To Do<span style={{ color: "var(--sage)" }}>.</span></div>
+          <div style={{ fontFamily: "'Lora', Georgia, serif", fontSize: 34, fontWeight: 400, color: "var(--text)", marginBottom: 4 }}>Places to Go<span style={{ color: "var(--sage)" }}>.</span></div>
           <div style={{ fontSize: 10, color: "var(--muted)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.22em", textTransform: "uppercase" }}>{filtered.length} places</div>
         </div>
-        <button type="button" aria-label="Add a place to Things To Do" onClick={() => { setAdding(true); setError(""); }} disabled={adding} style={{ border: "1px solid transparent", borderRadius: 10, padding: "10px 14px", background: adding ? "var(--surface2)" : "var(--sage)", color: adding ? "var(--muted)" : "white", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>+ Add place</button>
+        <button type="button" aria-label="Add a place to Places to Go" onClick={() => { setAdding(true); setError(""); }} disabled={adding} style={{ border: "1px solid transparent", borderRadius: 10, padding: "10px 14px", background: adding ? "var(--surface2)" : "var(--sage)", color: adding ? "var(--muted)" : "white", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>+ Add place</button>
       </div>
 
       {adding && <form aria-label="New place" onSubmit={addPlace} style={{ margin: "0 20px 16px", padding: 16, borderRadius: 14, background: "var(--surface)", border: "1px solid var(--border)", display: "grid", gap: 10 }}>
@@ -3877,7 +3877,7 @@ const NAV_MORE = [
   { key: "meal-planner", label: "Meal Planner", icon: "♧" },
   { key: "plan",     label: "Plan",    icon: "◷", albaOnly: true },
   { key: "connect",  label: "Connect", icon: "♡", albaOnly: true },
-  { key: "todo",     label: "Do",      icon: "◉", albaOnly: true },
+  { key: "places",   label: "Places to Go", icon: "◉", albaOnly: true },
   { key: "freetime", label: "Me",      icon: "◌", albaOnly: true },
   { key: "kidstime", label: "Kids",    icon: "☆", albaOnly: true },
 ];
@@ -4203,7 +4203,7 @@ function AppInner() {
     tasks: <TasksScreen who={who} />,
     plan: <PlanScreen />,
     connect: <ConnectScreen />,
-    todo: <ThingsToDoScreen />,
+    places: <PlacesToGoScreen />,
     freetime: <FreeTimeScreen />,
     kidstime: <KidsTimeScreen />,
   };
