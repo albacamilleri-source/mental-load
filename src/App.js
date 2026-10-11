@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import MealPlanner from "./MealPlanner";
+import { loadMealPlanTasks, mealTaskKey } from "./mealTasks";
 
 
 // ─── HAPTIC FEEDBACK ──────────────────────────────────────────────────────────
@@ -211,15 +212,20 @@ const weeklyKey = () => {
 const monthlyKey = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Malta" }).slice(0, 7);
 
 // ─── DATE FORMAT CONVERSION ────────────────────────────────────────────────────
-// Every due_date in this app is stored as DD/MM/YYYY, but native <input type="date">
-// pickers only accept/return ISO (YYYY-MM-DD). Convert at the UI boundary only —
-// the database and every matching/comparison in the app stays DD/MM/YYYY.
-const toISODate = (ddmmyyyy) => {
+// Native entries use DD/MM/YYYY, while automations can send ISO dates or timestamps.
+// Normalise every supported value before displaying or comparing dates.
+export const toISODate = (ddmmyyyy) => {
   if (!ddmmyyyy) return "";
-  const parts = ddmmyyyy.split("/");
-  if (parts.length !== 3) return "";
-  const [d, m, y] = parts;
-  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  const value = String(ddmmyyyy).trim();
+  const isoMatch = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2].padStart(2, "0")}-${isoMatch[3].padStart(2, "0")}`;
+  const parts = value.split("/");
+  if (parts.length === 3) {
+    const [d, m, y] = parts;
+    if (d && m && y) return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toLocaleDateString("sv-SE", { timeZone: "Europe/Malta" });
 };
 const fromISODate = (iso) => {
   if (!iso) return "";
@@ -232,9 +238,9 @@ const fromISODate = (iso) => {
 // Calculate overdue state in the UI so it stays accurate as the date changes,
 // without relying on a database field being refreshed.
 const isPastDue = (ddmmyyyy) => {
-  if (!ddmmyyyy) return false;
-  const [d, m, y] = ddmmyyyy.split("/").map(Number);
-  if (!d || !m || !y) return false;
+  const iso = toISODate(ddmmyyyy);
+  if (!iso) return false;
+  const [y, m, d] = iso.split("-").map(Number);
   const due = new Date(y, m - 1, d);
   due.setHours(0, 0, 0, 0);
   const today = new Date();
@@ -808,26 +814,44 @@ function SuggestedTasks({ who }) {
   // Same period keys the Month/Week screens use — so completions stay in sync both ways
   const mKey = monthlyKey();
   const wKey = weeklyKey();
+  const mealTaskStart = dailyKey();
+  const mealTaskDate = amount => {
+    const date = new Date(`${mealTaskStart}T12:00:00`);
+    date.setDate(date.getDate() + amount);
+    return date.toLocaleDateString("sv-SE", { timeZone: "Europe/Malta" });
+  };
+  const mealTaskEnd = mealTaskDate(6);
+  const defrostTarget = mealTaskDate(2);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [
-      { data: sugTasks },
-      { data: sugCompletions },
-      { data: routineTasks },
-      { data: monthlyCompletions },
-      { data: weeklyCompletions },
-    ] = await Promise.all([
-      sb.from("suggested_tasks").select("*").order("day_of_week").order("sort_order"),
-      sb.from("suggested_completions").select("task_id").eq("week_key", weekKey),
-      sb.from("routine_tasks").select("*").in("type", ["monthly", "weekly_other"]).order("sort_order"),
-      sb.from("routine_completions").select("task_id").eq("period_key", mKey),
-      sb.from("routine_completions").select("task_id").eq("period_key", wKey),
-    ]);
+    try {
+      const [
+        { data: sugTasks },
+        { data: sugCompletions },
+        { data: routineTasks },
+        { data: monthlyCompletions },
+        { data: weeklyCompletions },
+        mealTasks,
+        { data: prepCompletions },
+        { data: defrostCompletions },
+      ] = await Promise.all([
+        sb.from("suggested_tasks").select("*").order("day_of_week").order("sort_order"),
+        sb.from("suggested_completions").select("task_id").eq("week_key", weekKey),
+        sb.from("routine_tasks").select("*").in("type", ["monthly", "weekly_other"]).order("sort_order"),
+        sb.from("routine_completions").select("task_id").eq("period_key", mKey),
+        sb.from("routine_completions").select("task_id").eq("period_key", wKey),
+        loadMealPlanTasks(sb, mealTaskStart, mealTaskEnd),
+        sb.from("weekly_prep_completions").select("*").gte("scheduled_for", mealTaskStart).lte("scheduled_for", mealTaskEnd),
+        sb.from("weekly_defrost_completions").select("*").eq("scheduled_for", defrostTarget),
+      ]);
 
     const sugDone = new Set((sugCompletions || []).map(r => r.task_id));
     const monthDone = new Set((monthlyCompletions || []).map(r => r.task_id));
     const weekDone = new Set((weeklyCompletions || []).map(r => r.task_id));
+    const completionKey = row => `${row.meal_type}:${row.week_of}:${Number(row.meal_number)}:${row.recipe_key}`;
+    const prepDone = new Set((prepCompletions || []).map(completionKey));
+    const defrostDone = new Set((defrostCompletions || []).map(completionKey));
 
     // Days of week in order Mon=1 through Sun=0 → convert to Mon=0 ... Sun=6
     const toIdx = d => d === 0 ? 6 : d - 1;
@@ -852,9 +876,21 @@ function SuggestedTasks({ who }) {
       .filter(t => t.type === "weekly_other" && !weekDone.has(t.id))
       .map(t => ({ id: t.id, text: t.text, source: "weekly_admin", color: "var(--admin)", badge: "weekly", isDone: false }));
 
-    setItems([...sugVisible, ...monthlyVisible, ...weeklyAdminVisible]);
-    setLoading(false);
-  }, [weekKey, mKey, wKey, dow]);
+    const prepVisible = (mealTasks.prep || [])
+      .filter(task => !prepDone.has(mealTaskKey(task)))
+      .map(task => ({ id: mealTaskKey(task), text: `Prep ${task.recipe.title} for ${task.label.toLowerCase()}`, source: "meal_prep", color: "var(--planning)", badge: task.scheduledFor, isDone: false, mealTask: task }));
+
+    const defrostVisible = (mealTasks.defrost || [])
+      .filter(task => task.scheduledFor === defrostTarget && !defrostDone.has(mealTaskKey(task)))
+      .map(task => ({ id: mealTaskKey(task), text: `Defrost ${task.recipe.title}`, source: "meal_defrost", color: "var(--sage)", badge: `for ${task.scheduledFor}`, isDone: false, mealTask: task }));
+
+      setItems([...defrostVisible, ...prepVisible, ...sugVisible, ...monthlyVisible, ...weeklyAdminVisible]);
+    } catch (error) {
+      console.error("Suggested tasks failed to load:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [weekKey, mKey, wKey, dow, mealTaskStart, mealTaskEnd, defrostTarget]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -877,6 +913,13 @@ function SuggestedTasks({ who }) {
       setItems(its => its.filter(i => !(i.source === "weekly_admin" && i.id === item.id)));
       const { error } = await sb.from("routine_completions").upsert({ task_id: item.id, period_key: wKey, completed_by: who });
       if (error) { console.error("Weekly admin toggle failed:", error); setItems(its => [...its, item]); }
+    } else if (item.source === "meal_prep" || item.source === "meal_defrost") {
+      const task = item.mealTask;
+      const table = item.source === "meal_prep" ? "weekly_prep_completions" : "weekly_defrost_completions";
+      setItems(its => its.filter(i => !(i.source === item.source && i.id === item.id)));
+      const payload = { meal_type: task.mealType, week_of: task.weekOf, meal_number: task.mealNumber, scheduled_for: task.scheduledFor, recipe_key: task.recipeKey, completed_at: new Date().toISOString() };
+      const { error } = await sb.from(table).upsert(payload, { onConflict: "meal_type,week_of,meal_number,recipe_key" });
+      if (error) { console.error("Meal task toggle failed:", error); setItems(its => [...its, item]); }
     }
   };
 
@@ -1020,12 +1063,6 @@ function TodayScreen({ who }) {
   const pKey = dailyKey();
   const color = tab === "morning" ? "var(--morning)" : "var(--evening)";
 
-  // Today's date in DD/MM/YYYY for matching next actions
-  const todayDate = (() => {
-    const d = new Date();
-    return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-  })();
-
   // Meeting date from localStorage
   const meetingDate = localStorage.getItem("hb_meeting_date") || "";
   const todayISO = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Malta" });
@@ -1067,10 +1104,13 @@ function TodayScreen({ who }) {
     const loadPlans = async () => {
       setPlansLoading(true);
       const { data: actions } = await sb.from("next_actions")
-        .select("*").eq("done", false).eq("due_date", todayDate);
+        .select("*").eq("done", false).not("due_date", "is", null);
       const { data: monthly } = await sb.from("routine_tasks")
-        .select("*").eq("type", "monthly").not("due_date", "is", null).eq("due_date", todayDate);
-      setTodayPlans([...(actions || []).filter(action => !completingPlanIdsRef.current.has(action.id)), ...(monthly || [])]);
+        .select("*").eq("type", "monthly").not("due_date", "is", null);
+      setTodayPlans([
+        ...(actions || []).filter(action => toISODate(action.due_date) === todayISO && !completingPlanIdsRef.current.has(action.id)),
+        ...(monthly || []).filter(task => toISODate(task.due_date) === todayISO),
+      ]);
       setPlansLoading(false);
     };
     loadPlans();
@@ -1079,7 +1119,7 @@ function TodayScreen({ who }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "next_actions" }, loadPlans)
       .subscribe();
     return () => sb.removeChannel(sub);
-  }, [todayDate]);
+  }, [todayISO]);
 
   const completeTodayPlan = async (task) => {
     if (completingPlanIdsRef.current.has(task.id)) return true;
@@ -1958,7 +1998,7 @@ export function TasksScreen({ who }) {
   });
 
   const formatDate = (d) => `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-  const tasksForDay = (d) => tasks.filter(t => t.due_date === formatDate(d) && !t.done);
+  const tasksForDay = (d) => tasks.filter(t => toISODate(t.due_date) === toISODate(formatDate(d)) && !t.done);
   const unscheduled = tasks.filter(t => !t.due_date && !t.done);
 
   return (
