@@ -1211,9 +1211,24 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
           day_number: day, position: frontQueuePosition(queueRows, day), title: current.title.trim(), source_ref: current.source_ref.trim(),
           ingredients: current.ingredients, method: current.method || '', servings: storedRecipe?.servings ?? current.servings ?? null, extracted_at: current.extracted_at, rating: current.rating, notes: current.notes || '',
         };
-        const { data: preserved, error } = await from('meal_recipe_queue').insert(payload).select().single();
-        if (error) throw error;
-        nextQueue = [...queueRows, preserved];
+        let existingQueueItem = queueRows.find(row => sameRecipe(row, current));
+        if (!existingQueueItem) {
+          const { data, error: lookupError } = await from('meal_recipe_queue').select('*').eq('source_ref', current.source_ref.trim()).maybeSingle();
+          if (lookupError) throw lookupError;
+          existingQueueItem = data;
+        }
+        if (existingQueueItem) {
+          const { data: preserved, error } = await from('meal_recipe_queue').update(payload).eq('id', existingQueueItem.id).select().single();
+          if (error) throw error;
+          const updated = preserved || { ...existingQueueItem, ...payload };
+          nextQueue = queueRows.some(row => row.id === existingQueueItem.id)
+            ? queueRows.map(row => row.id === existingQueueItem.id ? updated : row)
+            : [...queueRows, updated];
+        } else {
+          const { data: preserved, error } = await from('meal_recipe_queue').insert(payload).select().single();
+          if (error) throw error;
+          nextQueue = [...queueRows, preserved];
+        }
       }
       const override = { ...recipe, meal_number: day, scheduled_for: current.scheduled_for || defaultScheduledFor(day), queue_item_id: null, is_override: true, override_type: type };
       await persistMeal(override, tags, true);
