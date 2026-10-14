@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import MealPlanner from "./MealPlanner";
-import { loadMealPlanTasks, mealTaskKey } from "./mealTasks";
+import { loadMealPlanTasks, mealTaskKey, sundayWeekRange } from "./mealTasks";
 
 
 // ─── HAPTIC FEEDBACK ──────────────────────────────────────────────────────────
@@ -814,13 +814,13 @@ function SuggestedTasks({ who }) {
   // Same period keys the Month/Week screens use — so completions stay in sync both ways
   const mKey = monthlyKey();
   const wKey = weeklyKey();
-  const mealTaskStart = dailyKey();
+  const todayKey = dailyKey();
+  const { start: mealTaskStart, end: mealTaskEnd } = sundayWeekRange(todayKey);
   const mealTaskDate = amount => {
-    const date = new Date(`${mealTaskStart}T12:00:00`);
+    const date = new Date(`${todayKey}T12:00:00`);
     date.setDate(date.getDate() + amount);
     return date.toLocaleDateString("sv-SE", { timeZone: "Europe/Malta" });
   };
-  const mealTaskEnd = mealTaskDate(6);
   const defrostTarget = mealTaskDate(2);
 
   const load = useCallback(async () => {

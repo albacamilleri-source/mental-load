@@ -270,8 +270,7 @@ test('Breakfast library recipes can be marked and unmarked as requiring prep', a
 
 test('Meal Planner overview lists scheduled prep recipes and records weekly completion separately', async () => {
   const weekStart = new Date();
-  if (weekStart.getDay() === 0) weekStart.setDate(weekStart.getDate() + 1);
-  else weekStart.setDate(weekStart.getDate() - (weekStart.getDay() - 1));
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
   const scheduledFor = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
   const prepMeal = {...sample(87), week_of:'kids-lunch-capsule', scheduled_for:scheduledFor};
   const ordinaryMeal = {...sample(88), week_of:'kids-lunch-capsule', scheduled_for:scheduledFor};
@@ -285,7 +284,8 @@ test('Meal Planner overview lists scheduled prep recipes and records weekly comp
   breakfastCurrent = [breakfastPrep];
   breakfastPast = [breakfastPrep];
   breakfastLibrary = [{...breakfastPrep, recipe_key:recipeKey(breakfastPrep), requires_prep:true, is_deleted:false}];
-  const dinnerPrep = {...sample(90), week_of:isoWeekFor(weekStart), meal_number:2};
+  const dinnerDate = new Date(weekStart); dinnerDate.setDate(dinnerDate.getDate() + 1);
+  const dinnerPrep = {...sample(90), week_of:isoWeekFor(dinnerDate), meal_number:1};
   current = [dinnerPrep];
   past = [dinnerPrep];
   library = [{...dinnerPrep, recipe_key:recipeKey(dinnerPrep), requires_prep:true, is_deleted:false}];
@@ -298,11 +298,12 @@ test('Meal Planner overview lists scheduled prep recipes and records weekly comp
   expect(prepSection.textContent).toContain('Breakfast · adults');
   expect(prepSection.textContent).toContain('Dinner');
   expect(prepSection.textContent).not.toContain('Recipe 88');
-  const firstTick = prepSection.querySelector('.weeklyPrepTick input');
-  await click(firstTick);
-  expect(writes.find(write => write.table === 'weekly_prep_completions' && write.value)).toMatchObject({value:{week_of:isoWeekFor(weekStart),completed_at:expect.any(String)}});
-  expect(firstTick.checked).toBe(true);
-  expect(firstTick.closest('label').textContent).toContain('Prepped');
+  const lunchPrepRow = prepSection.querySelector('[aria-label="View prep recipe: Recipe 87"]').closest('.weeklyPrepItem');
+  const lunchPrepTick = lunchPrepRow.querySelector('.weeklyPrepTick input');
+  await click(lunchPrepTick);
+  expect(writes.find(write => write.table === 'weekly_prep_completions' && write.value)).toMatchObject({value:{week_of:'kids-lunch-capsule',scheduled_for:scheduledFor,completed_at:expect.any(String)}});
+  expect(lunchPrepTick.checked).toBe(true);
+  expect(lunchPrepTick.closest('label').textContent).toContain('Prepped');
   await click(prepSection.querySelector('[aria-label="View prep recipe: Recipe 87"]'));
   expect(document.body.querySelector('[aria-label="Recipe details for Recipe 87"]')).not.toBeNull();
 });
@@ -1199,6 +1200,15 @@ test('day at a glance only shows capsule meals scheduled for the selected calend
   expect(container.querySelector('.todayFood').textContent).not.toContain('Breakfast for next week');
   await change('Choose date for meal overview', iso(nextWeek));
   expect(container.querySelector('.todayFood').textContent).toContain('Breakfast for next week');
+});
+
+test('day at a glance hides a scheduled dinner when that day is paused', async () => {
+  const today = new Date();
+  const dayIndex = today.getDay() || 7;
+  current = [{...sample(dayIndex), title:'Paused dinner should stay hidden', week_of:currentWeek(), meal_number:dayIndex}];
+  dayPauses = [{week_of:currentWeek(),day_number:dayIndex,is_paused:true}];
+  await act(async () => { root.render(<MealPlanner/>); });
+  expect(container.querySelector('.todayFood').textContent).not.toContain('Paused dinner should stay hidden');
 });
 
 test('Dinners uses seven named weekday slots', async () => {
