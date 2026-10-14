@@ -1,4 +1,4 @@
-import { loadMealPlanTasks, mealNeedsDefrosting } from './mealTasks';
+import { loadMealPlanTasks, mealNeedsDefrosting, sundayWeekRange } from './mealTasks';
 
 function clientWith(dataByTable) {
   return {
@@ -31,4 +31,20 @@ test('scheduled meals use every library for prep and defrost checklists', async 
   expect(result.prep).toHaveLength(1);
   expect(result.defrost).toHaveLength(1);
   expect(result.defrost[0]).toMatchObject({mealType:'dinner',scheduledFor:'2026-10-14',recipeKey:'adult-lunch-chicken',label:'Dinner'});
+});
+
+test('Sunday prep weeks run through Saturday', () => {
+  expect(sundayWeekRange('2026-10-14')).toEqual({start:'2026-10-11',end:'2026-10-17'});
+  expect(sundayWeekRange('2026-10-18')).toEqual({start:'2026-10-18',end:'2026-10-24'});
+});
+
+test('paused scheduled meals never create prep or defrost tasks', async () => {
+  const recipe = {recipe_key:'paused-chicken',title:'Chicken Dinner',source_ref:'Book p.1',requires_prep:true,is_deleted:false,ingredients:[{name:'chicken'}]};
+  const client = clientWith({
+    weekly_meals: [{id:'dinner-5',week_of:'2026-W42',meal_number:5,title:'Chicken Dinner',source_ref:'Book p.1'}],
+    meal_day_pauses: [{week_of:'2026-W42',day_number:5,is_paused:true}],
+    meal_recipe_library: [recipe],
+  });
+  const result = await loadMealPlanTasks(client, '2026-10-16', '2026-10-16');
+  expect(result).toEqual({prep:[],defrost:[]});
 });

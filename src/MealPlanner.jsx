@@ -7,7 +7,7 @@ import { BREAKFAST_SLOTS, PLANNER_CONFIG } from './plannerConfig';
 import { extractionErrorMessage } from "./extractionError";
 import { chooseQueueDay, frontQueuePosition, nextQueuePosition, queueForDay, queueInsertionBeforeTail, recipeTagsFor } from "./mealQueue";
 import { buildSmartGroceryRecipes, smartGroceryText } from './smartGrocery';
-import { loadMealPlanTasks, mealTaskKey, MEAL_LIBRARY_SOURCES } from './mealTasks';
+import { loadMealPlanTasks, mealTaskKey, MEAL_LIBRARY_SOURCES, sundayWeekRange } from './mealTasks';
 
 
 const SUPABASE_URL = "https://qvibdnrfywisvfsqgqux.supabase.co";
@@ -115,6 +115,14 @@ function formatWeekLabel(weekString) {
   const fmt = (d, withMonth = true) => d.toLocaleDateString("en-GB", withMonth ? { month:"short", day:"numeric" } : { day:"numeric" });
   const sameMonth = start.getMonth() === end.getMonth();
   return `Week of ${fmt(start)}–${sameMonth ? fmt(end,false) : fmt(end)}`;
+}
+
+function formatSundayWeekLabel(startValue) {
+  const start = localDate(startValue);
+  if (!start) return '';
+  const end = new Date(start); end.setDate(end.getDate() + 6);
+  const fmt = (date, withMonth = true) => date.toLocaleDateString('en-GB', withMonth ? { month: 'short', day: 'numeric' } : { day: 'numeric' });
+  return `Week of ${fmt(start)}–${start.getMonth() === end.getMonth() ? fmt(end, false) : fmt(end)}`;
 }
 
 function localISODate(date) {
@@ -1890,12 +1898,20 @@ function TodayAtGlance() {
       sb.from('breakfast_weekly_meals').select('*').eq('week_of', isoWeek(date)).eq('scheduled_for', selectedDate).order('meal_number'),
       sb.from('kids_lunch_weekly_meals').select('*').eq('week_of', isoWeek(date)).eq('scheduled_for', selectedDate).order('meal_number'),
       sb.from('weekly_meals').select('*').eq('week_of', isoWeek(date)).eq('meal_number', dayIndex).order('meal_number'),
+      sb.from('breakfast_day_pauses').select('*').eq('week_of', isoWeek(date)).eq('is_paused', true),
+      sb.from('kids_lunch_day_pauses').select('*').eq('week_of', isoWeek(date)).eq('is_paused', true),
+      sb.from('meal_day_pauses').select('*').eq('week_of', isoWeek(date)).eq('is_paused', true),
     ]).then(results => {
       if (cancelled) return;
-      const breakfast = (results[0].data || []).filter(meal => meal.scheduled_for === selectedDate && breakfastSlots.includes(Number(meal.meal_number))).map(meal => ({ label: BREAKFAST_SLOTS.find(slot => slot.day_number === Number(meal.meal_number))?.audience === 'shared' ? 'Breakfast' : `Breakfast · ${BREAKFAST_SLOTS.find(slot => slot.day_number === Number(meal.meal_number))?.audience}`, title: meal.title, recipe: meal }));
+      const failed = results.find(result => result.error);
+      if (failed) throw failed.error;
+      const pausedBreakfastSlots = new Set((results[3].data || []).map(row => Number(row.day_number)));
+      const pausedLunchDays = new Set((results[4].data || []).map(row => Number(row.day_number)));
+      const pausedDinnerDays = new Set((results[5].data || []).map(row => Number(row.day_number)));
+      const breakfast = (results[0].data || []).filter(meal => meal.scheduled_for === selectedDate && breakfastSlots.includes(Number(meal.meal_number)) && !pausedBreakfastSlots.has(Number(meal.meal_number))).map(meal => ({ label: BREAKFAST_SLOTS.find(slot => slot.day_number === Number(meal.meal_number))?.audience === 'shared' ? 'Breakfast' : `Breakfast · ${BREAKFAST_SLOTS.find(slot => slot.day_number === Number(meal.meal_number))?.audience}`, title: meal.title, recipe: meal }));
       if (day === 'Friday') breakfast.push({ label: 'Breakfast · kids', title: 'Cereal' });
-      const lunch = (results[1].data || []).filter(meal => meal.scheduled_for === selectedDate && Number(meal.meal_number) === dayIndex).map(meal => ({ label: 'Kids lunch', title: meal.title, recipe: meal }));
-      const dinner = (results[2].data || []).filter(meal => meal.week_of === isoWeek(date) && Number(meal.meal_number) === dayIndex).map(meal => ({ label: 'Dinner', title: meal.title, recipe: meal }));
+      const lunch = pausedLunchDays.has(dayIndex) ? [] : (results[1].data || []).filter(meal => meal.scheduled_for === selectedDate && Number(meal.meal_number) === dayIndex).map(meal => ({ label: 'Kids lunch', title: meal.title, recipe: meal }));
+      const dinner = pausedDinnerDays.has(dayIndex) ? [] : (results[2].data || []).filter(meal => meal.week_of === isoWeek(date) && Number(meal.meal_number) === dayIndex).map(meal => ({ label: 'Dinner', title: meal.title, recipe: meal }));
       setItems([...breakfast, ...lunch, ...dinner].filter(item => item.title));
     }).catch(() => { if (!cancelled) setItems([]); });
     return () => { cancelled = true; };
@@ -1957,31 +1973,30 @@ function DefrostToday() {
 }
 
 function WeeklyMealPrep() {
-  const [week, setWeek] = useState(defaultGroceryWeek);
+  const [weekStart, setWeekStart] = useState(() => sundayWeekRange(localISODate(new Date())).start);
   const [items, setItems] = useState([]);
   const [completions, setCompletions] = useState([]);
   const [busyKeys, setBusyKeys] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [detailsRecipe, setDetailsRecipe] = useState(null);
-  const start = localISODate(mondayForISOWeek(week));
-  const end = addDays(start, 6);
-  const itemKey = item => `${item.mealType}:${week}:${item.meal.meal_number}:${recipeKey(item.recipe)}`;
-  const isCompleted = item => completions.some(row => row.meal_type === item.mealType && row.week_of === week && Number(row.meal_number) === Number(item.meal.meal_number) && row.recipe_key === recipeKey(item.recipe));
+  const weekEnd = addDays(weekStart, 6);
+  const itemKey = mealTaskKey;
+  const isCompleted = item => completions.some(row => row.meal_type === item.mealType && row.week_of === item.weekOf && Number(row.meal_number) === item.mealNumber && row.recipe_key === item.recipeKey);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true); setError('');
     Promise.all([
-      loadMealPlanTasks(sb, start, end),
-      sb.from('weekly_prep_completions').select('*').eq('week_of', week).order('scheduled_for'),
+      loadMealPlanTasks(sb, weekStart, weekEnd),
+      sb.from('weekly_prep_completions').select('*').gte('scheduled_for', weekStart).lte('scheduled_for', weekEnd).order('scheduled_for'),
     ]).then(([snapshot, completionResult]) => {
       if (cancelled) return;
       if (completionResult.error) throw completionResult.error;
       setItems(snapshot.prep); setCompletions(completionResult.data || []);
     }).catch(reason => { if (!cancelled) { setItems([]); setCompletions([]); setError(reason.message || 'Could not load this week’s prep recipes.'); } }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [week, start, end]);
+  }, [weekStart, weekEnd]);
 
   async function toggleCompleted(item) {
     const key = itemKey(item);
@@ -1990,21 +2005,21 @@ function WeeklyMealPrep() {
     try {
       if (isCompleted(item)) {
         const { error: removeError } = await sb.from('weekly_prep_completions').delete()
-          .eq('meal_type', item.mealType).eq('week_of', week).eq('meal_number', item.meal.meal_number).eq('recipe_key', recipeKey(item.recipe));
+          .eq('meal_type', item.mealType).eq('week_of', item.weekOf).eq('meal_number', item.mealNumber).eq('recipe_key', item.recipeKey);
         if (removeError) throw removeError;
-        setCompletions(current => current.filter(row => !(row.meal_type === item.mealType && row.week_of === week && Number(row.meal_number) === Number(item.meal.meal_number) && row.recipe_key === recipeKey(item.recipe))));
+        setCompletions(current => current.filter(row => !(row.meal_type === item.mealType && row.week_of === item.weekOf && Number(row.meal_number) === item.mealNumber && row.recipe_key === item.recipeKey)));
       } else {
-        const payload = { meal_type: item.mealType, week_of: week, meal_number: Number(item.meal.meal_number), scheduled_for: item.meal.scheduled_for, recipe_key: recipeKey(item.recipe), completed_at: new Date().toISOString() };
+        const payload = { meal_type: item.mealType, week_of: item.weekOf, meal_number: item.mealNumber, scheduled_for: item.scheduledFor, recipe_key: item.recipeKey, completed_at: new Date().toISOString() };
         const { data, error: saveError } = await sb.from('weekly_prep_completions').upsert(payload, { onConflict: 'meal_type,week_of,meal_number,recipe_key' }).select().single();
         if (saveError) throw saveError;
-        setCompletions(current => [...current.filter(row => !(row.meal_type === item.mealType && row.week_of === week && Number(row.meal_number) === Number(item.meal.meal_number) && row.recipe_key === recipeKey(item.recipe))), data || payload]);
+        setCompletions(current => [...current.filter(row => !(row.meal_type === item.mealType && row.week_of === item.weekOf && Number(row.meal_number) === item.mealNumber && row.recipe_key === item.recipeKey)), data || payload]);
       }
     } catch (reason) { setError(reason.message || 'Could not update this prep item. Please retry.'); }
     finally { setBusyKeys(current => { const next = new Set(current); next.delete(key); return next; }); }
   }
 
   return <><section className="card weeklyPrep" aria-labelledby="weekly-prep-title">
-    <div className="weeklyPrepHead"><div><div className="plannerMonth">Breakfast · Kids lunch · Dinner</div><h2 className="sectionTitle" id="weekly-prep-title">Prep this week</h2><p className="small">Recipes appear here automatically when they are scheduled and marked as requiring advance prep.</p></div><div className="weekNav"><button type="button" className="iconBtn" aria-label="Previous prep week" onClick={() => setWeek(current => shiftWeek(current, -1))}>‹</button><span className="weekLabel">{formatWeekLabel(week)}</span><button type="button" className="iconBtn" aria-label="Next prep week" onClick={() => setWeek(current => shiftWeek(current, 1))}>›</button></div></div>
+    <div className="weeklyPrepHead"><div><div className="plannerMonth">Breakfast · Kids lunch · Dinner</div><h2 className="sectionTitle" id="weekly-prep-title">Prep this week</h2><p className="small">Recipes appear here automatically when they are scheduled and marked as requiring advance prep. Prep weeks run Sunday to Saturday.</p></div><div className="weekNav"><button type="button" className="iconBtn" aria-label="Previous prep week" onClick={() => setWeekStart(current => addDays(current, -7))}>‹</button><span className="weekLabel">{formatSundayWeekLabel(weekStart)}</span><button type="button" className="iconBtn" aria-label="Next prep week" onClick={() => setWeekStart(current => addDays(current, 7))}>›</button></div></div>
     {error && <div className="saveError" role="alert">{error}</div>}
     {loading ? <div className="empty">Loading this week’s prep…</div> : items.length ? <div className="weeklyPrepList">{items.map(item => { const done = isCompleted(item); return <div className={`weeklyPrepItem${done ? ' isDone' : ''}`} key={itemKey(item)}><button type="button" className="weeklyPrepRecipe" aria-label={`View prep recipe: ${item.recipe.title}`} onClick={() => setDetailsRecipe(item.recipe)}><span><b>{formatMealDate(item.meal.scheduled_for, { weekday: 'long' })}</b><small>{item.label} · {formatMealDate(item.meal.scheduled_for)}</small></span><strong>{item.recipe.title}</strong></button><label className="prepTick weeklyPrepTick"><input type="checkbox" checked={done} disabled={busyKeys.has(itemKey(item))} onChange={() => toggleCompleted(item)}/><span>{done ? 'Prepped' : 'To prep'}</span></label></div>; })}</div> : <div className="empty">No recipes requiring advance prep are scheduled for this week.</div>}
   </section>{detailsRecipe && createPortal(<div className="meal-planner"><RecipeDetailsModal recipe={detailsRecipe} tags={EMPTY_TAGS} scheduledDays={EMPTY_TAGS} queuedDays={EMPTY_TAGS} busy={false} cookedBusy={false} onTagsSaved={async () => ''} onToggleCooked={async () => ''} onClose={() => setDetailsRecipe(null)} onSave={async () => ''} showCookedStatus={false} readOnly/></div>, document.body)}</>;

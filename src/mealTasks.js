@@ -39,6 +39,16 @@ function localISODate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+export function sundayWeekRange(value) {
+  const date = value instanceof Date ? new Date(value) : localDate(value);
+  if (!date || Number.isNaN(date.getTime())) return { start: '', end: '' };
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() - date.getDay());
+  const end = new Date(date);
+  end.setDate(end.getDate() + 6);
+  return { start: localISODate(date), end: localISODate(end) };
+}
+
 function mondayForISOWeek(weekString) {
   const [yearText, weekText] = String(weekString || '').split('-W');
   const jan4 = new Date(Number(yearText), 0, 4, 12);
@@ -76,6 +86,9 @@ export async function loadMealPlanTasks(client, start, end) {
     client.from('breakfast_weekly_meals').select('*').gte('scheduled_for', start).lte('scheduled_for', end),
     client.from('kids_lunch_weekly_meals').select('*').gte('scheduled_for', start).lte('scheduled_for', end),
     client.from('weekly_meals').select('*'),
+    client.from('breakfast_day_pauses').select('*'),
+    client.from('kids_lunch_day_pauses').select('*'),
+    client.from('meal_day_pauses').select('*'),
   ];
   const libraryQueries = MEAL_LIBRARY_SOURCES.flatMap(source => [
     client.from(source.table).select('*'),
@@ -85,16 +98,27 @@ export async function loadMealPlanTasks(client, start, end) {
   const failed = results.find(result => result.error);
   if (failed) throw failed.error;
 
+  const libraryOffset = scheduleQueries.length;
   const libraries = MEAL_LIBRARY_SOURCES.map((source, index) => {
-    const recipes = results[3 + index * 2].data || [];
-    const tags = Object.fromEntries((results[4 + index * 2].data || []).map(row => [row.recipe_key, parseTags(row.tags)]));
+    const recipes = results[libraryOffset + index * 2].data || [];
+    const tags = Object.fromEntries((results[libraryOffset + index * 2 + 1].data || []).map(row => [row.recipe_key, parseTags(row.tags)]));
     return { ...source, recipes: recipes.filter(recipe => !recipe.is_deleted), tags };
   });
+  const pauseKey = row => `${row.week_of}:${Number(row.day_number)}`;
+  const pauses = {
+    breakfast: new Set((results[3].data || []).filter(row => row.is_paused).map(pauseKey)),
+    kids_lunch: new Set((results[4].data || []).filter(row => row.is_paused).map(pauseKey)),
+    dinner: new Set((results[5].data || []).filter(row => row.is_paused).map(pauseKey)),
+  };
   const scheduled = [
     ...(results[0].data || []).map(meal => ({ mealType: 'breakfast', meal, scheduledFor: meal.scheduled_for })),
     ...(results[1].data || []).map(meal => ({ mealType: 'kids_lunch', meal, scheduledFor: meal.scheduled_for })),
     ...(results[2].data || []).map(meal => ({ mealType: 'dinner', meal, scheduledFor: dinnerDate(meal) })),
-  ].filter(item => !item.meal.completed_at && item.meal.title && item.scheduledFor >= start && item.scheduledFor <= end);
+  ].filter(item => !item.meal.completed_at
+    && item.meal.title
+    && item.scheduledFor >= start
+    && item.scheduledFor <= end
+    && !pauses[item.mealType].has(`${item.meal.week_of}:${Number(item.meal.meal_number)}`));
 
   const tasks = scheduled.map(item => {
     const preferredKey = item.mealType === 'dinner' ? 'dinner' : item.mealType;
