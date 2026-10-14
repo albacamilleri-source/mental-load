@@ -1164,6 +1164,25 @@ test('a day can be assigned generic leftovers without adding a library recipe', 
   expect(writes.find(write => write.table === 'meal_recipe_library' && write.value?.title === 'Leftovers')).toBeUndefined();
 });
 
+test('breakfast leftovers reuse an existing queue row when the scheduled meal lost its queue reference', async () => {
+  const sundayBreakfast = {
+    ...sample(91), id:'breakfast-sunday', meal_number:11, week_of:'breakfast-capsule',
+    scheduled_for:'2026-10-18', queue_item_id:null, title:'Sunday Pancakes', source_ref:'Breakfast book p.91',
+  };
+  breakfastCurrent = [sundayBreakfast];
+  breakfastQueue = [{...sundayBreakfast, id:'breakfast-queue-91', day_number:11, position:1000}];
+  breakfastLibrary = [{...sundayBreakfast, recipe_key:recipeKey(sundayBreakfast), is_deleted:false}];
+  await render('breakfast');
+  await change('Sunday Main recipe', '__leftovers__');
+  expect(writes.find(write => write.table === 'breakfast_recipe_queue' && write.insert?.source_ref === sundayBreakfast.source_ref)).toBeUndefined();
+  expect(writes).toContainEqual(expect.objectContaining({
+    table:'breakfast_recipe_queue',
+    update:expect.objectContaining({field:'id', value:'breakfast-queue-91', payload:expect.objectContaining({day_number:11, title:'Sunday Pancakes'})}),
+  }));
+  expect(writes.find(write => write.table === 'breakfast_weekly_meals' && write.value?.title === 'Leftovers')).toMatchObject({value:{is_override:true,override_type:'leftovers'}});
+  expect(selectedBreakfastTitle(11)).toBe('Leftovers');
+});
+
 test('Meal Planner landing page shows today at a glance before all five planners', async () => {
   await act(async () => { root.render(<MealPlanner/>); });
   expect(container.querySelector('.todayFood')).not.toBeNull();
