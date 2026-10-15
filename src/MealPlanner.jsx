@@ -1376,7 +1376,18 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
       const isLeftovers = meal.override_type === 'leftovers';
       const isTemporaryOverride = !!meal.is_override;
       const existing = isTemporaryOverride ? null : findStoredLibraryRecipe(libraryRecords, meal);
-      const overrideStored = isTemporaryOverride ? switchLibraryRecords.find(row => sameRecipe(row, meal)) : null;
+      const overrideSource = !isLeftovers && isTemporaryOverride && meal.override_type?.startsWith('library:')
+        ? MEAL_LIBRARY_SOURCES.find(item => item.key === meal.override_type.slice('library:'.length))
+        : null;
+      let overrideStored = overrideSource
+        ? switchLibraryRecords.find(row => row.library_key === overrideSource.key && sameRecipe(row, meal))
+          || (overrideSource.table === config.tables.meal_recipe_library ? findStoredLibraryRecipe(libraryRecords, meal) : null)
+        : null;
+      if (overrideSource && !overrideStored) {
+        const { data, error: lookupError } = await sb.from(overrideSource.table).select('*').eq('source_ref', meal.source_ref.trim()).maybeSingle();
+        if (lookupError) throw lookupError;
+        overrideStored = data;
+      }
       const key = existing?.recipe_key || overrideStored?.recipe_key || recipeKey(meal);
       const queuedRecipe = queueRows.find(row => sameRecipe(row, meal));
       const payload = {
@@ -1386,10 +1397,11 @@ export function MealPlannerWorkspace({ mealType = 'dinner', onDirtyChange, onBac
         has_been_cooked: config.capsule ? !!existing?.has_been_cooked || markAsTried : true, is_deleted: false,
       };
       let banked = null;
-      if (!isLeftovers && isTemporaryOverride && meal.override_type?.startsWith('library:')) {
-        const source = MEAL_LIBRARY_SOURCES.find(item => item.key === meal.override_type.slice('library:'.length));
-        const { data, error: bankError } = await sb.from(source?.table || config.tables.meal_recipe_library).update({ has_been_cooked: true, cooked_at: payload.cooked_at }).eq('recipe_key', key).select().single();
+      if (overrideSource) {
+        if (!overrideStored) throw new Error(`Could not find ${meal.title} in the ${overrideSource.label} library.`);
+        const { data, error: bankError } = await sb.from(overrideSource.table).update({ has_been_cooked: true, cooked_at: payload.cooked_at }).eq('recipe_key', overrideStored.recipe_key).select().maybeSingle();
         if (bankError) throw bankError;
+        if (!data) throw new Error(`Could not update ${meal.title} in the ${overrideSource.label} library.`);
         banked = data;
       } else if (!isLeftovers && !isTemporaryOverride) {
         const { data, error: bankError } = await from('meal_recipe_library').upsert(payload, { onConflict: 'recipe_key' }).select().single();
