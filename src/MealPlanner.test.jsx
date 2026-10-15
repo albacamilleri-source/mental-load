@@ -45,6 +45,7 @@ function setupQueries() {
         let data = logicalTable === 'weekly_meals' ? (isPast ? source.past : source.current) : logicalTable === 'day_pauses' ? source.pauses : logicalTable === 'meal_recipe_tags' ? source.tagRows : logicalTable === 'meal_day_categories' ? source.categories : logicalTable === 'meal_recipe_library' ? source.library : logicalTable === 'side_options' ? source.sideOptions : logicalTable === 'day_sides' ? source.daySides : source.queue;
         if (maybeSingle && logicalTable === 'weekly_meals') data = [...source.current, ...source.past].find(row => Object.entries(filters).every(([field, value]) => row[field] === value)) || null;
         if (maybeSingle && logicalTable === 'meal_recipe_queue') data = source.queue.find(row => Object.entries(filters).every(([field, value]) => row[field] === value)) || null;
+        if (maybeSingle && logicalTable === 'meal_recipe_library') data = source.library.find(row => Object.entries(filters).every(([field, value]) => row[field] === value)) || null;
         if (payload && logicalTable === 'weekly_meals') data = { id: 'saved', ...payload };
         if (payload && logicalTable === 'weekly_prep_completions') data = payload;
         if (payload && logicalTable === 'meal_recipe_library') data = payload;
@@ -1152,6 +1153,24 @@ test('Switch can choose a recipe from a different meal library', async () => {
   await click(button('Made · rotate', day(1)));
   expect(writes).toContainEqual({table:'breakfast_recipe_library', update:{field:'recipe_key', value:'breakfast-burrito', payload:{has_been_cooked:true,cooked_at:expect.any(String)}}});
   expect(writes.find(write => write.table === 'meal_recipe_queue' && write.insert?.title === 'Breakfast Burrito')).toBeUndefined();
+});
+
+test('a reloaded same-library switch uses the stored recipe key when marked made', async () => {
+  const storedKey = '["greek meatballs in pita", "Laura in the Kitchen · p. 26"]';
+  const switchedDinner = {
+    ...sample(73), id:'dinner-switch-73', meal_number:4, title:'Greek Meatballs in Pita', source_ref:'Laura in the Kitchen · p. 26',
+    recipe_key:undefined, queue_item_id:null, is_override:true, override_type:'library:dinner',
+  };
+  current = [switchedDinner];
+  library = [{...switchedDinner, id:'library-73', recipe_key:storedKey, is_deleted:false}];
+  queue = [{...sample(74), id:'queue-74', day_number:4, position:1}];
+  await render('dinner');
+  await click(button('Made · rotate', day(4)));
+  expect(writes).toContainEqual({
+    table:'meal_recipe_library',
+    update:{field:'recipe_key', value:storedKey, payload:{has_been_cooked:true, cooked_at:expect.any(String)}},
+  });
+  expect(writes.find(write => write.table === 'weekly_meals' && write.update?.value === 'dinner-switch-73')).toBeTruthy();
 });
 
 test('a day can be assigned generic leftovers without adding a library recipe', async () => {
