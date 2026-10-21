@@ -388,6 +388,7 @@ const GlobalStyles = () => {
         /* ── Semantic product colors ── */
         --sage:     #7C9E8A;
         --morning:  #C4A882;
+        --post-work: #8B9674;
         --evening:  #4A7D8A;
         --chores:   #7C9E8A;
         --admin:    #7A6AA8;
@@ -1048,6 +1049,12 @@ function TodayMeetingAgenda() {
   );
 }
 
+const DAILY_ROUTINES = [
+  { key: "morning", label: "☀ Morning", title: "Morning Routine", color: "var(--morning)" },
+  { key: "post_work", label: "◷ Post-work", title: "Post-work Routine", color: "var(--post-work)" },
+  { key: "evening", label: "☾ Evening", title: "Evening Shutdown", color: "var(--evening)" },
+];
+
 function TodayScreen({ who }) {
   const [tasks, setTasks] = useState([]);
   const [completions, setCompletions] = useState(new Set());
@@ -1061,7 +1068,8 @@ function TodayScreen({ who }) {
   const weather = useWeather();
 
   const pKey = dailyKey();
-  const color = tab === "morning" ? "var(--morning)" : "var(--evening)";
+  const activeRoutine = DAILY_ROUTINES.find(routine => routine.key === tab);
+  const color = activeRoutine.color;
 
   // Meeting date from localStorage
   const meetingDate = localStorage.getItem("hb_meeting_date") || "";
@@ -1072,7 +1080,7 @@ function TodayScreen({ who }) {
     const load = async () => {
       setLoading(true);
       const [{ data: t }, { data: c }, { data: d }] = await Promise.all([
-        sb.from("routine_tasks").select("*").in("type", ["morning", "evening"]).order("sort_order"),
+        sb.from("routine_tasks").select("*").in("type", DAILY_ROUTINES.map(routine => routine.key)).order("sort_order"),
         sb.from("routine_completions").select("task_id").eq("period_key", pKey),
         sb.from("routine_delegations").select("task_id").eq("period_key", pKey),
       ]);
@@ -1180,10 +1188,7 @@ function TodayScreen({ who }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Morning" : hour < 18 ? "Afternoon" : "Evening";
 
-  const TABS = [
-    { key: "morning", label: "☀ Morning", color: "var(--morning)" },
-    { key: "evening", label: "☾ Evening", color: "var(--evening)" },
-  ];
+  const TABS = DAILY_ROUTINES;
 
   return (
     <div style={{ padding: "0 0 100px" }}>
@@ -1195,17 +1200,16 @@ function TodayScreen({ who }) {
       <WeatherStrip weather={weather} />
 
       {who === "josh" ? (
-        // ── Josh view: morning + evening stacked, no tabs, no suggested, no calendar ──
+        // ── Josh view: daily routines stacked, no tabs, no suggested, no calendar ──
         <div style={{ padding: "16px 0 0" }}>
-          {["morning", "evening"].map(routineType => {
-            const routineColor = routineType === "morning" ? "var(--morning)" : "var(--evening)";
+          {DAILY_ROUTINES.map(({ key: routineType, label, color: routineColor }) => {
             const routineTasks = tasks.filter(t => t.type === routineType && delegations.has(t.id));
             const routineDone = routineTasks.filter(t => completions.has(t.id)).length;
             return (
               <div key={routineType} style={{ marginBottom: 28 }}>
                 <div style={{ padding: "0 20px 10px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                    <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: routineColor, textTransform: "uppercase", letterSpacing: "0.22em" }}>{routineType === "morning" ? "☀ Morning" : "☾ Evening"}</span>
+                    <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: routineColor, textTransform: "uppercase", letterSpacing: "0.22em" }}>{label}</span>
                     <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>{routineDone}/{routineTasks.length}</span>
                   </div>
                   <Bar done={routineDone} total={routineTasks.length} color={routineColor} />
@@ -1244,10 +1248,10 @@ function TodayScreen({ who }) {
           </div>
           <div style={{ height: 16 }} />
 
-          {(tab === "morning" || tab === "evening") && (<>
+          {activeRoutine && (<>
             <div style={{ padding: "0 20px 14px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-                <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.22em" }}>{tab === "morning" ? "Morning Routine" : "Evening Shutdown"}</span>
+                <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color, textTransform: "uppercase", letterSpacing: "0.22em" }}>{activeRoutine.title}</span>
                 <span style={{ fontSize: 10, fontFamily: "'DM Mono', monospace", color: "var(--muted)" }}>{doneCount}/{visible.length}</span>
               </div>
               <Bar done={doneCount} total={visible.length} color={color} />
@@ -1257,6 +1261,7 @@ function TodayScreen({ who }) {
             </div>
             {loading ? <SkeletonCard rows={3} /> : (
               <div style={{ padding: "0 20px", display: "flex", flexDirection: "column", gap: 2 }}>
+                {visible.length === 0 && <div style={{ fontSize: 12, color: "var(--muted2)", padding: "8px 0" }}>No tasks yet. Add them in Edit Lists.</div>}
                 {visible.map(t => (
                   <div key={t.id} style={{ position: "relative" }}>
                     <TaskRow text={t.text} done={completions.has(t.id)} onToggle={() => toggle(t.id)} color={color} sub={t.sub_items} taskId={t.id} subCompletions={completions} onSubToggle={toggleSub} />
@@ -2817,6 +2822,7 @@ function EditSection({ title, color, items, onAdd, onRemove, onEdit, placeholder
 
 function EditScreen({ onBack }) {
   const [morningTasks, setMorningTasks] = useState([]);
+  const [postWorkTasks, setPostWorkTasks] = useState([]);
   const [eveningTasks, setEveningTasks] = useState([]);
   const [weeklyOther, setWeeklyOther] = useState([]);
   const [monthlyTasks, setMonthlyTasks] = useState([]);
@@ -2837,6 +2843,7 @@ function EditScreen({ onBack }) {
       if (agendaData) setAgenda(agendaData.map(a => a.text));
       if (data) {
         setMorningTasks(data.filter(t => t.type === "morning"));
+        setPostWorkTasks(data.filter(t => t.type === "post_work"));
         setEveningTasks(data.filter(t => t.type === "evening"));
         setWeeklyOther(data.filter(t => t.type === "weekly_other"));
         setMonthlyTasks(data.filter(t => t.type === "monthly"));
@@ -2870,6 +2877,7 @@ function EditScreen({ onBack }) {
 
   const sections = [
     { key: "morning", label: "Morning Routine", color: "var(--morning)" },
+    { key: "post_work", label: "Post-work Routine", color: "var(--post-work)" },
     { key: "evening", label: "After Dinner", color: "var(--evening)" },
     { key: "weekly_other", label: "Weekly Admin", color: "var(--admin)" },
     { key: "monthly", label: "Monthly Tasks", color: "var(--planning)" },
@@ -2880,6 +2888,7 @@ function EditScreen({ onBack }) {
 
   const getItems = (key) => {
     if (key === "morning") return morningTasks;
+    if (key === "post_work") return postWorkTasks;
     if (key === "evening") return eveningTasks;
     if (key === "weekly_other") return weeklyOther;
     if (key === "monthly") return monthlyTasks;
@@ -2893,6 +2902,9 @@ function EditScreen({ onBack }) {
     if (key === "morning") {
       const data = await addRoutineTask("morning", text, morningTasks.length + 1);
       if (data) setMorningTasks(ts => [...ts, data]);
+    } else if (key === "post_work") {
+      const data = await addRoutineTask("post_work", text, postWorkTasks.length + 1);
+      if (data) setPostWorkTasks(ts => [...ts, data]);
     } else if (key === "evening") {
       const data = await addRoutineTask("evening", text, eveningTasks.length + 1);
       if (data) setEveningTasks(ts => [...ts, data]);
@@ -2940,6 +2952,9 @@ function EditScreen({ onBack }) {
     if (key === "morning") {
       await removeRoutineTask(morningTasks[idx].id);
       setMorningTasks(ts => ts.filter((_, i) => i !== idx));
+    } else if (key === "post_work") {
+      await removeRoutineTask(postWorkTasks[idx].id);
+      setPostWorkTasks(ts => ts.filter((_, i) => i !== idx));
     } else if (key === "evening") {
       await removeRoutineTask(eveningTasks[idx].id);
       setEveningTasks(ts => ts.filter((_, i) => i !== idx));
@@ -2965,6 +2980,9 @@ function EditScreen({ onBack }) {
     if (key === "morning") {
       await sb.from("routine_tasks").update({ text }).eq("id", morningTasks[idx].id);
       update(setMorningTasks, morningTasks);
+    } else if (key === "post_work") {
+      await sb.from("routine_tasks").update({ text }).eq("id", postWorkTasks[idx].id);
+      update(setPostWorkTasks, postWorkTasks);
     } else if (key === "evening") {
       await sb.from("routine_tasks").update({ text }).eq("id", eveningTasks[idx].id);
       update(setEveningTasks, eveningTasks);
