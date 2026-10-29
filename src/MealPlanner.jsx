@@ -2058,26 +2058,31 @@ function defaultGroceryWeek() {
   return isoWeek(date);
 }
 
+function defaultGroceryRange() {
+  const start = localISODate(mondayForISOWeek(defaultGroceryWeek()));
+  return { start, end: addDays(start, 6) };
+}
+
 export function SmartGroceryList() {
-  const [start, setStart] = useState(() => localISODate(mondayForISOWeek(defaultGroceryWeek())));
+  const [{ start, end }, setRange] = useState(defaultGroceryRange);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
-  const end = addDays(start, 6);
 
   function changeStart(value) {
     if (!localDate(value)) return;
-    setStart(value); setError(''); setResult(null); setCopied(false);
+    setRange(current => ({ ...current, start: value })); setError(''); setResult(null); setCopied(false);
   }
 
   function changeEnd(value) {
     if (!localDate(value)) return;
-    changeStart(addDays(value, -6));
+    setRange(current => ({ ...current, end: value })); setError(''); setResult(null); setCopied(false);
   }
 
   function shiftWindow(days) {
-    changeStart(addDays(start, days));
+    setRange(current => ({ start: addDays(current.start, days), end: addDays(current.end, days) }));
+    setError(''); setResult(null); setCopied(false);
   }
 
   async function read(query, label) {
@@ -2090,6 +2095,7 @@ export function SmartGroceryList() {
     if (busy) return;
     setBusy(true); setError(''); setResult(null); setCopied(false);
     try {
+      if (start > end) throw new Error('The end date must be on or after the start date.');
       const [
         dinnerMeals, dinnerLibrary, breakfastMeals, breakfastLibrary, kidsLunchMeals, kidsLunchLibrary,
         kidsLunchSides, sideOptions, adultLunchSelections, adultLunchLibrary,
@@ -2118,7 +2124,7 @@ export function SmartGroceryList() {
         kidsLunchMeals: kidsLunchMeals.filter(inRange), kidsLunchLibrary, kidsLunchSides, sideOptions,
         adultLunchSelections, adultLunchLibrary, sideSelections, sideLibrary, treatSelections, treatLibrary,
       });
-      if (!recipes.length) throw new Error('No selected recipes with ingredients were found in this seven-day range. Schedule a meal or add a recipe to a Prep List first.');
+      if (!recipes.length) throw new Error('No selected recipes with ingredients were found in this date range. Schedule a meal or add a recipe to a Prep List first.');
       const { data, error: invokeError } = await sb.functions.invoke('meal-grocery-list', { body: { dateFrom: start, dateTo: end, recipes } });
       if (invokeError) throw new Error(invokeError.message || 'The smart grocery service could not be reached.');
       if (data?.error) throw new Error(data.error);
@@ -2138,7 +2144,7 @@ export function SmartGroceryList() {
 
   const itemCount = (result?.sections || []).reduce((total, section) => total + (section.items?.length || 0), 0);
   return <section className="card smartGrocery" aria-labelledby="smart-grocery-title">
-    <div className="smartGroceryHead"><div><div className="plannerMonth">Breakfast · Lunch · Dinner · Sides · Treats</div><h2 className="sectionTitle" id="smart-grocery-title">One smart grocery list</h2><p className="smartGroceryIntro">AI combines, organises and checks every scheduled meal and Prep List selection across exactly seven days.</p></div><div className="groceryDateControls"><button type="button" className="iconBtn" aria-label="Previous seven-day grocery window" onClick={() => shiftWindow(-7)}>‹</button><label>Start<input className="input" type="date" aria-label="Grocery list start date" value={start} onChange={event => changeStart(event.target.value)}/></label><span aria-hidden="true">→</span><label>End<input className="input" type="date" aria-label="Grocery list end date" value={end} onChange={event => changeEnd(event.target.value)}/></label><button type="button" className="iconBtn" aria-label="Next seven-day grocery window" onClick={() => shiftWindow(7)}>›</button></div></div>
+    <div className="smartGroceryHead"><div><div className="plannerMonth">Breakfast · Lunch · Dinner · Sides · Treats</div><h2 className="sectionTitle" id="smart-grocery-title">One smart grocery list</h2><p className="smartGroceryIntro">AI combines, organises and checks every scheduled meal and Prep List selection across the period you choose.</p></div><div className="groceryDateControls"><button type="button" className="iconBtn" aria-label="Move grocery period back one week" onClick={() => shiftWindow(-7)}>‹</button><label>Start<input className="input" type="date" aria-label="Grocery list start date" value={start} onChange={event => changeStart(event.target.value)}/></label><span aria-hidden="true">→</span><label>End<input className="input" type="date" aria-label="Grocery list end date" value={end} onChange={event => changeEnd(event.target.value)}/></label><button type="button" className="iconBtn" aria-label="Move grocery period forward one week" onClick={() => shiftWindow(7)}>›</button></div></div>
     <button type="button" className="btn smartGroceryGenerate" disabled={busy} onClick={generate}>{busy ? <><span className="spinner"/>Organising and checking…</> : 'Generate complete grocery list'}</button>
     {error && <div className="saveError smartGroceryError" role="alert">{error}</div>}
     {result && <div className="smartGroceryResult" aria-live="polite">
